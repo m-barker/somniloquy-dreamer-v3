@@ -1,4 +1,5 @@
 import copy
+import numpy as np
 import torch
 from torch import nn
 
@@ -148,14 +149,67 @@ class WorldModel(nn.Module):
                             50,
                             self.vocab,
                             self.device,
+                            data["image"],
+                            data["is_first"],
                         ).reshape(-1, 50)
                         # Shape (batch, seq_len, latent_state_dim)
                         feat = self.dynamics.get_feat(post)
-                        # Need to appropriately reshape this to get consecutive sequences
-                        # of latent states for narrations.
-                        feat = feat.reshape(64, 16, -1)
+
+                        latent_sequences = []
+                        padding_masks = []
+                        for batch in range(feat.shape[0]):
+                            is_first_batch = data["is_first"][batch].cpu().numpy()
+                            assert is_first_batch[0] == 1
+                            is_first_indices = np.where(is_first_batch == 1)[0]
+                            current_index = 0
+                            current_is_first_index = 1
+                            while current_index < feat.shape[1]:
+                                if len(is_first_indices) > current_is_first_index:
+                                    end_index = min(
+                                        current_index + 16,
+                                        feat.shape[1],
+                                        is_first_indices[current_is_first_index],
+                                    )
+
+                                    latent_sequence = feat[
+                                        batch, current_index:end_index
+                                    ]
+                                    current_index = end_index
+                                    current_is_first_index += 1
+                                else:
+                                    end_index = min(current_index + 16, feat.shape[1])
+                                    latent_sequence = feat[
+                                        batch, current_index:end_index
+                                    ]
+                                    current_index = end_index
+
+                                if latent_sequence.shape[0] < 16:
+                                    padding = torch.zeros(
+                                        16 - latent_sequence.shape[0],
+                                        latent_sequence.shape[1],
+                                    ).to(self.device)
+                                    padding_mask = torch.ones(16).to(self.device)
+                                    padding_mask[latent_sequence.shape[0] :] = 0
+                                    latent_sequence = torch.cat(
+                                        [latent_sequence, padding], dim=0
+                                    )
+                                else:
+                                    padding_mask = torch.zeros(16).to(self.device)
+                                latent_sequences.append(latent_sequence)
+                                padding_masks.append(padding_mask)
+
+                        feat = torch.stack(latent_sequences)
+                        padding_masks = torch.stack(padding_masks)
+
+                        print(f"NARRATIONS SHAPE: {narrations.shape}")
+                        print(f"FEAT SHAPE: {feat.shape}")
+                        print(f"PADDING MASKS SHAPE: {padding_masks.shape}")
+
                         pred = self.heads["language"].forward(
-                            feat, narrations[:, :-1], generate_mask=True
+                            feat,
+                            narrations[:, :-1],
+                            generate_mask=True,
+                            src_mask=padding_masks,
                         )
                         if type(pred) is dict:
                             preds.update(pred)

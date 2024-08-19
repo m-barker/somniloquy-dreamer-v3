@@ -10,8 +10,11 @@ import random
 from abc import ABC, abstractmethod
 import json
 from typing import List, Union
-
+from minigrid.core.grid import Grid
+from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX, COLORS
+from minigrid.core.world_object import WorldObj
 import numpy as np
+import cv2
 
 import torch
 from torch import nn
@@ -1064,6 +1067,8 @@ def generate_batch_narrations(
     max_narration_length: int,
     vocab: dict,
     device: torch.device,
+    rgb_obs: torch.Tensor,
+    is_first: torch.Tensor,
 ) -> torch.Tensor:
     """Generates a batch of narrations given a batch
     of observations.
@@ -1084,15 +1089,51 @@ def generate_batch_narrations(
 
     batch_length = observations.shape[1]
     narration_batches: List[np.ndarray] = []
-    for batch in observations:
+    rgb_obs = rgb_obs.detach().cpu().numpy()
+    is_first = is_first.detach().cpu().numpy()
+    for idx, batch in enumerate(observations):
         narrations: List[str] = []
-        for i in range(0, batch_length, obs_per_narration):
-            narration = narrator.narrate(batch[i : i + obs_per_narration])
-            narrations.append(narration)
+        is_first_batch = is_first[idx]
+        assert is_first_batch[0] == 1
+        is_first_indices = np.where(is_first_batch == 1)[0]
+        current_index = 0
+        current_is_first_index = 1
+        while current_index < len(batch):
+            if len(is_first_indices) > current_is_first_index:
+                # Determine the next index to use
+                end_index = min(
+                    current_index + obs_per_narration,
+                    len(batch),
+                    is_first_indices[current_is_first_index],
+                )
+                narration = narrator.narrate(batch[current_index:end_index])
+                narrations.append(narration)
+                current_index = end_index
+                current_is_first_index += 1
+            else:
+                end_index = min(current_index + obs_per_narration, len(batch))
+                narration = narrator.narrate(batch[current_index:end_index])
+                narrations.append(narration)
+                current_index = end_index
+
+        # for i in range(0, batch_length, obs_per_narration):
+        # rgb_batch = rgb_obs[idx, i : i + obs_per_narration]
+        # print(f"RGB BATCH SHAPE {rgb_batch.shape}")
+        # narration = narrator.narrate(batch[i : i + obs_per_narration])
+        # if narration == "the agent reached the goal ":
+        #     print("REACHED GOAL")
+        #     for idx2, obs in enumerate(batch[i : i + obs_per_narration]):
+        #         rgb_image = rgb_batch[idx2]
+        #         print(f"RGB IMAGE SHAPE {rgb_image.shape}")
+        #         # Display image with CV2
+        #         cv2.imshow("image", rgb_image)
+        #         cv2.waitKey(0)
+        #         cv2.destroyAllWindows()
+        # narrations.append(narration)
         batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
         narration_batches.append(batch_arr)
 
-    narration_arr = np.array(narration_batches)
+    narration_arr = np.concatenate(narration_batches, axis=0)
     narrations_tens = torch.tensor(narration_arr, dtype=torch.long).to(device)
     return narrations_tens
 

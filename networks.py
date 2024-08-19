@@ -903,6 +903,7 @@ class TransformerEncoderDecoder(nn.Module):
         src: torch.Tensor,
         tgt: torch.Tensor,
         generate_mask: bool = False,
+        src_mask: torch.Tensor = None,
     ) -> torch.Tensor:
         """_summary_
 
@@ -915,8 +916,11 @@ class TransformerEncoderDecoder(nn.Module):
             torch.Tensor: _description_
         """
         tgt_pad_mask = None
+        src_pad_mask = None
         if generate_mask:
             tgt_pad_mask = tgt == 0
+        if src_mask is not None:
+            src_pad_mask = src_mask
         src = src.permute(1, 0, 2)
         tgt = self.tgt_embedding(tgt)
         tgt = tgt.permute(1, 0, 2)
@@ -936,6 +940,7 @@ class TransformerEncoderDecoder(nn.Module):
             tgt,
             tgt_mask=tgt_mask,
             tgt_key_padding_mask=tgt_pad_mask,
+            src_key_padding_mask=src_pad_mask,
         )
         out = self.final_layer(out)
         return out

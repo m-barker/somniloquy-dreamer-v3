@@ -183,9 +183,11 @@ class MiniGrid:
 
         self._done = False
         self._step = 0
-        obs, reward, is_terminal, _ = self._obs(
+        obs, reward, is_terminal, encoded_image = self._obs(
             0.0, is_first=True, encoded_image=obs["encoded_image"]
         )
+
+        obs["encoded_image"] = encoded_image["encoded_image"]
 
         return obs
 
