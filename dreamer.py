@@ -20,6 +20,7 @@ from parallel import Parallel, Damy
 import torch
 from torch import nn
 from torch import distributions as torchd
+from evaluate_narration_model import plot_trajectory_graph
 
 
 to_np = lambda x: x.detach().cpu().numpy()
@@ -71,6 +72,7 @@ class Dreamer(nn.Module):
                 for name, values in self._metrics.items():
                     self._logger.scalar(name, float(np.mean(values)))
                     self._metrics[name] = []
+                plot_trajectory_graph(self, step=self._logger.step)
                 if self._config.video_pred_log:
                     openl = self._wm.video_pred(next(self._dataset))
                     self._wm.intent_prediction(next(self._dataset))

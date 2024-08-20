@@ -255,6 +255,7 @@ minigrid:
   envs: 1
   action_repeat: 1
   eval_episode_num: 10
+  eval_every: 5000
   log_every: 100
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"

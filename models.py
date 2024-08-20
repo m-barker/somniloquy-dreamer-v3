@@ -115,6 +115,8 @@ class WorldModel(nn.Module):
             reward=config.reward_head["loss_scale"],
             cont=config.cont_head["loss_scale"],
         )
+        self._narration_max_enc_seq = 16
+        self._narration_max_dec_seq = 50
 
     def _train(self, data):
         # action (batch_size, batch_length, act_dim)
@@ -151,7 +153,7 @@ class WorldModel(nn.Module):
                             self.device,
                             data["image"],
                             data["is_first"],
-                        ).reshape(-1, 50)
+                        ).reshape(-1, self._narration_max_dec_seq)
                         # Shape (batch, seq_len, latent_state_dim)
                         feat = self.dynamics.get_feat(post)
 
@@ -166,7 +168,7 @@ class WorldModel(nn.Module):
                             while current_index < feat.shape[1]:
                                 if len(is_first_indices) > current_is_first_index:
                                     end_index = min(
-                                        current_index + 16,
+                                        current_index + self._narration_max_enc_seq,
                                         feat.shape[1],
                                         is_first_indices[current_is_first_index],
                                     )
@@ -177,33 +179,44 @@ class WorldModel(nn.Module):
                                     current_index = end_index
                                     current_is_first_index += 1
                                 else:
-                                    end_index = min(current_index + 16, feat.shape[1])
+                                    end_index = min(
+                                        current_index + self._narration_max_enc_seq,
+                                        feat.shape[1],
+                                    )
                                     latent_sequence = feat[
                                         batch, current_index:end_index
                                     ]
                                     current_index = end_index
 
-                                if latent_sequence.shape[0] < 16:
+                                if (
+                                    latent_sequence.shape[0]
+                                    < self._narration_max_enc_seq
+                                ):
                                     padding = torch.zeros(
-                                        16 - latent_sequence.shape[0],
+                                        self._narration_max_enc_seq
+                                        - latent_sequence.shape[0],
                                         latent_sequence.shape[1],
                                     ).to(self.device)
-                                    padding_mask = torch.ones(16).to(self.device)
+                                    padding_mask = torch.ones(
+                                        self._narration_max_enc_seq
+                                    ).to(self.device)
                                     padding_mask[latent_sequence.shape[0] :] = 0
                                     latent_sequence = torch.cat(
                                         [latent_sequence, padding], dim=0
                                     )
                                 else:
-                                    padding_mask = torch.zeros(16).to(self.device)
+                                    padding_mask = torch.zeros(
+                                        self._narration_max_enc_seq
+                                    ).to(self.device)
                                 latent_sequences.append(latent_sequence)
                                 padding_masks.append(padding_mask)
 
                         feat = torch.stack(latent_sequences)
                         padding_masks = torch.stack(padding_masks)
 
-                        print(f"NARRATIONS SHAPE: {narrations.shape}")
-                        print(f"FEAT SHAPE: {feat.shape}")
-                        print(f"PADDING MASKS SHAPE: {padding_masks.shape}")
+                        # print(f"NARRATIONS SHAPE: {narrations.shape}")
+                        # print(f"FEAT SHAPE: {feat.shape}")
+                        # print(f"PADDING MASKS SHAPE: {padding_masks.shape}")
 
                         pred = self.heads["language"].forward(
                             feat,

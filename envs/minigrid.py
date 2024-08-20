@@ -149,6 +149,10 @@ class MiniGrid:
         )
 
     @property
+    def mission(self):
+        return self._env.mission
+
+    @property
     def action_space(self):
         space = self._env.action_space
         space.discrete = True
@@ -175,8 +179,11 @@ class MiniGrid:
             encoded_image=obs["encoded_image"],
         )
 
-    def reset(self):
+    def reset(self, goal=None):
         obs, info = self._env.reset()
+        if goal is not None:
+            while info["mission"] != goal:
+                obs, info = self._env
         self._buffer[0] = obs["rgb_image"]
         # self._screen(self._buffer[0])
         self._buffer[1].fill(0)
