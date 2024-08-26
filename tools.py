@@ -184,6 +184,7 @@ def simulate(
         # step envs
         results = [e.step(a) for e, a in zip(envs, action)]
         results = [r() for r in results]
+        # print(f"RESULTS: {results}")
         obs, reward, done = zip(*[p[:3] for p in results])
         obs = list(obs)
         reward = list(reward)
@@ -203,7 +204,7 @@ def simulate(
                 transition["action"] = a
             transition["reward"] = r
             transition["discount"] = info.get("discount", np.array(1 - float(d)))
-            transition["encoded_image"] = info.get("encoded_image", None)
+            # transition["encoded_image"] = info.get("encoded_image", None)
             add_to_cache(cache, env.id, transition)
 
         if done.any():

@@ -54,9 +54,6 @@ class WorldModel(nn.Module):
             config.device,
         )
         self.device = torch.device(config.device)
-        self.vocab = tools.load_json_vocab(
-            "/home/mattbarker/dev/dreamerv3-torch/minigird_four_squares.json"
-        )
         self.heads = nn.ModuleDict()
         self.narrator = tools.MiniGridFourSquareNarrator()
         if config.dyn_discrete:
@@ -90,11 +87,15 @@ class WorldModel(nn.Module):
             device=config.device,
             name="Cont",
         )
-        self.heads["language"] = networks.TransformerEncoderDecoder(
-            d_model=feat_size,
-            target_vocab_size=len(self.vocab),
-            max_seq_length=50,
-        )
+        if config.enable_language:
+            self.vocab = tools.load_json_vocab(config.vocab_path)
+            self.heads["language"] = networks.TransformerEncoderDecoder(
+                d_model=feat_size,
+                target_vocab_size=len(self.vocab),
+                max_seq_length=config.dec_max_length,
+            )
+            self._narration_max_enc_seq = config.enc_max_length
+            self._narration_max_dec_seq = config.dec_max_length
         for name in config.grad_heads:
             assert name in self.heads, name
         self._model_opt = tools.Optimizer(
@@ -115,8 +116,6 @@ class WorldModel(nn.Module):
             reward=config.reward_head["loss_scale"],
             cont=config.cont_head["loss_scale"],
         )
-        self._narration_max_enc_seq = 16
-        self._narration_max_dec_seq = 50
 
     def _train(self, data):
         # action (batch_size, batch_length, act_dim)
@@ -147,8 +146,8 @@ class WorldModel(nn.Module):
                         narrations = tools.generate_batch_narrations(
                             self.narrator,
                             data["encoded_image"],
-                            16,
-                            50,
+                            self._narration_max_enc_seq,
+                            self._narration_max_dec_seq,
                             self.vocab,
                             self.device,
                             data["image"],

@@ -29,6 +29,7 @@ defaults:
   reward_EMA: True
 
   # Model
+  enable_language: false
   dyn_hidden: 512
   dyn_deter: 512
   dyn_stoch: 32
@@ -264,6 +265,21 @@ minigrid:
   video_pred_log: false
   task: "minigrid_MiniGrid-DoorKey-6x6-v0"
   time_limit: 200
+
+minedojo:
+  steps: 4e5
+  envs: 1
+  eval_episode_num: 1
+  eval_every: 5000
+  log_every: 100
+  actor: { dist: "onehot", std: "none" }
+  imag_gradient: "reinforce"
+  resize: opencv
+  actions: needed
+  video_pred_log: true
+  task: "minedojo_harvest_1_dirt"
+  time_limit: 2000
+  enable_language: false
 
 debug:
   debug: True

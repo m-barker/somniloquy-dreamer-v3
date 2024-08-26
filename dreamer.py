@@ -72,10 +72,10 @@ class Dreamer(nn.Module):
                 for name, values in self._metrics.items():
                     self._logger.scalar(name, float(np.mean(values)))
                     self._metrics[name] = []
-                plot_trajectory_graph(self, step=self._logger.step)
+                # plot_trajectory_graph(self, step=self._logger.step)
                 if self._config.video_pred_log:
                     openl = self._wm.video_pred(next(self._dataset))
-                    self._wm.intent_prediction(next(self._dataset))
+                    # self._wm.intent_prediction(next(self._dataset))
                     self._logger.video("train_openl", to_np(openl))
                 self._logger.write(fps=True)
 
@@ -148,6 +148,7 @@ def make_dataset(episodes, config):
 
 def make_env(config, mode, id):
     suite, task = config.task.split("_", 1)
+    print(f"Creating {suite} environment for {task}...")
     if suite == "dmc":
         import envs.dmc as dmc
 
@@ -206,6 +207,14 @@ def make_env(config, mode, id):
 
         env = minecraft.make_env(task, size=config.size, break_speed=config.break_speed)
         env = wrappers.OneHotAction(env)
+    elif suite == "minedojo":
+        print(f"Creating MineDojo environment...")
+        import envs.minedojo_env as minedojo_env
+
+        env = minedojo_env.MineDojoEnv()
+        print(f"ACTION SPACE: {env.action_space}")
+        # env = wrappers.OneHotAction(env)
+        # print(f"ACTION SPACE AFTER WRAPPER: {env.action_space}")
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)
@@ -259,6 +268,7 @@ def main(config):
     acts = train_envs[0].action_space
     print("Action Space", acts)
     config.num_actions = acts.n if hasattr(acts, "n") else acts.shape[0]
+    print(f"NUMBER OF ACTIONS: {config.num_actions}")
 
     state = None
     if not config.offline_traindir:
@@ -328,7 +338,7 @@ def main(config):
             )
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(next(eval_dataset))
-                agent._wm.intent_prediction(next(eval_dataset))
+                # agent._wm.intent_prediction(next(eval_dataset))
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
         state = tools.simulate(

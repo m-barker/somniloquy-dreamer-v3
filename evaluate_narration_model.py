@@ -295,7 +295,7 @@ def plot_trajectory_graph(agent, step):
     # save to file
     plt.savefig(
         os.path.join(
-            "/home/mattbarker/dev/somniloquy-dreamer-v3/evaluation_imgs",
+            "/home/mattbarker/dev/somniloquy-dreamer-v3/evaluation_imgs_no_grad",
             f"latent_state_compressed_step_{step}.png",
         )
     )
