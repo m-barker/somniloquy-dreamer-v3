@@ -1,6 +1,7 @@
 import minedojo
 import numpy as np
 import gym
+import cv2
 
 
 class MineDojoEnv(gym.Env):
@@ -8,7 +9,7 @@ class MineDojoEnv(gym.Env):
         self.task_id = task_id
         self.image_size = image_size
 
-        self.env = minedojo.make(task_id=task_id, image_size=image_size)
+        self.env = minedojo.make(task_id=task_id, image_size=(160, 256))
         self.action_size = 61
         self.sticky_action_length = 30
         self._sticky_attack_counter = 0
@@ -52,8 +53,10 @@ class MineDojoEnv(gym.Env):
         return env_action
 
     def _obs(self, obs):
+        # resize image
         obs["rgb"] = np.transpose(obs["rgb"], (1, 2, 0))
-        assert obs["rgb"].shape == (64, 64, 3)
+        obs["rgb"] = cv2.resize(obs["rgb"], self.image_size)
+        # assert obs["rgb"].shape == (64, 64, 3)
         return {"image": obs["rgb"]}
 
     def reset(self):
