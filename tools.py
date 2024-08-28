@@ -10,11 +10,7 @@ import random
 from abc import ABC, abstractmethod
 import json
 from typing import List, Union
-from minigrid.core.grid import Grid
-from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX, COLORS
-from minigrid.core.world_object import WorldObj
 import numpy as np
-import cv2
 
 import torch
 from torch import nn
