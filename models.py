@@ -28,7 +28,7 @@ class RewardEMA:
 
 
 class WorldModel(nn.Module):
-    def __init__(self, obs_space, act_space, step, config):
+    def __init__(self, obs_space, act_space, step, config, narrator=None):
         super(WorldModel, self).__init__()
         self._step = step
         self._use_amp = True if config.precision == 16 else False
@@ -55,7 +55,6 @@ class WorldModel(nn.Module):
         )
         self.device = torch.device(config.device)
         self.heads = nn.ModuleDict()
-        self.narrator = tools.MiniGridFourSquareNarrator()
         if config.dyn_discrete:
             feat_size = config.dyn_stoch * config.dyn_discrete + config.dyn_deter
         else:
@@ -88,6 +87,8 @@ class WorldModel(nn.Module):
             name="Cont",
         )
         if config.enable_language:
+            assert narrator is not None
+            self.narrator = narrator
             self.vocab = tools.load_json_vocab(config.vocab_path)
             self.heads["language"] = networks.TransformerEncoderDecoder(
                 d_model=feat_size,
@@ -122,7 +123,6 @@ class WorldModel(nn.Module):
         # image (batch_size, batch_length, h, w, ch)
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
-        # encoded image (batch_size, batch_length, h, w, ch)
         data = self.preprocess(data)
 
         with tools.RequiresGrad(self):
@@ -142,10 +142,10 @@ class WorldModel(nn.Module):
                 for name, head in self.heads.items():
                     if name == "language":
                         # Convert to numpy
-                        data["encoded_image"] = to_np(data["encoded_image"])
+                        rgb_obs = to_np(data["image"])
                         narrations = tools.generate_batch_narrations(
                             self.narrator,
-                            data["encoded_image"],
+                            rgb_obs,
                             self._narration_max_enc_seq,
                             self._narration_max_dec_seq,
                             self.vocab,
@@ -212,10 +212,6 @@ class WorldModel(nn.Module):
 
                         feat = torch.stack(latent_sequences)
                         padding_masks = torch.stack(padding_masks)
-
-                        # print(f"NARRATIONS SHAPE: {narrations.shape}")
-                        # print(f"FEAT SHAPE: {feat.shape}")
-                        # print(f"PADDING MASKS SHAPE: {padding_masks.shape}")
 
                         pred = self.heads["language"].forward(
                             feat,
@@ -320,9 +316,8 @@ class WorldModel(nn.Module):
         data = self.preprocess(data)
         embed = self.encoder(data)
         embed = embed[0, :16].unsqueeze(0)
-        encoded_imgs = data["encoded_image"][0, :16]
-        encoded_imgs = to_np(encoded_imgs)
-        encoded_imgs_list = [encoded_imgs[i] for i in range(16)]
+        rgb_imgs = to_np(data["image"][0, :16])
+        encoded_imgs_list = [rgb_imgs[i] for i in range(16)]
         ground_truth_intent = self.narrator.narrate(encoded_imgs_list)
         states, _ = self.dynamics.observe(
             embed,

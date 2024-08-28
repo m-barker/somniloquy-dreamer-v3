@@ -269,7 +269,7 @@ minigrid:
 minedojo:
   steps: 4e5
   envs: 1
-  eval_episode_num: 1
+  eval_episode_num: 0
   eval_every: 5000
   log_every: 100
   actor: { dist: "onehot", std: "none" }
@@ -278,8 +278,14 @@ minedojo:
   actions: needed
   video_pred_log: true
   task: "minedojo_harvest_1_dirt"
-  time_limit: 2000
-  enable_language: false
+  minedojo_task_id: "harvest_1_dirt"
+  time_limit: 5000
+  enable_language: true
+  vocab_path: vocab/mindojo_harvest_1_dirt.json
+  prompt_path: captions/minedojo.json
+  mineclip_ckpt_path: attn.pth
+  dec_max_length: 50
+  enc_max_length: 16
 
 debug:
   debug: True

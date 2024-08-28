@@ -3,6 +3,7 @@ import functools
 import os
 import pathlib
 import sys
+import wandb
 
 os.environ["MUJOCO_GL"] = "osmesa"
 
@@ -18,9 +19,11 @@ import envs.wrappers as wrappers
 from parallel import Parallel, Damy
 
 import torch
+import json
 from torch import nn
 from torch import distributions as torchd
 from evaluate_narration_model import plot_trajectory_graph
+from narration.mineclip_narrator import MineCLIPNarrator
 
 
 to_np = lambda x: x.detach().cpu().numpy()
@@ -42,7 +45,19 @@ class Dreamer(nn.Module):
         self._step = logger.step // config.action_repeat
         self._update_count = 0
         self._dataset = dataset
-        self._wm = models.WorldModel(obs_space, act_space, self._step, config)
+        narrator = None
+        if config.enable_language:
+            with open(config.prompt_path, "r") as f:
+                prompts = json.load(f)[config.minedojo_task_id]
+            narrator = MineCLIPNarrator(
+                config.mineclip_ckpt_path,
+                torch.device("cuda"),
+                prompts,
+            )
+        wandb.init(project="minedojo-dreamer", sync_tensorboard=True)
+        self._wm = models.WorldModel(
+            obs_space, act_space, self._step, config, narrator=narrator
+        )
         self._task_behavior = models.ImagBehavior(config, self._wm)
         if (
             config.compile and os.name != "nt"
@@ -75,7 +90,7 @@ class Dreamer(nn.Module):
                 # plot_trajectory_graph(self, step=self._logger.step)
                 if self._config.video_pred_log:
                     openl = self._wm.video_pred(next(self._dataset))
-                    # self._wm.intent_prediction(next(self._dataset))
+                    self._wm.intent_prediction(next(self._dataset))
                     self._logger.video("train_openl", to_np(openl))
                 self._logger.write(fps=True)
 
