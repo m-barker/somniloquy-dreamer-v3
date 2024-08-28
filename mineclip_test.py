@@ -33,6 +33,12 @@ if __name__ == "__main__":
         "I am holding shears",
         "Trying to find a sheep",
         "Breaking a dirt block",
+        "Breaking a sand block",
+        "Breaking a gravel block",
+        "Breaking a tree",
+        "Breaking a leaf block",
+        "Breaking a stone block",
+        "Breaking a cobblestone block",
         "Doing nothing",
         "looking up",
         "looking at a tree",
@@ -52,7 +58,7 @@ if __name__ == "__main__":
         "Walking towards a river",
     ]
     env = MineDojoEnv(
-        task_id="harvest_1_dirt",
+        task_id="harvest_wool",
         image_size=(160, 256),
     )
     env = wrappers.SelectAction(env, key="action")
