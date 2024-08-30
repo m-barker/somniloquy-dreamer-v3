@@ -3,7 +3,6 @@ import functools
 import os
 import pathlib
 import sys
-import wandb
 
 os.environ["MUJOCO_GL"] = "osmesa"
 
@@ -56,7 +55,6 @@ class Dreamer(nn.Module):
                 torch.device("cuda"),
                 prompts,
             )
-        wandb.init(project="minedojo-dreamer", sync_tensorboard=True)
         self._wm = models.WorldModel(
             obs_space, act_space, self._step, config, narrator=narrator
         )
@@ -81,7 +79,7 @@ class Dreamer(nn.Module):
                 if self._should_pretrain()
                 else self._should_train(step)
             )
-            for step in tqdm(range(steps)):
+            for _ in range(steps):
                 self._train(next(self._dataset))
                 self._update_count += 1
                 self._metrics["update_count"] = self._update_count
@@ -94,6 +92,7 @@ class Dreamer(nn.Module):
                     openl = self._wm.video_pred(next(self._dataset))
                     self._wm.intent_prediction(next(self._dataset))
                     self._logger.video("train_openl", to_np(openl))
+                    pass
                 self._logger.write(fps=True)
 
         policy_output, state = self._policy(obs, state, training)
@@ -286,7 +285,6 @@ def main(config):
     print("Action Space", acts)
     config.num_actions = acts.n if hasattr(acts, "n") else acts.shape[0]
     print(f"NUMBER OF ACTIONS: {config.num_actions}")
-
     state = None
     if not config.offline_traindir:
         prefill = max(0, config.prefill - count_steps(config.traindir))

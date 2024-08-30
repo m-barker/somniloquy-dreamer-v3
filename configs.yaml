@@ -269,14 +269,15 @@ minigrid:
 minedojo:
   steps: 4e5
   envs: 1
-  eval_episode_num: 0
+  eval_episode_num: 1
   eval_every: 5000
+  action_repeat: 1
   log_every: 100
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   resize: opencv
   actions: needed
-  video_pred_log: true
+  video_pred_log: false
   task: "minedojo_harvest_1_dirt"
   minedojo_task_id: "harvest_1_dirt"
   time_limit: 5000

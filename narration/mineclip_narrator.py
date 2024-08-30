@@ -44,4 +44,5 @@ class MineCLIPNarrator:
             video_features, self.text_embeddings
         )
         caption_probs = torch.nn.functional.softmax(logits_per_text, dim=0)
+        print(self.prompts[caption_probs.argmax().item()])
         return self.prompts[caption_probs.argmax().item()]  # type: ignore

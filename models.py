@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import torch
 from torch import nn
-
+from copy import deepcopy
 import networks
 import tools
 
@@ -123,6 +123,7 @@ class WorldModel(nn.Module):
         # image (batch_size, batch_length, h, w, ch)
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
+        rgb_obs = deepcopy(data["image"])
         data = self.preprocess(data)
 
         with tools.RequiresGrad(self):
@@ -141,8 +142,6 @@ class WorldModel(nn.Module):
                 preds = {}
                 for name, head in self.heads.items():
                     if name == "language":
-                        # Convert to numpy
-                        rgb_obs = to_np(data["image"])
                         narrations = tools.generate_batch_narrations(
                             self.narrator,
                             rgb_obs,
@@ -238,6 +237,7 @@ class WorldModel(nn.Module):
                 for name, pred in preds.items():
                     if name == "language":
                         loss = tools.narration_loss(pred, narrations[:, 1:])
+                        print(f"LANGUAGE LOSS: {loss}")
                         losses[name] = loss
 
                     else:
@@ -250,7 +250,9 @@ class WorldModel(nn.Module):
                 }
                 model_loss = sum(scaled.values()) + kl_loss
             metrics = self._model_opt(torch.mean(model_loss), self.parameters())
-
+            for name, loss in losses.items():
+                if torch.isnan(loss).any():
+                    print(f"NAN DETECTED IN LOSS {name}")
         metrics.update({f"{name}_loss": to_np(loss) for name, loss in losses.items()})
         metrics["kl_free"] = kl_free
         metrics["dyn_scale"] = dyn_scale
