@@ -273,8 +273,6 @@ minedojo:
   eval_every: 5000
   action_repeat: 1
   log_every: 100
-  actor: { dist: "onehot", std: "none" }
-  imag_gradient: "reinforce"
   resize: opencv
   actions: needed
   video_pred_log: false
@@ -287,6 +285,30 @@ minedojo:
   mineclip_ckpt_path: attn.pth
   dec_max_length: 50
   enc_max_length: 16
+  dyn_hidden: 1024
+  dyn_deter: 4096
+  units: 1024
+  encoder:
+    {
+      mlp_keys: "inventory|inventory_max|equipped|health|hunger|breath|obs_reward",
+      cnn_keys: "image",
+      cnn_depth: 96,
+      mlp_layers: 5,
+      mlp_units: 1024,
+    }
+  decoder:
+    {
+      mlp_keys: "inventory|inventory_max|equipped|health|hunger|breath",
+      cnn_keys: "image",
+      cnn_depth: 96,
+      mlp_layers: 5,
+      mlp_units: 1024,
+    }
+  actor: { layers: 5, dist: "onehot", std: "none" }
+  value: { layers: 5 }
+  reward_head: { layers: 5 }
+  cont_head: { layers: 5 }
+  imag_gradient: "reinforce"
 
 debug:
   debug: True
