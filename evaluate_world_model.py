@@ -162,84 +162,103 @@ def evaluate_world_model(
         os.path.join(results_folder, "true_img_t0.png"),
         cv2.cvtColor(true_img, cv2.COLOR_RGB2BGR),
     )
+    done = False
+    while not done:
+        with torch.no_grad():
+            post_states = []
+            prior_states = []
+            for t in range(trajectory_length):
+                action_arr = np.zeros(env.action_space.n)
 
-    with torch.no_grad():
-        for t in range(trajectory_length):
-            action_arr = np.zeros(env.action_space.n)
+                if actions == "keyboard":
+                    action = input("Enter action: ")
+                    action_arr[int(action)] = 1
+                elif actions == "random":
+                    action = np.random.randint(env.action_space.n)
+                    action_arr[action] = 1
+                elif isinstance(actions, list):
+                    action = actions[t]
+                    action_arr[action] = 1
+                else:
+                    # Use Actor
+                    actor = agent._task_behavior.actor(latent_state)
+                    action = actor.mode().argmax().item()
+                    action_arr[action] = 1
 
-            if actions == "keyboard":
-                action = input("Enter action: ")
-                action_arr[int(action)] = 1
-            elif actions == "random":
-                action = np.random.randint(env.action_space.n)
-                action_arr[action] = 1
-            elif isinstance(actions, list):
-                action = actions[t]
-                action_arr[action] = 1
-            else:
-                # Use Actor
-                actor = agent._task_behavior.actor(latent_state)
-                action = actor.mode().argmax().item()
-                action_arr[action] = 1
+                action_dict = {"action": action_arr}
+                obs, reward, done, info = env.step(action_dict)
+                current_obs = obs.copy()
+                current_obs = add_batch_to_obs(current_obs)
+                current_obs = {k: tools.convert(v) for k, v in current_obs.items()}
+                current_obs = agent._wm.preprocess(current_obs)
+                embed = agent._wm.encoder(current_obs)
+                post, _ = agent._wm.dynamics.obs_step(
+                    embed=embed,
+                    is_first=current_obs["is_first"],
+                    prev_state=post,
+                    prev_action=torch.tensor(action_arr)
+                    .unsqueeze(0)
+                    .to(agent._config.device)
+                    .float(),
+                )
+                prior = agent._wm.dynamics.img_step(
+                    prev_state=prior,
+                    prev_action=torch.tensor(action_arr)
+                    .unsqueeze(0)
+                    .to(agent._config.device)
+                    .float(),
+                )
+                latent_state = agent._wm.dynamics.get_feat(post).unsqueeze(0)
+                imagined_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
+                post_states.append(latent_state)
+                prior_states.append(imagined_state)
+                reconstructed_obs = agent._wm.heads["decoder"](latent_state)[
+                    "image"
+                ].mode()
+                reconstructed_img = reconstructed_obs[0, 0].detach().cpu().numpy()
+                reconstructed_img = np.clip(255 * reconstructed_img, 0, 255).astype(
+                    np.uint8
+                )
+                imagined_img = agent._wm.heads["decoder"](imagined_state)[
+                    "image"
+                ].mode()
+                imagined_img = imagined_img[0, 0].detach().cpu().numpy()
+                imagined_img = np.clip(255 * imagined_img, 0, 255).astype(np.uint8)
 
-            action_dict = {"action": action_arr}
-            obs, reward, done, info = env.step(action_dict)
-            current_obs = obs.copy()
-            current_obs = add_batch_to_obs(current_obs)
-            current_obs = {k: tools.convert(v) for k, v in current_obs.items()}
-            current_obs = agent._wm.preprocess(current_obs)
-            embed = agent._wm.encoder(current_obs)
-            post, _ = agent._wm.dynamics.obs_step(
-                embed=embed,
-                is_first=current_obs["is_first"],
-                prev_state=post,
-                prev_action=torch.tensor(action_arr)
-                .unsqueeze(0)
-                .to(agent._config.device)
-                .float(),
-            )
-            prior = agent._wm.dynamics.img_step(
-                prev_state=prior,
-                prev_action=torch.tensor(action_arr)
-                .unsqueeze(0)
-                .to(agent._config.device)
-                .float(),
-            )
-            latent_state = agent._wm.dynamics.get_feat(post).unsqueeze(0)
-            imagined_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
-            reconstructed_obs = agent._wm.heads["decoder"](latent_state)["image"].mode()
-            reconstructed_img = reconstructed_obs[0, 0].detach().cpu().numpy()
-            reconstructed_img = np.clip(255 * reconstructed_img, 0, 255).astype(
-                np.uint8
-            )
-            imagined_img = agent._wm.heads["decoder"](imagined_state)["image"].mode()
-            imagined_img = imagined_img[0, 0].detach().cpu().numpy()
-            imagined_img = np.clip(255 * imagined_img, 0, 255).astype(np.uint8)
+                # save image
+                cv2.imwrite(
+                    os.path.join(results_folder, f"reconstructed_img_t{t+1}.png"),
+                    cv2.cvtColor(reconstructed_img, cv2.COLOR_RGB2BGR),
+                )
 
-            # save image
-            cv2.imwrite(
-                os.path.join(results_folder, f"reconstructed_img_t{t+1}.png"),
-                cv2.cvtColor(reconstructed_img, cv2.COLOR_RGB2BGR),
-            )
+                # Save the imagined image
+                cv2.imwrite(
+                    os.path.join(results_folder, f"imagined_img_t{t+1}.png"),
+                    cv2.cvtColor(imagined_img, cv2.COLOR_RGB2BGR),
+                )
 
-            # Save the imagined image
-            cv2.imwrite(
-                os.path.join(results_folder, f"imagined_img_t{t+1}.png"),
-                cv2.cvtColor(imagined_img, cv2.COLOR_RGB2BGR),
-            )
-
-            # save true image
-            true_img = obs["image"]
-            cv2.imwrite(
-                os.path.join(results_folder, f"true_img_t{t+1}.png"),
-                cv2.cvtColor(true_img, cv2.COLOR_RGB2BGR),
-            )
+                # save true image
+                true_img = obs["image"]
+                cv2.imwrite(
+                    os.path.join(results_folder, f"true_img_t{t+1}.png"),
+                    cv2.cvtColor(true_img, cv2.COLOR_RGB2BGR),
+                )
+        latent_states = torch.cat(post_states, dim=0).permute(1, 0, 2)
+        imagined_states = torch.cat(prior_states, dim=0).permute(1, 0, 2)
+        # T, B, D
+        narration = agent._wm.heads["language"].generate(
+            latent_states, agent._wm.vocab, 50
+        )
+        intent = agent._wm.heads["language"].generate(
+            imagined_states, agent._wm.vocab, 50
+        )
+        print(f"POSTERIOR NARRATION: {narration}")
+        print(f"PRIOR NARRATION: {intent}")
+        input("Press Enter to continue...")
 
 
 if __name__ == "__main__":
-    import sys
-
-    model_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minedojo/latest.pt"
+    model_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/minedojo-narration.pth"
     config_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/configs.yaml"
     logdir = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minedojo"
     suite = "minedojo"
@@ -249,7 +268,12 @@ if __name__ == "__main__":
     )
     step = 0
     config = load_config(config_path)
-    print(config)
+    config.enable_language = True
+    config.vocab_path = (
+        "/home/mattbarker/dev/somniloquy-dreamer-v3/vocab/mindojo_harvest_1_dirt.json"
+    )
+    config.dec_max_length = 50
+    config.enc_max_length = 16
     env = load_env(suite=suite, task=task, max_steps=2000)
     logger = tools.Logger(logdir, config.action_repeat * step)
     agent = initialize_agent(
@@ -261,4 +285,4 @@ if __name__ == "__main__":
     )
     load_weights(model_path, agent)
 
-    evaluate_world_model(env, agent, results_folder, trajectory_length=100)
+    evaluate_world_model(env, agent, results_folder, trajectory_length=16)
