@@ -163,3 +163,5 @@ cython_debug/
 
 logdir*
 *.png
+*.pth
+wandb*
