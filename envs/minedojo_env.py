@@ -1,7 +1,12 @@
-import minedojo
+from __future__ import annotations
+
+import minedojo  # type: ignore
 import numpy as np
-import gym
-import cv2
+import gym  # type: ignore
+import cv2  # type: ignore
+from gym import Wrapper
+from collections import deque
+from typing import Literal
 
 
 class MineDojoEnv(gym.Env):
@@ -27,7 +32,7 @@ class MineDojoEnv(gym.Env):
                 # RGB Observation
                 "image": gym.spaces.Box(0, 255, self.image_size + (3,), np.uint8),
                 # Pitch and Yaw of the agent
-                "compass": gym.spaces.Box(-180, 180, (4,), np.float32),
+                "compass": gym.spaces.Box(-180, 180, (2,), np.float32),
                 # xyz position of the agent
                 "position": gym.spaces.Box(-np.inf, np.inf, (3,), np.float32),
             }
@@ -92,11 +97,25 @@ class MineDojoEnv(gym.Env):
 
         return env_action
 
-    def _obs(self, obs):
+    def _obs(self, obs: dict) -> dict:
         # resize image
-        obs["rgb"] = np.transpose(obs["rgb"], (1, 2, 0))
-        obs["rgb"] = cv2.resize(obs["rgb"], self.image_size)
-        return {"image": obs["rgb"]}
+        rgb_frame = np.transpose(obs["rgb"], (1, 2, 0))
+        rgb_frame = cv2.resize(obs["rgb"], self.image_size)
+        flattened_compass = np.array(
+            [obs["location_stats"]["yaw"], obs["location_stats"]["pitch"]]
+        ).squeeze()
+        posistion = obs["location_stats"]["pos"]
+
+        # np array (3, 3, 3)
+        voxel_meta = obs["voxels"]["block_meta"]
+        voxel_meta = voxel_meta.flatten()
+
+        return {
+            "image": rgb_frame,
+            "compass": flattened_compass,
+            "position": posistion,
+            "voxel_meta": voxel_meta,
+        }
 
     def reset(self):
         obs = self.env.reset()
@@ -121,3 +140,87 @@ class MineDojoEnv(gym.Env):
         obs["is_last"] = bool(done)
         obs["is_terminal"] = bool(info.get("is_terminal", done))
         return obs, reward, done, info
+
+
+class AnimalZooDenseRewardWrapper(Wrapper):
+    """From MineCLIP implementation"""
+
+    def __init__(
+        self,
+        env,
+        entity: Literal["cow", "sheep"],
+        step_penalty: float | int,
+        nav_reward_scale: float | int,
+        attack_reward: float | int,
+    ):
+        assert (
+            "rays" in env.observation_space.keys()
+        ), "Dense reward function requires lidar observation"
+        super().__init__(env)
+
+        self._entity = entity
+        assert step_penalty >= 0, f"penalty must be non-negative"
+        self._step_penalty = step_penalty
+        self._nav_reward_scale = nav_reward_scale
+        self._attack_reward = attack_reward
+
+        self._weapon_durability_deque = deque(maxlen=2)  # type: ignore
+        self._consecutive_distances = deque(maxlen=2)  # type: ignore
+        self._distance_min = np.inf
+
+    def reset(self, **kwargs):
+        self._weapon_durability_deque.clear()
+        self._consecutive_distances.clear()
+        self._distance_min = np.inf
+
+        obs = super().reset(**kwargs)
+
+        entity_in_sight, distance = self._find_distance_to_entity_if_in_sight(obs)
+        if entity_in_sight:
+            distance = self._distance_min = min(distance, self._distance_min)
+            self._consecutive_distances.append(distance)
+        else:
+            self._consecutive_distances.append(0)
+        self._weapon_durability_deque.append(obs["inventory"]["cur_durability"][0])
+
+        return obs
+
+    def step(self, action):
+        obs, _reward, done, info = super().step(action)
+
+        self._weapon_durability_deque.append(obs["inventory"]["cur_durability"][0])
+        valid_attack = (
+            self._weapon_durability_deque[0] - self._weapon_durability_deque[1]
+        )
+        # when dying, the weapon is gone and durability changes to 0
+        valid_attack = 1.0 if valid_attack == 1.0 else 0.0
+
+        # attack reward
+        attack_reward = valid_attack * self._attack_reward
+        # nav reward
+        entity_in_sight, distance = self._find_distance_to_entity_if_in_sight(obs)
+        nav_reward = 0
+        if entity_in_sight:
+            distance = self._distance_min = min(distance, self._distance_min)
+            self._consecutive_distances.append(distance)
+            nav_reward = self._consecutive_distances[0] - self._consecutive_distances[1]
+        nav_reward = max(0, nav_reward)
+        nav_reward *= self._nav_reward_scale
+        # reset distance min if attacking the entity because entity will run away
+        if valid_attack > 0:
+            self._distance_min = np.inf
+        # total reward
+        reward = attack_reward + nav_reward - self._step_penalty + _reward
+        return obs, reward, done, info
+
+    def _find_distance_to_entity_if_in_sight(self, obs):
+        in_sight, min_distance = False, None
+        entities, distances = (
+            obs["rays"]["entity_name"],
+            obs["rays"]["entity_distance"],
+        )
+        entity_idx = np.where(entities == self._entity)[0]
+        if len(entity_idx) > 0:
+            in_sight = True
+            min_distance = np.min(distances[entity_idx])
+        return in_sight, min_distance

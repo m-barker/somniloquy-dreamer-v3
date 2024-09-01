@@ -2,6 +2,10 @@ import datetime
 import gym
 import numpy as np
 import uuid
+from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
+import gymnasium as gym
+from gymnasium import ObservationWrapper, spaces
+from minigrid.core.constants import OBJECT_TO_IDX, COLOR_TO_IDX  # type: ignore
 
 
 class TimeLimit(gym.Wrapper):
@@ -115,3 +119,56 @@ class UUID(gym.Wrapper):
         timestamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
         self.id = f"{timestamp}-{str(uuid.uuid4().hex)}"
         return self.env.reset()
+
+
+class MiniGridFullObsWrapper(ObservationWrapper):
+    """Combining the two existing mini-grid RGBImage wrapper and
+    FullObs wrapper into one wrapper."""
+
+    def __init__(
+        self,
+        env,
+        tile_size: int = 8,
+    ):
+        super().__init__(env)
+        self._tile_size = tile_size
+
+        rgb_image_space = spaces.Box(
+            low=0,
+            high=255,
+            shape=(
+                self._tile_size * self.env.width,
+                self._tile_size * self.env.height,
+                3,
+            ),
+            dtype="uint8",
+        )
+
+        encoded_image_space = spaces.Box(
+            low=0,
+            high=255,
+            shape=(self.env.width, self.env.height, 3),
+            dtype="uint8",
+        )
+
+        self.observation_space = spaces.Dict(
+            {
+                **self.observation_space.spaces,
+                "rgb_image": rgb_image_space,
+                "encoded_image": encoded_image_space,
+            }
+        )
+
+    def observation(self, observation) -> dict:
+        rgb_image = self.get_frame(highlight=True, tile_size=self._tile_size)
+        env = self.unwrapped
+        full_grid = env.grid.encode()
+        full_grid[env.agent_pos[0]][env.agent_pos[1]] = np.array(
+            [OBJECT_TO_IDX["agent"], COLOR_TO_IDX["red"], env.agent_dir]
+        )
+        encoded_image = full_grid
+        return {
+            **observation,
+            "rgb_image": rgb_image,
+            "encoded_image": encoded_image,
+        }
