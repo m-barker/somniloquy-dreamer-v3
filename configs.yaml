@@ -255,16 +255,17 @@ minigrid:
   steps: 4e5
   envs: 1
   action_repeat: 1
+  prefill: 10000
   eval_episode_num: 10
   eval_every: 5000
-  log_every: 100
+  log_every: 1000
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
-  resize: opencv
   actions: needed
-  video_pred_log: false
-  task: "minigrid_MiniGrid-DoorKey-6x6-v0"
-  time_limit: 200
+  enable_language: false
+  video_pred_log: true
+  task: "minigrid_teleport5x5"
+  time_limit: 512
 
 minedojo:
   steps: 4e5
@@ -272,7 +273,7 @@ minedojo:
   eval_episode_num: 1
   eval_every: 5000
   action_repeat: 1
-  log_every: 100
+  log_every: 1000
   resize: opencv
   actions: needed
   video_pred_log: false

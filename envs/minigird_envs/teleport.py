@@ -800,6 +800,7 @@ class Teleport5by5(TeleportBaseEnv):
         agent_start_pos=(1, 5),
         agent_start_dir=0,
         max_steps: int | None = None,
+        render_mode: str | None = None,
         **kwargs,
     ):
         self.agent_start_pos = agent_start_pos
@@ -816,6 +817,7 @@ class Teleport5by5(TeleportBaseEnv):
             # Set this to True for maximum speed
             see_through_walls=True,
             max_steps=max_steps,
+            render_mode=render_mode,
             **kwargs,
         )
 

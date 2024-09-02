@@ -9,6 +9,8 @@ import numpy as np
 import tools
 import envs.wrappers as wrappers
 
+from dreamer import make_env
+
 
 def load_weights(model_path: str, agent):
 
@@ -33,61 +35,6 @@ def initialize_agent(observation_space, action_space, config, logger, train_data
         train_dataset,
     ).to(config.device)
     return agent
-
-
-def load_env(suite: str, task: str, max_steps: int = 100, **kwargs):
-    print(f"Creating {suite} environment for {task}...")
-    if suite == "dmc":
-        import envs.dmc as dmc
-
-        env = dmc.DeepMindControl(
-            task, config.action_repeat, config.size, seed=config.seed + id
-        )
-        env = wrappers.NormalizeActions(env)
-    elif suite == "atari":
-        import envs.atari as atari
-
-        env = atari.Atari(task, **kwargs)
-        env = wrappers.OneHotAction(env)
-
-    elif suite == "minigrid":
-        import envs.minigrid as minigrid
-
-        env = minigrid.MiniGrid(task, **kwargs)
-        env = wrappers.OneHotAction(env)
-
-    elif suite == "dmlab":
-        import envs.dmlab as dmlab
-
-        env = dmlab.DeepMindLabyrinth(task, **kwargs)
-        env = wrappers.OneHotAction(env)
-    elif suite == "memorymaze":
-        from envs.memorymaze import MemoryMaze
-
-        env = MemoryMaze(task, **kwargs)
-        env = wrappers.OneHotAction(env)
-    elif suite == "crafter":
-        import envs.crafter as crafter
-
-        env = crafter.Crafter(task, **kwargs)
-        env = wrappers.OneHotAction(env)
-    elif suite == "minecraft":
-        import envs.minecraft as minecraft
-
-        env = minecraft.make_env(task, size=config.size, break_speed=config.break_speed)
-        env = wrappers.OneHotAction(env)
-    elif suite == "minedojo":
-        import envs.minedojo_env as minedojo_env
-
-        env = minedojo_env.MineDojoEnv()
-    else:
-        raise NotImplementedError(suite)
-    env = wrappers.TimeLimit(env, max_steps)
-    env = wrappers.SelectAction(env, key="action")
-    env = wrappers.UUID(env)
-    if suite == "minecraft":
-        env = wrappers.RewardObs(env)
-    return env
 
 
 def load_config(yaml_path: str):
@@ -168,7 +115,7 @@ def evaluate_world_model(
             post_states = []
             prior_states = []
             for t in range(trajectory_length):
-                action_arr = np.zeros(env.action_space.n)
+                action_arr = np.zeros(3)
 
                 if actions == "keyboard":
                     action = input("Enter action: ")
@@ -258,23 +205,19 @@ def evaluate_world_model(
 
 
 if __name__ == "__main__":
-    model_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/minedojo-narration.pth"
+    model_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic/latest.pt"
     config_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/configs.yaml"
-    logdir = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minedojo"
-    suite = "minedojo"
-    task = "harvest_1_dirt"
-    results_folder = (
-        "/home/mattbarker/dev/somniloquy-dreamer-v3/world_model_evaluation/minedojo"
-    )
+    logdir = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic"
+    results_folder = "/home/mattbarker/dev/somniloquy-dreamer-v3/world_model_evaluation/minigrid-stochastic"
     step = 0
     config = load_config(config_path)
-    config.enable_language = True
-    config.vocab_path = (
-        "/home/mattbarker/dev/somniloquy-dreamer-v3/vocab/mindojo_harvest_1_dirt.json"
-    )
-    config.dec_max_length = 50
-    config.enc_max_length = 16
-    env = load_env(suite=suite, task=task, max_steps=2000)
+    # config.enable_language = True
+    # config.vocab_path = (
+    #     "/home/mattbarker/dev/somniloquy-dreamer-v3/vocab/mindojo_harvest_1_dirt.json"
+    # )
+    # config.dec_max_length = 50
+    # config.enc_max_length = 16
+    env = make_env(config, "train", 1)
     logger = tools.Logger(logdir, config.action_repeat * step)
     agent = initialize_agent(
         observation_space=env.observation_space,
@@ -285,4 +228,6 @@ if __name__ == "__main__":
     )
     load_weights(model_path, agent)
 
-    evaluate_world_model(env, agent, results_folder, trajectory_length=16)
+    evaluate_world_model(
+        env, agent, results_folder, trajectory_length=16, actions="keyboard"
+    )

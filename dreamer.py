@@ -90,7 +90,8 @@ class Dreamer(nn.Module):
                 # plot_trajectory_graph(self, step=self._logger.step)
                 if self._config.video_pred_log:
                     openl = self._wm.video_pred(next(self._dataset))
-                    self._wm.intent_prediction(next(self._dataset))
+                    if self._config.enable_language:
+                        self._wm.intent_prediction(next(self._dataset))
                     self._logger.video("train_openl", to_np(openl))
                     pass
                 self._logger.write(fps=True)
@@ -193,8 +194,11 @@ def make_env(config, mode, id):
         import envs.minigrid as minigrid
 
         env = minigrid.MiniGrid(
-            task,
-            size=config.size,
+            task_name=task,
+            img_size=config.size,
+            actions=config.actions,
+            max_length=config.time_limit,
+            store_encoded_grid=config.enable_language,
         )
         env = wrappers.OneHotAction(env)
 
@@ -238,6 +242,7 @@ def make_env(config, mode, id):
     env = wrappers.UUID(env)
     if suite == "minecraft":
         env = wrappers.RewardObs(env)
+
     return env
 
 
@@ -353,7 +358,8 @@ def main(config):
             )
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(next(eval_dataset))
-                # agent._wm.intent_prediction(next(eval_dataset))
+                if config.enable_language:
+                    agent._wm.intent_prediction(next(eval_dataset))
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
         state = tools.simulate(

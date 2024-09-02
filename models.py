@@ -123,7 +123,7 @@ class WorldModel(nn.Module):
         # image (batch_size, batch_length, h, w, ch)
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
-        rgb_obs = deepcopy(data["image"])
+        # rgb_obs = deepcopy(data["image"])
         data = self.preprocess(data)
 
         with tools.RequiresGrad(self):
@@ -250,9 +250,9 @@ class WorldModel(nn.Module):
                 }
                 model_loss = sum(scaled.values()) + kl_loss
             metrics = self._model_opt(torch.mean(model_loss), self.parameters())
-            for name, loss in losses.items():
-                if torch.isnan(loss).any():
-                    print(f"NAN DETECTED IN LOSS {name}")
+            # for name, loss in losses.items():
+            #     if torch.isnan(loss).any():
+            #         print(f"NAN DETECTED IN LOSS {name}")
         metrics.update({f"{name}_loss": to_np(loss) for name, loss in losses.items()})
         metrics["kl_free"] = kl_free
         metrics["dyn_scale"] = dyn_scale

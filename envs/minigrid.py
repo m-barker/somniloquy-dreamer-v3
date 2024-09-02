@@ -29,14 +29,14 @@ class MiniGrid:
         self._action_mapping: dict[int, int] = {}
         self._max_length = max_length
         self._random = np.random.RandomState(seed)
-        self._env = self._create_env(task_name)
-
+        self._full_obs = full_obs
+        self._store_encoded_grid = store_encoded_grid
         self._done = True
         self._step = 0
         self._img_size = img_size
-        self._store_encoded_grid = store_encoded_grid
-        self._full_obs = full_obs
         self.reward_range = [0, np.inf]
+
+        self._env = self._create_env(task_name)
 
     def _create_env(self, task_name: str) -> gym.Env:
         print(f"Creating MiniGrid environment for task: {task_name}")
@@ -105,7 +105,7 @@ class MiniGrid:
             encoded_image=obs["encoded_image"],
         )
 
-    def reset(self):
+    def reset(self, seed=None, **kwargs):
         obs, info = self._env.reset()
         self._done = False
         self._step = 0
@@ -114,7 +114,7 @@ class MiniGrid:
             0.0,
             is_first=True,
             encoded_image=obs["encoded_image"],
-        )
+        )[0]
 
     def _obs(
         self,
