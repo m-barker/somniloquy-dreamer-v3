@@ -458,3 +458,10 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
             )
 
         return narration_str
+
+
+class MiniGridTeleportNarrator(MiniGridNarrator):
+    def narrate(self, observations: list[np.ndarray]) -> str:
+        """Generates a narration from a sequence of observations"""
+        narration_str = ""
+        return narration_str

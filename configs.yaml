@@ -273,6 +273,7 @@ minedojo:
   eval_episode_num: 1
   eval_every: 5000
   action_repeat: 1
+  train_ratio: 16
   log_every: 1000
   resize: opencv
   actions: needed
