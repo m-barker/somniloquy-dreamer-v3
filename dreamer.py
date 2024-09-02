@@ -233,8 +233,6 @@ def make_env(config, mode, id):
 
         env = minedojo_env.MineDojoEnv()
         print(f"ACTION SPACE: {env.action_space}")
-        # env = wrappers.OneHotAction(env)
-        # print(f"ACTION SPACE AFTER WRAPPER: {env.action_space}")
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)

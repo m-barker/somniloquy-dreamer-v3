@@ -100,7 +100,7 @@ class MineDojoEnv(gym.Env):
     def _obs(self, obs: dict) -> dict:
         # resize image
         rgb_frame = np.transpose(obs["rgb"], (1, 2, 0))
-        rgb_frame = cv2.resize(obs["rgb"], self.image_size)
+        rgb_frame = cv2.resize(rgb_frame, self.image_size)
         flattened_compass = np.array(
             [obs["location_stats"]["yaw"], obs["location_stats"]["pitch"]]
         ).squeeze()
@@ -109,7 +109,6 @@ class MineDojoEnv(gym.Env):
         # np array (3, 3, 3)
         voxel_meta = obs["voxels"]["block_meta"]
         voxel_meta = voxel_meta.flatten()
-
         return {
             "image": rgb_frame,
             "compass": flattened_compass,
