@@ -25,6 +25,10 @@ from tqdm import tqdm
 
 # from evaluate_narration_model import plot_trajectory_graph
 from narration.mineclip_narrator import MineCLIPNarrator
+from narration.minigrd_narrator import (
+    MiniGridFourSquareNarrator,
+    MiniGridTeleportNarrator,
+)
 
 
 to_np = lambda x: x.detach().cpu().numpy()
@@ -47,14 +51,20 @@ class Dreamer(nn.Module):
         self._update_count = 0
         self._dataset = dataset
         narrator = None
-        if config.enable_language:
-            with open(config.prompt_path, "r") as f:
-                prompts = json.load(f)[config.minedojo_task_id]
-            narrator = MineCLIPNarrator(
-                config.mineclip_ckpt_path,
-                torch.device("cuda"),
-                prompts,
-            )
+        if "minedojo" in config.task:
+            if config.mineclip_ckpt_path is not None:
+                with open(config.prompt_path, "r") as f:
+                    prompts = json.load(f)[config.minedojo_task_id]
+                narrator = MineCLIPNarrator(
+                    config.mineclip_ckpt_path,
+                    torch.device("cuda"),
+                    prompts,
+                )
+        elif "minigrid" in config.task:
+            if "four_squares" in config.task:
+                narrator = MiniGridFourSquareNarrator()
+            elif "teleport" in config.task:
+                narrator = MiniGridTeleportNarrator()
         self._wm = models.WorldModel(
             obs_space, act_space, self._step, config, narrator=narrator
         )
@@ -79,7 +89,7 @@ class Dreamer(nn.Module):
                 if self._should_pretrain()
                 else self._should_train(step)
             )
-            for _ in tqdm(range(steps)):
+            for _ in range(steps):
                 self._train(next(self._dataset))
                 self._update_count += 1
                 self._metrics["update_count"] = self._update_count
@@ -191,9 +201,9 @@ def make_env(config, mode, id):
         env = wrappers.OneHotAction(env)
 
     elif suite == "minigrid":
-        import envs.minigrid as minigrid
+        import envs.minigrid_env as minigrid_env
 
-        env = minigrid.MiniGrid(
+        env = minigrid_env.MiniGrid(
             task_name=task,
             img_size=config.size,
             actions=config.actions,

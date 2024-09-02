@@ -219,7 +219,7 @@ def simulate(
                     transition["action"] = a
                 transition["reward"] = r
                 transition["discount"] = info.get("discount", np.array(1 - float(d)))
-                # transition["encoded_image"] = info.get("encoded_image", None)
+                transition["encoded_image"] = info.get("encoded_image", None)
                 add_to_cache(cache, env.id, transition)
 
             if done.any():
@@ -1064,6 +1064,7 @@ def word_tokenise_text(
     tokenised_text = []
     for sentence in text:
         sentence = sentence.replace(",", "").replace(".", "")
+        sentence = sentence.lower()
         tokenised_sentence: list[int] = [vocab[word] for word in sentence.split()]
         if tokenised_sentence[0] != vocab["<BOS>"]:
             tokenised_sentence.insert(0, vocab["<BOS>"])
@@ -1105,7 +1106,10 @@ def generate_batch_narrations(
     """
 
     narration_batches: List[np.ndarray] = []
-    rgb_obs = rgb_obs.detach().cpu().numpy()
+    try:
+        rgb_obs = rgb_obs.detach().cpu().numpy()
+    except AttributeError:
+        rgb_obs = rgb_obs
     is_first = is_first.detach().cpu().numpy()
     for idx, batch in enumerate(observations):
         narrations: List[str] = []

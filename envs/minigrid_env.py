@@ -20,6 +20,7 @@ class MiniGrid:
         seed: int = 42,
         store_encoded_grid: bool = False,
         full_obs: bool = True,
+        human_render: bool = False,
     ):
         assert img_size[0] == img_size[1]
         assert actions in ("all", "needed"), actions
@@ -35,7 +36,7 @@ class MiniGrid:
         self._step = 0
         self._img_size = img_size
         self.reward_range = [0, np.inf]
-
+        self._human_render = human_render
         self._env = self._create_env(task_name)
 
     def _create_env(self, task_name: str) -> gym.Env:
@@ -51,7 +52,10 @@ class MiniGrid:
                 env.action_space = gym.spaces.Discrete(3)
 
         elif task_name == "teleport5x5":
-            env = Teleport5by5()
+            if self._human_render:
+                env = Teleport5by5(render_mode="human")
+            else:
+                env = Teleport5by5()
             if self._full_obs:
                 env = MiniGridFullObsWrapper(env)
             else:
@@ -109,12 +113,14 @@ class MiniGrid:
         obs, info = self._env.reset()
         self._done = False
         self._step = 0
-        return self._obs(
+        result = self._obs(
             obs["rgb_image"],
             0.0,
             is_first=True,
             encoded_image=obs["encoded_image"],
         )[0]
+        result["encoded_image"] = obs["encoded_image"]
+        return result
 
     def _obs(
         self,
@@ -142,3 +148,13 @@ class MiniGrid:
 
     def close(self):
         return self._env.close()
+
+
+if __name__ == "__main__":
+    from minigrid.manual_control import ManualControl
+
+    env = MiniGrid(task_name="teleport5x5", full_obs=True, human_render=True)._env
+
+    # enable manual control for testing
+    manual_control = ManualControl(env, seed=42)
+    manual_control.start()

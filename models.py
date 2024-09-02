@@ -124,8 +124,8 @@ class WorldModel(nn.Module):
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
         # rgb_obs = deepcopy(data["image"])
+        encoded_img = data["encoded_image"]
         data = self.preprocess(data)
-
         with tools.RequiresGrad(self):
             with torch.cuda.amp.autocast(self._use_amp):
                 embed = self.encoder(data)
@@ -144,7 +144,7 @@ class WorldModel(nn.Module):
                     if name == "language":
                         narrations = tools.generate_batch_narrations(
                             self.narrator,
-                            rgb_obs,
+                            encoded_img,
                             self._narration_max_enc_seq,
                             self._narration_max_dec_seq,
                             self.vocab,
@@ -237,7 +237,6 @@ class WorldModel(nn.Module):
                 for name, pred in preds.items():
                     if name == "language":
                         loss = tools.narration_loss(pred, narrations[:, 1:])
-                        print(f"LANGUAGE LOSS: {loss}")
                         losses[name] = loss
 
                     else:
@@ -289,7 +288,11 @@ class WorldModel(nn.Module):
         # 'is_terminal' is necesarry to train cont_head
         assert "is_terminal" in obs
         obs["cont"] = torch.Tensor(1.0 - obs["is_terminal"]).unsqueeze(-1)
-        obs = {k: torch.Tensor(v).to(self._config.device) for k, v in obs.items()}
+        obs = {
+            k: torch.Tensor(v).to(self._config.device)
+            for k, v in obs.items()
+            if k != "encoded_image"
+        }
         return obs
 
     def video_pred(self, data):
@@ -315,11 +318,12 @@ class WorldModel(nn.Module):
         return torch.cat([truth, model, error], 2)
 
     def intent_prediction(self, data):
+        encoded_img = data["encoded_image"]
         data = self.preprocess(data)
         embed = self.encoder(data)
         embed = embed[0, :16].unsqueeze(0)
-        rgb_imgs = to_np(data["image"][0, :16])
-        encoded_imgs_list = [rgb_imgs[i] for i in range(16)]
+        # rgb_imgs = to_np(data["image"][0, :16])
+        encoded_imgs_list = [encoded_img[i] for i in range(16)]
         ground_truth_intent = self.narrator.narrate(encoded_imgs_list)
         states, _ = self.dynamics.observe(
             embed,

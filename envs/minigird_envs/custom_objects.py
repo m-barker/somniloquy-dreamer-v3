@@ -97,6 +97,7 @@ class WorldObj:
         # State, 0: open, 1: closed, 2: locked
         is_open = state == 0
         is_locked = state == 2
+        is_active = state == 0
 
         if obj_type == "wall":
             v = Wall(color)
@@ -115,7 +116,7 @@ class WorldObj:
         elif obj_type == "lava":
             v = Lava()
         elif obj_type == "teleporter":
-            v = Teleporter()
+            v = Teleporter(active=is_active)
         else:
             assert False, "unknown object type in decode '%s'" % obj_type
 
@@ -142,6 +143,17 @@ class Teleporter(WorldObj):
         self.inactive_colour = inactive_colour
         colour = active_colour if active else inactive_colour
         super().__init__("teleporter", colour)
+
+    def encode(self):
+        """Encode the a description of this object as a 3-tuple of integers"""
+
+        # State, 0: active, 1: inactive
+        if self.is_active:
+            state = 0
+        else:
+            state = 1
+
+        return (OBJECT_TO_IDX[self.type], COLOR_TO_IDX[self.color], state)
 
     def render(self, img: np.ndarray):
         active_colour = COLORS[self.active_colour]

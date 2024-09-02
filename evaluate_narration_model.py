@@ -10,7 +10,7 @@ from sklearn.decomposition import PCA
 
 import tools
 import envs.wrappers as wrappers
-import envs.minigrid as minigrid
+import envs.minigrid_env as minigrid_env
 
 
 def load_weights(model_path: str, agent):
@@ -39,7 +39,7 @@ def initialize_agent(observation_space, action_space, config, logger, train_data
 
 
 def load_env(task: str = "four_squares", max_steps: int = 100):
-    env = minigrid.MiniGrid(task)
+    env = minigrid_env.MiniGrid(task)
     env = wrappers.OneHotAction(env)
     env = wrappers.TimeLimit(env, max_steps)
     env = wrappers.SelectAction(env, key="action")

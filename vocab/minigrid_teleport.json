@@ -1,0 +1,23 @@
+{
+    "<PAD>": 0,
+    "<BOS>": 1,
+    "<EOS>": 2,
+    "<UNK>": 3,
+    "i": 4,
+    "will": 5,
+    "not": 6,
+    "teleport": 7,
+    "yet": 8,
+    "go": 9,
+    "through": 10,
+    "the": 11,
+    "left": 12,
+    "teleporter": 13,
+    "and": 14,
+    "right": 15,
+    "have": 16,
+    "already": 17,
+    "teleported": 18,
+    "reach": 19,
+    "goal": 20
+}

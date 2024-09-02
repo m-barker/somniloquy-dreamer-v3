@@ -14,12 +14,18 @@ class MiniGridNarrator(ABC):
             "KEY_ID": 5,
             "GOAL_ID": 8,
             "AGENT_ID": 10,
+            "TELEPORTER_ID": 11,
         }
         # Status is channel 2 of the environment observation
-        self._STATUS_IDS = {
+        self._DOOR_STATUS_IDS = {
             "OPEN": 0,
             "CLOSED": 1,
             "LOCKED": 2,
+        }
+
+        self._TELEPORTER_STATUS_IDS = {
+            "ACTIVE": 0,
+            "INACTIVE": 1,
         }
 
         self._COLOUR_IDS = {
@@ -283,7 +289,10 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
                 door_position = self._get_object_location(
                     obs, self._OBJECT_IDS["AGENT_ID"]
                 )[0]
-            if obs[door_position[0], door_position[1], 2] != self._STATUS_IDS["LOCKED"]:
+            if (
+                obs[door_position[0], door_position[1], 2]
+                != self._DOOR_STATUS_IDS["LOCKED"]
+            ):
                 return i
         return -1
 
@@ -335,9 +344,9 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
         initial_status = first_obs[door_position[0], door_position[1], 2]
         final_status = last_obs[door_position[0], door_position[1], 2]
 
-        if initial_status == self._STATUS_IDS["LOCKED"]:
+        if initial_status == self._DOOR_STATUS_IDS["LOCKED"]:
             door_locked = True
-            if final_status != self._STATUS_IDS["LOCKED"]:
+            if final_status != self._DOOR_STATUS_IDS["LOCKED"]:
                 agent_unlocked_door = True
                 door_locked = False
 
@@ -356,15 +365,15 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
             next_status = observations[i][door_position[0], door_position[1], 2]
             if next_status != current_status:
                 if (
-                    next_status == self._STATUS_IDS["OPEN"]
-                    and current_status == self._STATUS_IDS["CLOSED"]
+                    next_status == self._DOOR_STATUS_IDS["OPEN"]
+                    and current_status == self._DOOR_STATUS_IDS["CLOSED"]
                 ):
                     if door_changed:
                         door_open_close_sequence += "and then "
                     door_open_close_sequence += "the agent opened the door "
                     door_changed = True
                     current_status = next_status
-                elif next_status == self._STATUS_IDS["CLOSED"]:
+                elif next_status == self._DOOR_STATUS_IDS["CLOSED"]:
                     if door_changed:
                         door_open_close_sequence += "and then "
                     door_open_close_sequence += "the agent closed the door "
@@ -461,7 +470,94 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
 
 
 class MiniGridTeleportNarrator(MiniGridNarrator):
+    def __init__(self) -> None:
+        super().__init__()
+
+        # Hardcoding to the 5x5 grid size for now.
+        # If we use this more, need to make this more general.
+
+        self._TELEPORTER_POSITIONS = {
+            "active_teleporter": (3, 4),
+            "left_teleporter": (2, 2),
+            "right_teleporter": (4, 2),
+        }
+
+        self._NON_TELEPORT_POSITIONS = [
+            (3, 4),
+            (2, 4),
+            (1, 4),
+            (4, 4),
+            (5, 4),
+            (3, 5),
+            (2, 5),
+            (1, 5),
+            (4, 5),
+            (5, 5),
+        ]
+
+        self._LEFT_TELEPORT_POSITIONS = [
+            (2, 2),
+            (1, 2),
+            (1, 1),
+            (2, 1),
+        ]
+
+        self._RIGHT_TELEPORT_POSITIONS = [
+            (4, 2),
+            (5, 2),
+            (4, 1),
+            (5, 1),
+        ]
+
+        self._LEFT_GOAL_POSITION = (1, 1)
+        self._RIGHT_GOAL_POSITION = (5, 1)
+
     def narrate(self, observations: list[np.ndarray]) -> str:
         """Generates a narration from a sequence of observations"""
         narration_str = ""
+        try:
+            agent_start_position = self._get_object_location(
+                observations[0], self._OBJECT_IDS["AGENT_ID"]
+            )[0]
+        except IndexError:
+            return "I will reach the goal"
+
+        try:
+            agent_end_position = self._get_object_location(
+                observations[-1], self._OBJECT_IDS["AGENT_ID"]
+            )[0]
+        except IndexError:
+            if agent_start_position in self._RIGHT_TELEPORT_POSITIONS:
+                agent_end_position = self._RIGHT_GOAL_POSITION
+            elif agent_start_position in self._LEFT_TELEPORT_POSITIONS:
+                agent_end_position = self._LEFT_GOAL_POSITION
+            else:
+                for obs in observations:
+                    agent_pos = self._get_object_location(
+                        obs, self._OBJECT_IDS["AGENT_ID"]
+                    )[0]
+                    if agent_pos in self._RIGHT_TELEPORT_POSITIONS:
+                        return "I will go through the teleporter and teleport right"
+                    elif agent_pos in self._LEFT_TELEPORT_POSITIONS:
+                        return "I will go through the teleporter and teleport left"
+                raise ValueError(
+                    "Agent did not reach goal or teleporter, but error occurred in getting agent end position"
+                )
+
+        if agent_start_position in self._NON_TELEPORT_POSITIONS:
+            if agent_end_position in self._NON_TELEPORT_POSITIONS:
+                narration_str += "I will not teleport yet"
+            elif agent_end_position in self._LEFT_TELEPORT_POSITIONS:
+                narration_str += "I will go through the teleporter and teleport left"
+            elif agent_end_position in self._RIGHT_TELEPORT_POSITIONS:
+                narration_str += "I will go through the teleporter and teleport right"
+        elif agent_start_position in self._LEFT_TELEPORT_POSITIONS:
+            narration_str += "I have already teleported left"
+        elif agent_start_position in self._RIGHT_TELEPORT_POSITIONS:
+            narration_str += "I have already teleported right"
+
+        if agent_end_position == self._LEFT_GOAL_POSITION:
+            narration_str += " and I will reach the left goal"
+        elif agent_end_position == self._RIGHT_GOAL_POSITION:
+            narration_str += " and I will reach the right goal"
         return narration_str
