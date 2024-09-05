@@ -270,6 +270,7 @@ minigrid:
   video_pred_log: true
   task: "minigrid_teleport5x5"
   time_limit: 512
+  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-lang-no-grad/latest.pt"
 
 minedojo:
   steps: 4e5

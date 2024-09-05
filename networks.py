@@ -975,26 +975,6 @@ class TransformerEncoderDecoder(nn.Module):
             output_probs = F.softmax(output_logits, dim=-1)
             output_probs = output_probs.squeeze(1)
 
-            # Convert the output tokens to a string
-            sequence_so_far = translated_input.squeeze(0).cpu().numpy()
-            narration = [
-                list(vocab.keys())[list(vocab.values()).index(token_id)]
-                for token_id in sequence_so_far
-            ]
-            sequence_so_far = " ".join(narration)
-            print(f"Generated sequence so far: {sequence_so_far}")
-
-            probability_of_next_words = {}
-
-            for token_id, prob in enumerate(output_probs[-1]):
-                token_id_translated = list(vocab.keys())[
-                    list(vocab.values()).index(token_id)
-                ]
-                probability_of_next_words[token_id_translated] = prob.item()
-
-            for k, v in probability_of_next_words.items():
-                print(f"{k}: {v}")
-
             if deterministic:
                 predicted_token_ids = torch.argmax(output_probs, dim=-1)
             else:

@@ -564,14 +564,6 @@ class TeleportBaseEnv(gym.Env):
                         LEFT += 1
                     else:
                         RIGHT += 1
-                    print(f"TOTAL LEFT TELEPORTS: {LEFT}")
-                    print(f"TOTAL RIGHT TELEPORTS: {RIGHT}")
-                    print(
-                        f"SAMPLED PROBABILITY OF LEFT TELEPORT: {LEFT / (LEFT + RIGHT):.2f}"
-                    )
-                    print(
-                        f"SAMPLED PROBABILITY OF RIGHT TELEPORT: {RIGHT / (LEFT + RIGHT):.2f}"
-                    )
                     self.agent_pos = end_locations[teleport_to]
                 else:
                     self.agent_pos = tuple(fwd_pos)
