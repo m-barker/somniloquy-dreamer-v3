@@ -20,7 +20,7 @@ from minigrid.core.constants import COLOR_NAMES, DIR_TO_VEC, TILE_PIXELS
 from minigrid.core.grid import Grid
 from minigrid.core.mission import MissionSpace
 
-from .custom_objects import Teleporter, WorldObj, Point
+from custom_objects import Teleporter, WorldObj, Point
 
 T = TypeVar("T")
 LEFT = 0
@@ -868,8 +868,127 @@ class Teleport5by5(TeleportBaseEnv):
         self.mission = "Navigate to one of the goals using the teleporter"
 
 
+class TeleportComplex(TeleportBaseEnv):
+    def __init__(
+        self,
+        size=10,
+        agent_start_pos=(1, 8),
+        agent_start_dir=0,
+        max_steps: int | None = None,
+        render_mode: str | None = None,
+        **kwargs,
+    ):
+        self.agent_start_pos = agent_start_pos
+        self.agent_start_dir = agent_start_dir
+
+        mission_space = MissionSpace(mission_func=self._gen_mission)
+
+        if max_steps is None:
+            max_steps = 4 * size**2
+
+        super().__init__(
+            mission_space=mission_space,
+            grid_size=size,
+            # Set this to True for maximum speed
+            see_through_walls=True,
+            max_steps=max_steps,
+            render_mode="human",
+            **kwargs,
+        )
+
+    @staticmethod
+    def _gen_mission():
+        return "Navigate to one of the goals using the teleporter"
+
+    def _gen_grid(self, width, height):
+        # Create an empty grid
+        self.grid = Grid(width, height)
+
+        # Generate the surrounding walls
+        self.grid.wall_rect(0, 0, width, height)
+
+        wall_positions = [
+            (3, 8),
+            (3, 7),
+            (3, 6),
+            (3, 5),
+            (3, 4),
+            (3, 3),
+            (3, 2),
+            (7, 8),
+            (7, 7),
+            (7, 6),
+            (7, 5),
+            (7, 4),
+            (7, 3),
+            (7, 2),
+            (4, 5),
+            (5, 5),
+            (6, 5),
+            (1, 6),
+            (2, 6),
+            (1, 3),
+            (2, 3),
+            (4, 2),
+            (5, 2),
+        ]
+
+        for pos in wall_positions:
+            self.put_obj(Wall(), *pos)
+
+        # Place teleporters
+
+        blue_teleporter = Teleporter(active=True)
+        blue_teleporter.end_locations = [(1, 5), (5, 3), (4, 8)]
+        blue_teleporter.end_probabilities = [0.33, 0.33, 0.34]
+
+        green_teleporter = Teleporter(active=True, active_colour="green")
+        green_teleporter.end_locations = [(2, 2), (4, 8)]
+        green_teleporter.end_probabilities = [0.5, 0.5]
+
+        purple_teleporter_l = Teleporter(active=True, active_colour="purple")
+        purple_teleporter_l.end_locations = [(2, 8), (5, 3)]
+        purple_teleporter_l.end_probabilities = [0.5, 0.5]
+
+        purple_teleporter_r = Teleporter(active=True, active_colour="purple")
+        purple_teleporter_r.end_locations = [(5, 3), (8, 8)]
+        purple_teleporter_r.end_probabilities = [0.5, 0.5]
+
+        source_teleporter = Teleporter(active=True)
+        source_teleporter.end_locations = [(2, 2), (4, 2)]
+        source_teleporter.end_probabilities = [0.5, 0.5]
+
+        destination_teleporter_locations = [
+            (1, 5),
+            (2, 2),
+            (4, 8),
+            (5, 3),
+            (8, 8),
+            (2, 8),
+        ]
+
+        for pos in destination_teleporter_locations:
+            self.put_obj(Teleporter(active=False), *pos)
+
+        self.put_obj(blue_teleporter, 2, 7)
+        self.put_obj(green_teleporter, 2, 4)
+        self.put_obj(purple_teleporter_l, 4, 6)
+        self.put_obj(purple_teleporter_r, 6, 6)
+
+        self.put_obj(Goal(), 8, 1)
+
+        # Place the agent
+        if self.agent_start_pos is not None:
+            self.agent_pos = self.agent_start_pos
+            self.agent_dir = self.agent_start_dir
+        else:
+            self.place_agent()
+
+        self.mission = "Navigate to one of the goals using the teleporter"
+
+
 def main():
-    env = Teleport5by5(render_mode="human")
+    env = TeleportComplex(render_mode="human")
 
     # enable manual control for testing
     manual_control = ManualControl(env, seed=42)
