@@ -3,6 +3,7 @@ import functools
 import os
 import pathlib
 import sys
+from typing import List, Union, Tuple, Dict
 
 os.environ["MUJOCO_GL"] = "osmesa"
 
@@ -21,7 +22,6 @@ import torch
 import json
 from torch import nn
 from torch import distributions as torchd
-from tqdm import tqdm
 
 # from evaluate_narration_model import plot_trajectory_graph
 from narration.mineclip_narrator import MineCLIPNarrator
@@ -51,20 +51,8 @@ class Dreamer(nn.Module):
         self._update_count = 0
         self._dataset = dataset
         narrator = None
-        if "minedojo" in config.task:
-            if config.mineclip_ckpt_path is not None:
-                with open(config.prompt_path, "r") as f:
-                    prompts = json.load(f)[config.minedojo_task_id]
-                narrator = MineCLIPNarrator(
-                    config.mineclip_ckpt_path,
-                    torch.device("cuda"),
-                    prompts,
-                )
-        elif "minigrid" in config.task:
-            if "four_squares" in config.task:
-                narrator = MiniGridFourSquareNarrator()
-            elif "teleport" in config.task:
-                narrator = MiniGridTeleportNarrator()
+        if config.enable_language:
+            narrator = configure_narrator(config)
         self._wm = models.WorldModel(
             obs_space, act_space, self._step, config, narrator=narrator
         )
@@ -173,6 +161,24 @@ def make_dataset(episodes, config):
     return dataset
 
 
+def configure_narrator(config):
+    if "minedojo" in config.task:
+        if config.mineclip_ckpt_path is not None:
+            with open(config.prompt_path, "r") as f:
+                prompts = json.load(f)[config.minedojo_task_id]
+            narrator = MineCLIPNarrator(
+                config.mineclip_ckpt_path,
+                torch.device("cuda"),
+                prompts,
+            )
+    elif "minigrid" in config.task:
+        if "four_squares" in config.task:
+            narrator = MiniGridFourSquareNarrator()
+        elif "teleport" in config.task:
+            narrator = MiniGridTeleportNarrator()
+    return narrator
+
+
 def make_env(config, mode, id):
     suite, task = config.task.split("_", 1)
     print(f"Creating {suite} environment for {task}...")
@@ -254,7 +260,113 @@ def make_env(config, mode, id):
     return env
 
 
-def main(config):
+def setup_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--configs", nargs="+")
+    args, remaining = parser.parse_known_args()
+    configs = yaml.safe_load(
+        (pathlib.Path(sys.argv[0]).parent / "configs.yaml").read_text()
+    )
+
+    def recursive_update(base, update):
+        for key, value in update.items():
+            if isinstance(value, dict) and key in base:
+                recursive_update(base[key], value)
+            else:
+                base[key] = value
+
+    name_list = ["defaults", *args.configs] if args.configs else ["defaults"]
+    defaults = {}
+    for name in name_list:
+        recursive_update(defaults, configs[name])
+    parser = argparse.ArgumentParser()
+    for key, value in sorted(defaults.items(), key=lambda x: x[0]):
+        arg_type = tools.args_type(value)
+        parser.add_argument(f"--{key}", type=arg_type, default=arg_type(value))
+    return parser.parse_args(remaining)
+
+
+def prefill_dataset(
+    train_envs: List[Union[Parallel, Damy]],
+    train_eps: dict,
+    config: argparse.Namespace,
+    logger: tools.Logger,
+    action_space,
+) -> None:
+    """_summary_
+
+    Args:
+        train_envs (List[Union[Parallel, Damy]]): _description_
+        train_eps (List[dict]): _description_
+        config (argparse.Namespace): _description_
+    """
+
+    prefill = max(0, config.prefill - count_steps(config.traindir))
+    print(f"Prefill dataset ({prefill} steps).")
+    if hasattr(action_space, "discrete"):
+        random_actor: Union[tools.OneHotDist, torchd.independent.Independent] = (
+            tools.OneHotDist(torch.zeros(config.num_actions).repeat(config.envs, 1))
+        )
+    else:
+        random_actor = torchd.independent.Independent(
+            torchd.uniform.Uniform(
+                torch.Tensor(action_space.low).repeat(config.envs, 1),
+                torch.Tensor(action_space.high).repeat(config.envs, 1),
+            ),
+            1,
+        )
+
+    def random_agent(o, d, s):
+        action = random_actor.sample()
+        logprob = random_actor.log_prob(action)
+        return {"action": action, "logprob": logprob}, None
+
+    _ = tools.simulate(
+        random_agent,
+        train_envs,
+        train_eps,
+        config.traindir,
+        logger,
+        limit=config.dataset_size,
+        steps=prefill,
+    )
+    logger.step += prefill * config.action_repeat
+    print(f"Logger: ({logger.step} steps).")
+
+
+def create_environments(
+    config,
+) -> Tuple[List[Union[Parallel, Damy]], List[Union[Parallel, Damy]]]:
+
+    make = lambda mode, id: make_env(config, mode, id)
+    train_envs = [make("train", i) for i in range(config.envs)]
+    eval_envs = [make("eval", i) for i in range(config.envs)]
+    if config.parallel:
+        train_envs = [Parallel(env, "process") for env in train_envs]
+        eval_envs = [Parallel(env, "process") for env in eval_envs]
+    else:
+        train_envs = [Damy(env) for env in train_envs]
+        eval_envs = [Damy(env) for env in eval_envs]
+
+    return train_envs, eval_envs
+
+
+def load_existing_episodes(config: argparse.Namespace) -> Tuple[dict, dict]:
+    if config.offline_traindir:
+        directory = config.offline_traindir.format(**vars(config))
+    else:
+        directory = config.traindir
+    if config.offline_evaldir:
+        directory = config.offline_evaldir.format(**vars(config))
+    else:
+        directory = config.evaldir
+
+    train_eps = tools.load_episodes(directory, limit=config.dataset_size)
+    eval_eps = tools.load_episodes(directory, limit=1)
+    return train_eps, eval_eps
+
+
+def setup(config: argparse.Namespace) -> Tuple[argparse.Namespace, pathlib.Path]:
     tools.set_seed_everywhere(config.seed)
     if config.deterministic_run:
         tools.enable_deterministic_run()
@@ -270,67 +382,28 @@ def main(config):
     logdir.mkdir(parents=True, exist_ok=True)
     config.traindir.mkdir(parents=True, exist_ok=True)
     config.evaldir.mkdir(parents=True, exist_ok=True)
+    return config, logdir
+
+
+def main(config):
+    config, logdir = setup(config)
     step = count_steps(config.traindir)
     # step in logger is environmental step
     logger = tools.Logger(logdir, config.action_repeat * step)
 
     print("Create envs.")
-    if config.offline_traindir:
-        directory = config.offline_traindir.format(**vars(config))
-    else:
-        directory = config.traindir
-    train_eps = tools.load_episodes(directory, limit=config.dataset_size)
-    if config.offline_evaldir:
-        directory = config.offline_evaldir.format(**vars(config))
-    else:
-        directory = config.evaldir
-    eval_eps = tools.load_episodes(directory, limit=1)
-    make = lambda mode, id: make_env(config, mode, id)
-    train_envs = [make("train", i) for i in range(config.envs)]
-    eval_envs = [make("eval", i) for i in range(config.envs)]
-    if config.parallel:
-        train_envs = [Parallel(env, "process") for env in train_envs]
-        eval_envs = [Parallel(env, "process") for env in eval_envs]
-    else:
-        train_envs = [Damy(env) for env in train_envs]
-        eval_envs = [Damy(env) for env in eval_envs]
+    train_envs, eval_envs = create_environments(config)
+
+    print("Load existing episodes.")
+    train_eps, eval_eps = load_existing_episodes(config)
+
     acts = train_envs[0].action_space
     print("Action Space", acts)
     config.num_actions = acts.n if hasattr(acts, "n") else acts.shape[0]
     print(f"NUMBER OF ACTIONS: {config.num_actions}")
     state = None
     if not config.offline_traindir:
-        prefill = max(0, config.prefill - count_steps(config.traindir))
-        print(f"Prefill dataset ({prefill} steps).")
-        if hasattr(acts, "discrete"):
-            random_actor = tools.OneHotDist(
-                torch.zeros(config.num_actions).repeat(config.envs, 1)
-            )
-        else:
-            random_actor = torchd.independent.Independent(
-                torchd.uniform.Uniform(
-                    torch.Tensor(acts.low).repeat(config.envs, 1),
-                    torch.Tensor(acts.high).repeat(config.envs, 1),
-                ),
-                1,
-            )
-
-        def random_agent(o, d, s):
-            action = random_actor.sample()
-            logprob = random_actor.log_prob(action)
-            return {"action": action, "logprob": logprob}, None
-
-        state = tools.simulate(
-            random_agent,
-            train_envs,
-            train_eps,
-            config.traindir,
-            logger,
-            limit=config.dataset_size,
-            steps=prefill,
-        )
-        logger.step += prefill * config.action_repeat
-        print(f"Logger: ({logger.step} steps).")
+        prefill_dataset(train_envs, train_eps, config, logger, acts)
 
     print("Simulate agent.")
     train_dataset = make_dataset(train_eps, config)
@@ -343,8 +416,8 @@ def main(config):
         train_dataset,
     ).to(config.device)
     agent.requires_grad_(requires_grad=False)
-    if (logdir / "latest.pt").exists():
-        checkpoint = torch.load(logdir / "latest.pt")
+    if config.checkpoint:
+        checkpoint = torch.load(config.checkpoint)
         agent.load_state_dict(checkpoint["agent_state_dict"])
         tools.recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
         agent._should_pretrain._once = False
@@ -354,6 +427,8 @@ def main(config):
         logger.write()
         if config.eval_episode_num > 0:
             print("Start evaluation.")
+            # partial is used to ensure that training is set to false
+            # at every __call__ to the agent.
             eval_policy = functools.partial(agent, training=False)
             tools.simulate(
                 eval_policy,
@@ -384,7 +459,7 @@ def main(config):
             "agent_state_dict": agent.state_dict(),
             "optims_state_dict": tools.recursively_collect_optim_state_dict(agent),
         }
-        torch.save(items_to_save, logdir / "latest.pt")
+        torch.save(items_to_save, logdir / f"dreamer-agent-step-{agent._step}.pt")
     for env in train_envs + eval_envs:
         try:
             env.close()
@@ -393,26 +468,4 @@ def main(config):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--configs", nargs="+")
-    args, remaining = parser.parse_known_args()
-    configs = yaml.safe_load(
-        (pathlib.Path(sys.argv[0]).parent / "configs.yaml").read_text()
-    )
-
-    def recursive_update(base, update):
-        for key, value in update.items():
-            if isinstance(value, dict) and key in base:
-                recursive_update(base[key], value)
-            else:
-                base[key] = value
-
-    name_list = ["defaults", *args.configs] if args.configs else ["defaults"]
-    defaults = {}
-    for name in name_list:
-        recursive_update(defaults, configs[name])
-    parser = argparse.ArgumentParser()
-    for key, value in sorted(defaults.items(), key=lambda x: x[0]):
-        arg_type = tools.args_type(value)
-        parser.add_argument(f"--{key}", type=arg_type, default=arg_type(value))
-    main(parser.parse_args(remaining))
+    main(setup_args())

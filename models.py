@@ -153,7 +153,7 @@ class WorldModel(nn.Module):
                             data["is_first"],
                         ).reshape(-1, self._narration_max_dec_seq)
                         # Shape (batch, seq_len, latent_state_dim)
-                        feat = self.dynamics.get_feat(post)
+                        feat = self.dynamics.get_feat(post).detach()
 
                         latent_sequences = []
                         padding_masks = []
@@ -209,7 +209,7 @@ class WorldModel(nn.Module):
                                 latent_sequences.append(latent_sequence)
                                 padding_masks.append(padding_mask)
 
-                        feat = torch.stack(latent_sequences)
+                        feat = torch.stack(latent_sequences).detach()
                         padding_masks = torch.stack(padding_masks)
 
                         pred = self.heads["language"].forward(

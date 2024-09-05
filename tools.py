@@ -1,16 +1,13 @@
-import datetime
 import timeit
 import collections
 import io
 import os
 import json
 import pathlib
-import re
 import time
 import random
-from abc import ABC, abstractmethod
 import json
-from typing import List, Union
+from typing import List, Union, Optional, Tuple
 import numpy as np
 
 import torch
@@ -19,6 +16,7 @@ from torch.nn import functional as F
 from torch import distributions as torchd
 from torch.utils.tensorboard import SummaryWriter
 
+from parallel import Parallel, Damy
 
 to_np = lambda x: x.detach().cpu().numpy()
 
@@ -147,16 +145,51 @@ class Logger:
 
 def simulate(
     agent,
-    envs,
-    cache,
-    directory,
-    logger,
-    is_eval=False,
-    limit=None,
-    steps=0,
-    episodes=0,
-    state=None,
-):
+    envs: List[Union[Parallel, Damy]],
+    cache: dict,
+    directory: pathlib.PurePath,
+    logger: Logger,
+    is_eval: bool = False,
+    limit: Optional[int] = None,
+    steps: int = 0,
+    episodes: int = 0,
+    state: Optional[Tuple] = None,
+) -> Tuple:
+    """Runs agent interaction with the environment.
+
+    Args:
+        agent (_type_): Random Agent or Dreamer Agent.
+
+        envs (List[Union[Parallel, Damy]]): List of environments to step.
+
+        cache (dict): Dictionary of episodes which is added to by this function.
+
+        directory (pathlib.PurePath): Path to save episodes.
+
+        logger (Logger): Logger object to record metrics.
+
+        is_eval (bool, optional): Whether the agent is being trained or evaluated. Defaults to False.
+
+        limit (Optional[int], optional): Max Cache size. Defaults to None.
+
+        steps (int, optional): Total steps to run for each environment. Defaults to 0.
+
+        episodes (int, optional): Total episodes to run for each environment. Defaults to 0.
+
+        state (Optional[Tuple], optional): Previous world model state used for the Actor.
+        To decide on which action to take. Defaults to None.
+
+    Returns:
+        Tuple: Tuple containing (
+            Remaining steps,
+            Remaining episodes,
+            Done status of envs,
+            Length of simulation steps,
+            Observations seen in simulation,
+            Agent State for next simulation,
+            Reward from simulation
+        )
+    """
     with Timer("Simulate Function"):
         # initialize or unpack simulation state
         if state is None:
@@ -227,7 +260,7 @@ def simulate(
                 # logging for done episode
                 for i in indices:
                     # with Timer("Saving episode"):
-                    #     save_episodes(directory, {envs[i].id: cache[envs[i].id]})
+                    save_episodes(directory, {envs[i].id: cache[envs[i].id]})
                     length = len(cache[envs[i].id]["reward"]) - 1
                     score = float(np.array(cache[envs[i].id]["reward"]).sum())
                     video = cache[envs[i].id]["image"]
@@ -274,7 +307,19 @@ def simulate(
     return (step - steps, episode - episodes, done, length, obs, agent_state, reward)
 
 
-def add_to_cache(cache, id, transition):
+def add_to_cache(cache: dict, id: str, transition: dict) -> None:
+    """Adds a transition to the cache, in the episode
+    specified by a given ID.
+
+    Args:
+        cache (dict): Dictionary of episodes.
+        id (str): The unique ID of the episode to which the
+        transition pertains.
+        transition (dict): dictionary of transition elements
+        containing the keys 'action', 'reward', 'discount', "image", etc.
+
+    """
+    # Cache contains current image, current reward, previous action
     if id not in cache:
         cache[id] = dict()
         for key, val in transition.items():
@@ -289,8 +334,18 @@ def add_to_cache(cache, id, transition):
                 cache[id][key].append(convert(val))
 
 
-def erase_over_episodes(cache, dataset_size):
+def erase_over_episodes(cache: dict, dataset_size: int) -> int:
+    """If required, removes the oldest episodes from the cache
+
+    Args:
+        cache (dict): Cache of episodes.
+        dataset_size (int): Maximum number of transitions to keep in the cache.
+
+    Returns:
+        int: The number of transitions in the dataset.
+    """
     step_in_dataset = 0
+    # Reversed as we want to keep the most recent episodes
     for key, ep in reversed(sorted(cache.items(), key=lambda x: x[0])):
         if (
             not dataset_size
@@ -317,7 +372,18 @@ def convert(value, precision=32):
     return value.astype(dtype)
 
 
-def save_episodes(directory, episodes):
+def save_episodes(directory: pathlib.PurePath, episodes: dict) -> bool:
+    """Saves the transitions of the episodes to the directory as npz files.
+
+    Args:
+        directory (pathlib.PurePath): The directory to save the episodes.
+        episodes (dict): The episodes to save -- nested dictionary where
+        the outer keys are the episode names and the inner keys are the
+        transition item names; transitons are stored as numpy arrays (or lists?).
+    Returns
+        True.
+
+    """
     directory = pathlib.Path(directory).expanduser()
     directory.mkdir(parents=True, exist_ok=True)
     for filename, episode in episodes.items():
@@ -400,8 +466,6 @@ def load_episodes(directory, limit=None, reverse=True):
                 with filename.open("rb") as f:
                     episode = np.load(f)
                     episode = {k: episode[k] for k in episode.keys()}
-                    print(episode["reward"])
-                    print(episode["logprob"])
 
             except Exception as e:
                 print(f"Could not load episode: {e}")

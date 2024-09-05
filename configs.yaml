@@ -111,6 +111,7 @@ defaults:
   # Training
   batch_size: 16
   batch_length: 64
+  # The ratio of model update steps: environment steps
   train_ratio: 512
   pretrain: 100
   model_lr: 1e-4
@@ -256,7 +257,7 @@ minigrid:
   envs: 1
   action_repeat: 1
   prefill: 10000
-  eval_episode_num: 10
+  eval_episode_num: 0
   eval_every: 5000
   log_every: 1000
   actor: { dist: "onehot", std: "none" }

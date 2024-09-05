@@ -109,8 +109,8 @@ def evaluate_world_model(
         os.path.join(results_folder, "true_img_t0.png"),
         cv2.cvtColor(true_img, cv2.COLOR_RGB2BGR),
     )
-    done = False
-    while not done:
+    exit = False
+    while not exit:
         with torch.no_grad():
             post_states = []
             prior_states = []
@@ -190,6 +190,9 @@ def evaluate_world_model(
                     os.path.join(results_folder, f"true_img_t{t+1}.png"),
                     cv2.cvtColor(true_img, cv2.COLOR_RGB2BGR),
                 )
+                if done:
+                    exit = True
+                    break
         latent_states = torch.cat(post_states, dim=0).permute(1, 0, 2)
         imagined_states = torch.cat(prior_states, dim=0).permute(1, 0, 2)
         # T, B, D
@@ -197,7 +200,7 @@ def evaluate_world_model(
             latent_states, agent._wm.vocab, 50
         )
         intent = agent._wm.heads["language"].generate(
-            imagined_states, agent._wm.vocab, 50
+            imagined_states, agent._wm.vocab, 50, deterministic=False
         )
         print(f"POSTERIOR NARRATION: {narration}")
         print(f"PRIOR NARRATION: {intent}")
@@ -205,18 +208,18 @@ def evaluate_world_model(
 
 
 if __name__ == "__main__":
-    model_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic/latest.pt"
+    model_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-lang-no-grad/latest.pt"
     config_path = "/home/mattbarker/dev/somniloquy-dreamer-v3/configs.yaml"
-    logdir = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic"
-    results_folder = "/home/mattbarker/dev/somniloquy-dreamer-v3/world_model_evaluation/minigrid-stochastic"
+    logdir = "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-lang-no-grad"
+    results_folder = "/home/mattbarker/dev/somniloquy-dreamer-v3/world_model_evaluation/minigrid-stochastic-lang-no-grad"
     step = 0
     config = load_config(config_path)
-    # config.enable_language = True
-    # config.vocab_path = (
-    #     "/home/mattbarker/dev/somniloquy-dreamer-v3/vocab/mindojo_harvest_1_dirt.json"
-    # )
-    # config.dec_max_length = 50
-    # config.enc_max_length = 16
+    config.enable_language = True
+    config.vocab_path = (
+        "/home/mattbarker/dev/somniloquy-dreamer-v3/vocab/minigrid_teleport.json"
+    )
+    config.dec_max_length = 50
+    config.enc_max_length = 16
     env = make_env(config, "train", 1)
     logger = tools.Logger(logdir, config.action_repeat * step)
     agent = initialize_agent(

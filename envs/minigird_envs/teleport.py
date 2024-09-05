@@ -23,6 +23,8 @@ from minigrid.core.mission import MissionSpace
 from .custom_objects import Teleporter, WorldObj, Point
 
 T = TypeVar("T")
+LEFT = 0
+RIGHT = 0
 
 
 class TeleportBaseEnv(gym.Env):
@@ -523,6 +525,8 @@ class TeleportBaseEnv(gym.Env):
     ) -> tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]:
         self.step_count += 1
 
+        global LEFT
+        global RIGHT
         reward = 0
         terminated = False
         truncated = False
@@ -542,7 +546,6 @@ class TeleportBaseEnv(gym.Env):
         # Rotate right
         elif action == self.actions.right:
             self.agent_dir = (self.agent_dir + 1) % 4
-
         # Move forward
         elif action == self.actions.forward:
             if fwd_cell is None or fwd_cell.can_overlap():
@@ -557,6 +560,18 @@ class TeleportBaseEnv(gym.Env):
                     end_locations = fwd_cell.end_locations
                     end_probs = fwd_cell.end_probabilities
                     teleport_to = np.random.choice(len(end_locations), p=end_probs)
+                    if teleport_to == 0:
+                        LEFT += 1
+                    else:
+                        RIGHT += 1
+                    print(f"TOTAL LEFT TELEPORTS: {LEFT}")
+                    print(f"TOTAL RIGHT TELEPORTS: {RIGHT}")
+                    print(
+                        f"SAMPLED PROBABILITY OF LEFT TELEPORT: {LEFT / (LEFT + RIGHT):.2f}"
+                    )
+                    print(
+                        f"SAMPLED PROBABILITY OF RIGHT TELEPORT: {RIGHT / (LEFT + RIGHT):.2f}"
+                    )
                     self.agent_pos = end_locations[teleport_to]
                 else:
                     self.agent_pos = tuple(fwd_pos)
@@ -817,7 +832,7 @@ class Teleport5by5(TeleportBaseEnv):
             # Set this to True for maximum speed
             see_through_walls=True,
             max_steps=max_steps,
-            render_mode=render_mode,
+            render_mode="human",
             **kwargs,
         )
 
