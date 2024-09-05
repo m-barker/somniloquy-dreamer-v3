@@ -1,6 +1,10 @@
+from typing import List
+
 import torch
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 from dreamer import (
     Dreamer,
     setup_args,
@@ -71,6 +75,51 @@ def setup_agent_and_env(args):
     return agent, train_env
 
 
+def generate_trajectory_plot(latent_states: List[List[torch.Tensor]]):
+    pca = PCA(n_components=2)
+
+    # Concat all latent states
+    latent_states_combined = [torch.cat(states, dim=0) for states in latent_states]
+    latent_states_combined = torch.cat(latent_states_combined, dim=0)
+    latent_states_combined = latent_states_combined.squeeze(1).detach().cpu().numpy()
+    pca.fit(latent_states_combined)
+
+    # Make empty plot
+    plt.figure()
+    plt.title("Imagined Latent Space Trajectories")
+    plt.xlabel("Imagined Latent State PCA Component 1")
+    plt.ylabel("Imagined Latent State PCA Component 2")
+    colours = ["b", "r"]
+    labels = ["I will teleport right", "I will teleport left"]
+    for index, trajectory in enumerate(latent_states):
+        trajectory = torch.cat(trajectory, dim=0).squeeze(1).detach().cpu().numpy()
+        trajectory_pca = pca.transform(trajectory)
+        plt.scatter(
+            trajectory_pca[:, 0],
+            trajectory_pca[:, 1],
+            label=labels[index],
+            c=colours[index],
+        )
+
+        # Add arrows
+        for i in range(1, len(trajectory_pca)):
+            plt.arrow(
+                trajectory_pca[i - 1, 0],
+                trajectory_pca[i - 1, 1],
+                trajectory_pca[i, 0] - trajectory_pca[i - 1, 0],
+                trajectory_pca[i, 1] - trajectory_pca[i - 1, 1],
+                head_width=0.2,
+                head_length=0.3,
+                fc=colours[index],
+                ec=colours[index],
+            )
+
+    # Save plot
+    plt.legend()
+    plt.savefig("latent_space_trajectories.png")
+    plt.close()
+
+
 def main(args):
     agent, env = setup_agent_and_env(args)
 
@@ -91,6 +140,7 @@ def main(args):
         prev_action=None,
     )
 
+    all_trajectories = []
     # Sample rollouts
     for t in range(n_rollouts):
         imagained_states, imagined_actions = sample_rollouts(
@@ -117,6 +167,7 @@ def main(args):
             "-----------------------------------------------------------------------------------------------------"
         )
         env.reset()()
+        all_trajectories.append(imagained_states)
 
         for index, state in enumerate(imagained_states):
             imagined_img = agent._wm.heads["decoder"](state)["image"].mode()
@@ -127,6 +178,8 @@ def main(args):
                 f"imagined_img_rollout_{t+1}_step_{index+1}.png",
                 cv2.cvtColor(imagined_img, cv2.COLOR_RGB2BGR),
             )
+
+    generate_trajectory_plot(all_trajectories[:2])
 
 
 if __name__ == "__main__":
