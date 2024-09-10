@@ -1139,6 +1139,11 @@ def word_tokenise_text(
                 [vocab[padding_token]] * (max_length - len(tokenised_sentence))
             )
         tokenised_text.append(tokenised_sentence)
+    for sequence in tokenised_text:
+        if len(sequence) != max_length:
+            raise ValueError(
+                f"Sequence length {len(sequence)} does not match max length {max_length}, sequence: {sequence}"
+            )
     return np.array(tokenised_text, dtype=np.int32)
 
 
@@ -1193,7 +1198,8 @@ def generate_batch_narrations(
                 narration = narrator.narrate(batch[current_index:end_index])
                 narrations.append(narration)
                 current_index = end_index
-                current_is_first_index += 1
+                if current_index == is_first_indices[current_is_first_index]:
+                    current_is_first_index += 1
             else:
                 end_index = min(current_index + obs_per_narration, len(batch))
                 narration = narrator.narrate(batch[current_index:end_index])

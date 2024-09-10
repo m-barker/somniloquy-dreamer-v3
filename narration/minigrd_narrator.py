@@ -43,7 +43,7 @@ class MiniGridNarrator(ABC):
 
     def _get_object_location(
         self, observation: np.ndarray, object_id: int
-    ) -> list[tuple]:
+    ) -> list[tuple[int, int]]:
         """
         Returns the location of the object in the observation
         """
@@ -560,4 +560,172 @@ class MiniGridTeleportNarrator(MiniGridNarrator):
             narration_str += " and I will reach the left goal"
         elif agent_end_position == self._RIGHT_GOAL_POSITION:
             narration_str += " and I will reach the right goal"
+        return narration_str
+
+
+class MiniGridComplexTeleportNarrator(MiniGridNarrator):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self._teleporter_information = {
+            "blue teleporter": {
+                "position": (2, 7),
+                "reachable_from": [(1, 7), (2, 8)],
+                "destinations": [(1, 5), (5, 3), (4, 8)],
+            },
+            "green teleporter": {
+                "position": (2, 4),
+                "reachable_from": [(1, 4), (2, 5)],
+                "destinations": [(2, 2), (4, 8)],
+            },
+            "left purple teleporter": {
+                "position": (4, 6),
+                "reachable_from": [(4, 7), (5, 6)],
+                "destinations": [(2, 8), (5, 3)],
+            },
+            "right purple teleporter": {
+                "position": (6, 7),
+                "reachable_from": [(6, 8), (5, 7), (6, 6)],
+                "destinations": [(5, 3), (8, 8)],
+            },
+        }
+
+        self._goal_position = (8, 1)
+
+        self._room_positions = {
+            "blue teleporter room": [(1, 7), (1, 8), (2, 7), (2, 8)],
+            "green teleporter room": [(1, 4), (1, 5), (2, 4), (2, 5)],
+            "purple teleporter room": [
+                (4, 6),
+                (4, 7),
+                (4, 8),
+                (5, 6),
+                (5, 7),
+                (5, 8),
+                (6, 6),
+                (6, 7),
+                (6, 8),
+            ],
+            "left goal corridor": [(1, 1), (1, 2), (2, 1), (2, 2)],
+            "middle goal corridor": [(4, 3), (4, 4), (5, 4), (5, 3), (6, 4), (6, 3)],
+            "bottom right goal corridor": [(8, 8), (8, 7), (8, 6), (8, 5)],
+        }
+
+    def _get_room_location(self, position: tuple[int, int]) -> str:
+        for room, positions in self._room_positions.items():
+            if position in positions:
+                return room
+        raise ValueError(f"Position {position} not in any room")
+
+    def narrate(self, observations: list[np.ndarray]) -> str:
+        """Generates a narration from a sequence of observations"""
+        narration_str = ""
+        goal_corridor = False
+        try:
+            agent_start_position = self._get_object_location(
+                observations[0], self._OBJECT_IDS["AGENT_ID"]
+            )[0]
+        # This happens in the rare case the agent's start position
+        # is on top of the goal -- their position is masked by the goal.
+        except IndexError:
+            return "I will reach the goal"
+        teleporter_room = True
+        current_room = None
+        if agent_start_position in self._room_positions["blue teleporter room"]:
+            narration_str += "I start in the blue teleporter room "
+            current_room = "blue teleporter room"
+        elif agent_start_position in self._room_positions["green teleporter room"]:
+            narration_str += "I start in the green teleporter room "
+            current_room = "green teleporter room"
+        elif agent_start_position in self._room_positions["purple teleporter room"]:
+            narration_str += "I start in the purple teleporter room "
+            current_room = "purple teleporter room"
+        else:
+            narration_str += "I start in the goal corridor "
+            teleporter_room = False
+            goal_corridor = True
+            current_room = "goal corridor"
+        if teleporter_room:
+            teleport = False
+            current_obs_index = 1
+            first = True
+            while current_obs_index < len(observations) and not goal_corridor:
+                agent_pos = self._get_object_location(
+                    observations[current_obs_index], self._OBJECT_IDS["AGENT_ID"]
+                )[0]
+                agent_room = self._get_room_location(agent_pos)
+                if agent_room == current_room:
+                    current_obs_index += 1
+                    continue
+                teleport = True
+                colour = current_room.split(" ")[0]
+                if first:
+                    first_str = ""
+                    first = False
+                else:
+                    first_str = "then "
+
+                if colour == "purple":
+                    # Need to handle the two teleportes in the purple room
+                    prev_obs = observations[current_obs_index - 1]
+                    prev_agent_pos = self._get_object_location(
+                        prev_obs, self._OBJECT_IDS["AGENT_ID"]
+                    )[0]
+                    if (
+                        prev_agent_pos
+                        in self._teleporter_information["left purple teleporter"][
+                            "reachable_from"
+                        ]
+                    ):
+                        colour = "left purple"
+                    elif (
+                        prev_agent_pos
+                        in self._teleporter_information["right purple teleporter"][
+                            "reachable_from"
+                        ]
+                    ):
+                        colour = "right purple "
+                    else:
+                        raise ValueError(
+                            "Agent is in purple room, but teleported from unknown location"
+                        )
+
+                narration_str += f"and {first_str}I go through the {colour} teleporter to the {agent_room} "
+                current_obs_index += 1
+                current_room = agent_room
+                if "goal" in agent_room:
+                    goal_corridor = True
+                    if current_obs_index < len(observations):
+                        agent_start_position = self._get_object_location(
+                            observations[current_obs_index],
+                            self._OBJECT_IDS["AGENT_ID"],
+                        )[0]
+
+            if not teleport:
+                narration_str += "and I will not teleport yet "
+                return narration_str
+
+        if goal_corridor:
+            try:
+                agent_end_position = self._get_object_location(
+                    observations[-1], self._OBJECT_IDS["AGENT_ID"]
+                )[0]
+            except IndexError:
+                narration_str += "and then I will reach the goal"
+                return narration_str
+
+            start_dist_to_goal = self._calculate_distance(
+                agent_start_position, self._goal_position
+            )
+            end_dist_to_goal = self._calculate_distance(
+                agent_end_position, self._goal_position
+            )
+
+            if start_dist_to_goal == end_dist_to_goal:
+                narration_str += "and then I will stay the same distance from the goal "
+            elif start_dist_to_goal > end_dist_to_goal:
+                narration_str += "and then I will move towards the goal "
+            else:
+                narration_str += "and then I will move away from the goal "
+
         return narration_str

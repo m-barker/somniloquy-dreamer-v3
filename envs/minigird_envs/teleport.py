@@ -20,7 +20,7 @@ from minigrid.core.constants import COLOR_NAMES, DIR_TO_VEC, TILE_PIXELS
 from minigrid.core.grid import Grid
 from minigrid.core.mission import MissionSpace
 
-from custom_objects import Teleporter, WorldObj, Point
+from .custom_objects import Teleporter, WorldObj, Point
 
 T = TypeVar("T")
 LEFT = 0
@@ -560,10 +560,6 @@ class TeleportBaseEnv(gym.Env):
                     end_locations = fwd_cell.end_locations
                     end_probs = fwd_cell.end_probabilities
                     teleport_to = np.random.choice(len(end_locations), p=end_probs)
-                    if teleport_to == 0:
-                        LEFT += 1
-                    else:
-                        RIGHT += 1
                     self.agent_pos = end_locations[teleport_to]
                 else:
                     self.agent_pos = tuple(fwd_pos)
@@ -892,13 +888,13 @@ class TeleportComplex(TeleportBaseEnv):
             # Set this to True for maximum speed
             see_through_walls=True,
             max_steps=max_steps,
-            render_mode="human",
+            # render_mode="human",
             **kwargs,
         )
 
     @staticmethod
     def _gen_mission():
-        return "Navigate to one of the goals using the teleporter"
+        return "Navigate to the goal using the teleporters"
 
     def _gen_grid(self, width, height):
         # Create an empty grid
@@ -973,7 +969,7 @@ class TeleportComplex(TeleportBaseEnv):
         self.put_obj(blue_teleporter, 2, 7)
         self.put_obj(green_teleporter, 2, 4)
         self.put_obj(purple_teleporter_l, 4, 6)
-        self.put_obj(purple_teleporter_r, 6, 6)
+        self.put_obj(purple_teleporter_r, 6, 7)
 
         self.put_obj(Goal(), 8, 1)
 

@@ -28,7 +28,7 @@ class FourSquares(MiniGridEnv):
             max_steps=max_steps,
             mission_space=mission_space,
             see_through_walls=True,
-            render_mode="human",
+            # render_mode="human",
             **kwargs,
         )
 
@@ -78,6 +78,3 @@ class FourSquares(MiniGridEnv):
             mission_str = "navigate to the purple square"
 
         self.mission = mission_str
-
-
-

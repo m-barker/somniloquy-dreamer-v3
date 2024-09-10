@@ -124,7 +124,7 @@ def main(args):
     agent, env = setup_agent_and_env(args)
 
     trajectory_length = 16
-    n_rollouts = 10
+    n_rollouts = 20
 
     # Get initial state
     obs = env.reset()()  # Nasty
@@ -151,7 +151,7 @@ def main(args):
         # Reshape to (T, N, C)
         imagined_tensor = torch.cat(imagained_states, dim=0).permute(1, 0, 2)
         imagined_narration = agent._wm.heads["language"].generate(
-            imagined_tensor, agent._wm.vocab, 50, deterministic=False
+            imagined_tensor, agent._wm.vocab, 150, deterministic=False
         )
         true_obs = []
         for action in imagined_actions:
@@ -162,7 +162,7 @@ def main(args):
                 break
         true_narration = agent._wm.narrator.narrate(true_obs)
         print(f"Imagined: {imagined_narration}")
-        print(f"True: {true_narration}")
+        # print(f"True: {true_narration}")
         print(
             "-----------------------------------------------------------------------------------------------------"
         )
@@ -179,7 +179,7 @@ def main(args):
                 cv2.cvtColor(imagined_img, cv2.COLOR_RGB2BGR),
             )
 
-    generate_trajectory_plot(all_trajectories[:2])
+    # generate_trajectory_plot(all_trajectories[:2])
 
 
 if __name__ == "__main__":

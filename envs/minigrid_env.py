@@ -5,7 +5,7 @@ import gymnasium as gym
 import numpy as np
 
 from .minigird_envs.minigrid_four_squares import FourSquares  # type: ignore
-from .minigird_envs.teleport import Teleport5by5  # type: ignore
+from .minigird_envs.teleport import Teleport5by5, TeleportComplex  # type: ignore
 from .wrappers import MiniGridFullObsWrapper  # type: ignore
 
 
@@ -56,6 +56,19 @@ class MiniGrid:
                 env = Teleport5by5(render_mode="human")
             else:
                 env = Teleport5by5()
+            if self._full_obs:
+                env = MiniGridFullObsWrapper(env)
+            else:
+                raise NotImplementedError("Partial observation not implemented yet.")
+            env.action_space = gym.spaces.Discrete(3)
+            if self._actions == "needed":
+                # Forward, Turn left, Turn right
+                env.action_space = gym.spaces.Discrete(3)
+        elif task_name == "teleport_complex":
+            if self._human_render:
+                env = TeleportComplex(render_mode="human")
+            else:
+                env = TeleportComplex()
             if self._full_obs:
                 env = MiniGridFullObsWrapper(env)
             else:

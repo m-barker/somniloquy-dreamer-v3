@@ -1,6 +1,7 @@
 import math
-import numpy as np
+from typing import Optional
 import re
+import numpy as np
 
 import torch
 from torch import nn
@@ -903,7 +904,10 @@ class TransformerEncoderDecoder(nn.Module):
         src: torch.Tensor,
         tgt: torch.Tensor,
         generate_mask: bool = False,
-        src_mask: torch.Tensor = None,
+        src_mask: Optional[torch.Tensor] = None,
+        tokens_to_append: Optional[torch.Tensor] = None,
+        embed_src: bool = False,
+        embed_tgt: bool = True,
     ) -> torch.Tensor:
         """_summary_
 
@@ -917,12 +921,23 @@ class TransformerEncoderDecoder(nn.Module):
         """
         tgt_pad_mask = None
         src_pad_mask = None
+
         if generate_mask:
             tgt_pad_mask = tgt == 0
+
         if src_mask is not None:
             src_pad_mask = src_mask
+
+        if embed_tgt:
+            tgt = self.tgt_embedding(tgt)
+        if embed_src:
+            translation_token = torch.zeros(src.shape[0], dtype=torch.long)
+            translation_token = (
+                torch.fill_(translation_token, 33).to(self.device).unsqueeze(1)
+            )
+            src = torch.cat([src, translation_token], dim=1)
+            src = self.tgt_embedding(src)
         src = src.permute(1, 0, 2)
-        tgt = self.tgt_embedding(tgt)
         tgt = tgt.permute(1, 0, 2)
         src = self.pe(src)
         tgt = self.pe(tgt)
@@ -935,6 +950,9 @@ class TransformerEncoderDecoder(nn.Module):
         # print(f"Target shape: {tgt.shape}")
         # print(f"Target mask shape: {tgt_mask.shape}")
         # print(f"Target pad mask shape: {tgt_pad_mask.shape}")
+
+        if tokens_to_append is not None:
+            src = torch.cat([src, tokens_to_append.unsqueeze(0)], dim=0)
         out = self.transformer(
             src,
             tgt,

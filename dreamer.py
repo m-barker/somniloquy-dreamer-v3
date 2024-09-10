@@ -28,6 +28,7 @@ from narration.mineclip_narrator import MineCLIPNarrator
 from narration.minigrd_narrator import (
     MiniGridFourSquareNarrator,
     MiniGridTeleportNarrator,
+    MiniGridComplexTeleportNarrator,
 )
 
 
@@ -175,7 +176,11 @@ def configure_narrator(config):
         if "four_squares" in config.task:
             narrator = MiniGridFourSquareNarrator()
         elif "teleport" in config.task:
-            narrator = MiniGridTeleportNarrator()
+            if "complex" in config.task:
+                narrator = MiniGridComplexTeleportNarrator()
+            else:
+                narrator = MiniGridTeleportNarrator()
+
     return narrator
 
 

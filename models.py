@@ -153,8 +153,7 @@ class WorldModel(nn.Module):
                             data["is_first"],
                         ).reshape(-1, self._narration_max_dec_seq)
                         # Shape (batch, seq_len, latent_state_dim)
-                        feat = self.dynamics.get_feat(post).detach()
-
+                        feat = self.dynamics.get_feat(post)
                         latent_sequences = []
                         padding_masks = []
                         for batch in range(feat.shape[0]):
@@ -175,7 +174,11 @@ class WorldModel(nn.Module):
                                         batch, current_index:end_index
                                     ]
                                     current_index = end_index
-                                    current_is_first_index += 1
+                                    if (
+                                        end_index
+                                        == is_first_indices[current_is_first_index]
+                                    ):
+                                        current_is_first_index += 1
                                 else:
                                     end_index = min(
                                         current_index + self._narration_max_enc_seq,
@@ -207,9 +210,9 @@ class WorldModel(nn.Module):
                                         self._narration_max_enc_seq
                                     ).to(self.device)
                                 latent_sequences.append(latent_sequence)
-                                padding_masks.append(padding_mask)
 
-                        feat = torch.stack(latent_sequences).detach()
+                        # Shapes (batch, seq_len, dim)
+                        feat = torch.stack(latent_sequences)
                         padding_masks = torch.stack(padding_masks)
 
                         pred = self.heads["language"].forward(
@@ -218,6 +221,7 @@ class WorldModel(nn.Module):
                             generate_mask=True,
                             src_mask=padding_masks,
                         )
+
                         if type(pred) is dict:
                             preds.update(pred)
                         else:
@@ -238,7 +242,6 @@ class WorldModel(nn.Module):
                     if name == "language":
                         loss = tools.narration_loss(pred, narrations[:, 1:])
                         losses[name] = loss
-
                     else:
                         loss = -pred.log_prob(data[name])
                         assert loss.shape == embed.shape[:2], (name, loss.shape)
@@ -323,7 +326,7 @@ class WorldModel(nn.Module):
         embed = self.encoder(data)
         embed = embed[0, :16].unsqueeze(0)
         # rgb_imgs = to_np(data["image"][0, :16])
-        encoded_imgs_list = [encoded_img[i] for i in range(16)]
+        encoded_imgs_list = [encoded_img[0][i] for i in range(16)]
         ground_truth_intent = self.narrator.narrate(encoded_imgs_list)
         states, _ = self.dynamics.observe(
             embed,
@@ -335,7 +338,7 @@ class WorldModel(nn.Module):
             data["action"][0, :16].unsqueeze(0), init
         )
         imagined_feat = self.dynamics.get_feat(prior)
-        intent = self.heads["language"].generate(imagined_feat, self.vocab, 50)
+        intent = self.heads["language"].generate(imagined_feat, self.vocab, 150)
         print(f"Imagined Intent: {intent}")
         print(f"Ground Truth Intent: {ground_truth_intent}")
         return intent, ground_truth_intent

@@ -17,6 +17,7 @@ defaults:
   precision: 32
   debug: False
   video_pred_log: True
+  checkpoint: null
 
   # Environment
   task: "dmc_walker_walk"
@@ -256,21 +257,25 @@ minigrid:
   steps: 4e5
   envs: 1
   action_repeat: 1
-  prefill: 10000
-  eval_episode_num: 0
-  eval_every: 5000
-  log_every: 1000
+  prefill: 1000
+  eval_episode_num: 10
+  eval_every: 1000
+  log_every: 500
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   actions: needed
   enable_language: true
-  vocab_path: vocab/minigrid_teleport.json
-  dec_max_length: 50
+  vocab_path: vocab/minigrid_four_squares_with_actions.json
+  dec_max_length: 150
   enc_max_length: 16
   video_pred_log: true
-  task: "minigrid_teleport5x5"
-  time_limit: 512
-  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-lang-no-grad/latest.pt"
+  dyn_hidden: 256
+  dyn_deter: 256
+  units: 256
+  task: "minigrid_four_squares"
+  time_limit: 1024
+  batch_size: 8
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-complex-lang/dreamer-agent-step-27000.pt"
 
 minedojo:
   steps: 4e5
