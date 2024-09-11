@@ -262,20 +262,18 @@ minigrid:
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
+  encoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "$^" }
+  decoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "$^" }
+  narrator: { narration_key: "occupancy_grid" }
   imag_gradient: "reinforce"
   actions: needed
-  enable_language: true
-  vocab_path: vocab/minigrid_four_squares_with_actions.json
+  enable_language: false
+  vocab_path: vocab/minigrid_teleport_complex.json
   dec_max_length: 150
   enc_max_length: 16
-  video_pred_log: true
-  dyn_hidden: 256
-  dyn_deter: 256
-  units: 256
-  task: "minigrid_four_squares"
+  video_pred_log: false
+  task: "minigrid_teleport_complex"
   time_limit: 1024
-  batch_size: 8
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-complex-lang/dreamer-agent-step-27000.pt"
 
 minedojo:
   steps: 4e5

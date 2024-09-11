@@ -18,7 +18,6 @@ class MiniGrid:
         actions: str = "all",
         max_length: int = 1024,
         seed: int = 42,
-        store_encoded_grid: bool = False,
         full_obs: bool = True,
         human_render: bool = False,
     ):
@@ -31,7 +30,6 @@ class MiniGrid:
         self._max_length = max_length
         self._random = np.random.RandomState(seed)
         self._full_obs = full_obs
-        self._store_encoded_grid = store_encoded_grid
         self._done = True
         self._step = 0
         self._img_size = img_size
@@ -88,9 +86,22 @@ class MiniGrid:
     @property
     def observation_space(self):
         img_shape = self._img_size + (3,)
+        # Assuming full obs for now.
         return gym.spaces.Dict(
             {
                 "image": gym.spaces.Box(0, 255, img_shape, np.uint8),
+                "occupancy_grid": gym.spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(self._env.width, self._env.height, 3),
+                    dtype="uint8",
+                ),
+                "flattened_occupancy_grid": gym.spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(self._env.width * self._env.height * 3,),
+                    dtype="uint8",
+                ),
             }
         )
 
@@ -117,9 +128,9 @@ class MiniGrid:
         return self._obs(
             obs["rgb_image"],
             reward,
+            obs["encoded_image"],
             is_last=self._done,
             is_terminal=over or truncated,
-            encoded_image=obs["encoded_image"],
         )
 
     def reset(self, seed=None, **kwargs):
@@ -129,34 +140,35 @@ class MiniGrid:
         result = self._obs(
             obs["rgb_image"],
             0.0,
+            obs["encoded_image"],
             is_first=True,
-            encoded_image=obs["encoded_image"],
         )[0]
-        result["encoded_image"] = obs["encoded_image"]
         return result
 
     def _obs(
         self,
         img: np.ndarray,
         reward: float,
+        occupancy_grid: np.ndarray,
         is_first: bool = False,
         is_last: bool = False,
         is_terminal: bool = False,
-        encoded_image: Optional[np.ndarray] = None,
     ) -> Tuple[dict, float, bool, dict]:
         image = img
         if image.shape[:2] != self._img_size:
             image = cv2.resize(image, self._img_size, interpolation=cv2.INTER_AREA)
-        if self._store_encoded_grid:
-            assert encoded_image is not None
-            encoded_image = encoded_image
-        else:
-            encoded_image = None
+        flattened_occupancy_grid = occupancy_grid.flatten()
         return (
-            {"image": image, "is_terminal": is_terminal, "is_first": is_first},
+            {
+                "image": image,
+                "occupancy_grid": occupancy_grid,
+                "is_terminal": is_terminal,
+                "is_first": is_first,
+                "flattened_occupancy_grid": flattened_occupancy_grid,
+            },
             reward,
             is_last,
-            {"encoded_image": encoded_image},
+            {},
         )
 
     def close(self):

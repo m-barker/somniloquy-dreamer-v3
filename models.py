@@ -123,8 +123,8 @@ class WorldModel(nn.Module):
         # image (batch_size, batch_length, h, w, ch)
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
-        # rgb_obs = deepcopy(data["image"])
-        encoded_img = data["encoded_image"]
+        if self._config.enable_language:
+            narration_data = deepcopy(data[self._config.narrator["narration_key"]])
         data = self.preprocess(data)
         with tools.RequiresGrad(self):
             with torch.cuda.amp.autocast(self._use_amp):
@@ -144,7 +144,7 @@ class WorldModel(nn.Module):
                     if name == "language":
                         narrations = tools.generate_batch_narrations(
                             self.narrator,
-                            encoded_img,
+                            narration_data,
                             self._narration_max_enc_seq,
                             self._narration_max_dec_seq,
                             self.vocab,
@@ -252,9 +252,7 @@ class WorldModel(nn.Module):
                 }
                 model_loss = sum(scaled.values()) + kl_loss
             metrics = self._model_opt(torch.mean(model_loss), self.parameters())
-            # for name, loss in losses.items():
-            #     if torch.isnan(loss).any():
-            #         print(f"NAN DETECTED IN LOSS {name}")
+
         metrics.update({f"{name}_loss": to_np(loss) for name, loss in losses.items()})
         metrics["kl_free"] = kl_free
         metrics["dyn_scale"] = dyn_scale
@@ -282,6 +280,10 @@ class WorldModel(nn.Module):
     def preprocess(self, obs):
         obs = obs.copy()
         obs["image"] = torch.Tensor(obs["image"]) / 255.0
+        if "flattened_occupancy_grid" in obs:
+            obs["flattened_occupancy_grid"] = torch.Tensor(
+                obs["flattened_occupancy_grid"] / 255.0
+            )
         if "discount" in obs:
             obs["discount"] *= self._config.discount
             # (batch_size, batch_length) -> (batch_size, batch_length, 1)
@@ -291,11 +293,7 @@ class WorldModel(nn.Module):
         # 'is_terminal' is necesarry to train cont_head
         assert "is_terminal" in obs
         obs["cont"] = torch.Tensor(1.0 - obs["is_terminal"]).unsqueeze(-1)
-        obs = {
-            k: torch.Tensor(v).to(self._config.device)
-            for k, v in obs.items()
-            if k != "encoded_image"
-        }
+        obs = {k: torch.Tensor(v).to(self._config.device) for k, v in obs.items()}
         return obs
 
     def video_pred(self, data):
@@ -321,13 +319,12 @@ class WorldModel(nn.Module):
         return torch.cat([truth, model, error], 2)
 
     def intent_prediction(self, data):
-        encoded_img = data["encoded_image"]
+        narration_data = data[self._config.narrator["narration_key"]]
         data = self.preprocess(data)
         embed = self.encoder(data)
         embed = embed[0, :16].unsqueeze(0)
-        # rgb_imgs = to_np(data["image"][0, :16])
-        encoded_imgs_list = [encoded_img[0][i] for i in range(16)]
-        ground_truth_intent = self.narrator.narrate(encoded_imgs_list)
+        narration_data_list = [narration_data[0][i] for i in range(16)]
+        ground_truth_intent = self.narrator.narrate(narration_data_list)
         states, _ = self.dynamics.observe(
             embed,
             data["action"][0, :16].unsqueeze(0),
@@ -338,7 +335,9 @@ class WorldModel(nn.Module):
             data["action"][0, :16].unsqueeze(0), init
         )
         imagined_feat = self.dynamics.get_feat(prior)
-        intent = self.heads["language"].generate(imagined_feat, self.vocab, 150)
+        intent = self.heads["language"].generate(
+            imagined_feat, self.vocab, self._narration_max_dec_seq
+        )
         print(f"Imagined Intent: {intent}")
         print(f"Ground Truth Intent: {ground_truth_intent}")
         return intent, ground_truth_intent

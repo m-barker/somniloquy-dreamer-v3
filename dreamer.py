@@ -219,7 +219,6 @@ def make_env(config, mode, id):
             img_size=config.size,
             actions=config.actions,
             max_length=config.time_limit,
-            store_encoded_grid=config.enable_language,
         )
         env = wrappers.OneHotAction(env)
 
