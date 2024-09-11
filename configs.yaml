@@ -262,8 +262,8 @@ minigrid:
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
-  encoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "$^" }
-  decoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "$^" }
+  encoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
+  decoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
   narrator: { narration_key: "occupancy_grid" }
   imag_gradient: "reinforce"
   actions: needed
@@ -274,6 +274,7 @@ minigrid:
   video_pred_log: false
   task: "minigrid_teleport_complex"
   time_limit: 1024
+  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-test/dreamer-agent-step-10984.pt"
 
 minedojo:
   steps: 4e5
@@ -288,11 +289,11 @@ minedojo:
   video_pred_log: false
   task: "minedojo_harvest_1_dirt"
   minedojo_task_id: "harvest_1_dirt"
-  time_limit: 5000
-  enable_language: true
-  vocab_path: vocab/mindojo_harvest_1_dirt.json
-  prompt_path: captions/minedojo.json
-  mineclip_ckpt_path: attn.pth
+  time_limit: 36000
+  enable_language: false
+  # vocab_path: vocab/mindojo_harvest_1_dirt.json
+  # prompt_path: captions/minedojo.json
+  # mineclip_ckpt_path: attn.pth
   dec_max_length: 50
   enc_max_length: 16
   dyn_hidden: 512

@@ -157,7 +157,7 @@ def main(args):
         for action in imagined_actions:
             numpy_action = action.squeeze(0).detach().cpu().numpy()
             obs, reward, done, info = env.step({"action": numpy_action})()
-            true_obs.append(obs["occupancy_grid"])
+            true_obs.append(info["encoded_image"])
             if done:
                 break
         true_narration = agent._wm.narrator.narrate(true_obs)
