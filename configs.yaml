@@ -279,18 +279,19 @@ minigrid:
 minedojo:
   steps: 4e5
   envs: 1
-  eval_episode_num: 1
-  eval_every: 5000
+  eval_episode_num: 0
+  eval_every: 1e4
   action_repeat: 1
   train_ratio: 16
   log_every: 1000
   resize: opencv
   actions: needed
-  video_pred_log: false
-  task: "minedojo_harvest_1_dirt"
-  minedojo_task_id: "harvest_1_dirt"
+  video_pred_log: true
+  task: "minedojo_harvest_milk_with_empty_bucket_and_cow"
+  minedojo_task_id: "harvest_milk_with_empty_bucket_and_cow"
   time_limit: 36000
   enable_language: false
+  world_seed: 128
   # vocab_path: vocab/mindojo_harvest_1_dirt.json
   # prompt_path: captions/minedojo.json
   # mineclip_ckpt_path: attn.pth

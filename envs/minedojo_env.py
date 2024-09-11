@@ -11,7 +11,7 @@ from typing import Literal
 
 class MineDojoEnv(gym.Env):
     def __init__(
-        self, task_id="harvest_1_dirt", image_size=(64, 64), world_seed: int = 42
+        self, task_id="harvest_1_dirt", image_size=(64, 64), world_seed: int = 128
     ):
         self.task_id = task_id
         self.image_size = image_size

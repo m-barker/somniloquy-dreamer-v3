@@ -251,7 +251,7 @@ def make_env(config, mode, id):
         print(f"Creating MineDojo environment...")
         import envs.minedojo_env as minedojo_env
 
-        env = minedojo_env.MineDojoEnv()
+        env = minedojo_env.MineDojoEnv(task_id=task, world_seed=config.world_seed)
         print(f"ACTION SPACE: {env.action_space}")
     else:
         raise NotImplementedError(suite)
