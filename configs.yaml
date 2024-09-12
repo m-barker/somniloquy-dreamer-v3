@@ -31,6 +31,7 @@ defaults:
 
   # Model
   enable_language: false
+  action_prediction: false
   dyn_hidden: 512
   dyn_deter: 512
   dyn_stoch: 32
@@ -101,6 +102,8 @@ defaults:
     }
   reward_head:
     { layers: 2, dist: "symlog_disc", loss_scale: 1.0, outscale: 0.0 }
+  action_prediction_head:
+    { layers: 2, dist: "onehot", loss_scale: 1.0, outscale: 0.0 }
   cont_head: { layers: 2, loss_scale: 1.0, outscale: 1.0 }
   dyn_scale: 0.5
   rep_scale: 0.1
@@ -262,19 +265,20 @@ minigrid:
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
-  encoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
-  decoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
+  # encoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
+  # decoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
   narrator: { narration_key: "occupancy_grid" }
   imag_gradient: "reinforce"
   actions: needed
   enable_language: false
+  action_prediction: true
   vocab_path: vocab/minigrid_teleport_complex.json
   dec_max_length: 150
   enc_max_length: 16
   video_pred_log: false
   task: "minigrid_teleport_complex"
   time_limit: 1024
-  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-test/dreamer-agent-step-10984.pt"
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-test/dreamer-agent-step-10984.pt"
 
 minedojo:
   steps: 4e5

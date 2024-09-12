@@ -98,6 +98,22 @@ class WorldModel(nn.Module):
             )
             self._narration_max_enc_seq = config.enc_max_length
             self._narration_max_dec_seq = config.dec_max_length
+
+        if config.action_prediction:
+            stochastic_size = config.dyn_stoch * config.dyn_discrete
+            self.heads["action_prediction"] = networks.MLP(
+                stochastic_size * 2,  # prev and next stochastic state as input
+                config.num_actions,
+                config.action_prediction_head["layers"],
+                config.units,
+                config.act,
+                config.norm,
+                dist=config.action_prediction_head["dist"],
+                outscale=config.action_prediction_head["outscale"],
+                device=config.device,
+                name="action_prediction",
+            )
+
         for name in config.grad_heads:
             assert name in self.heads, name
         self._model_opt = tools.Optimizer(
@@ -210,6 +226,20 @@ class WorldModel(nn.Module):
 
         return pred, narrations
 
+    def _language_to_latent_state(
+        self, posterior_logits: torch.Tensor, true_narrations: torch.Tensor
+    ) -> torch.Tensor:
+        """Generates the reverse translation: from language to a sequence of posterior distributions.
+
+        Args:
+            posterior_logits (torch.Tensor): Set of posterior logits of shape ...
+            true_narrations (torch.Tensor): Set of ground-truth narration tokens of shape ...
+
+        Returns:
+            torch.Tensor: KL divergence loss between predicted and actual posterior distributions.
+        """
+        return torch.zeros(1)
+
     def _train(self, data):
         # action (batch_size, batch_length, act_dim)
         # image (batch_size, batch_length, h, w, ch)
@@ -237,10 +267,15 @@ class WorldModel(nn.Module):
                         pred, narrations = self._get_language_prediction(
                             data, post, narration_data
                         )
-                        if type(pred) is dict:
-                            preds.update(pred)
-                        else:
-                            preds[name] = pred
+
+                    elif name == "action_prediction":
+                        feat = post["stoch"].reshape(embed.shape[:2] + (-1,))
+                        prev_states = feat[:, :-1]
+                        next_states = feat[:, 1:]
+                        action_pred_input = torch.cat(
+                            [prev_states, next_states], dim=-1
+                        )
+                        pred = head(action_pred_input)
 
                     else:
                         grad_head = name in self._config.grad_heads
@@ -248,14 +283,18 @@ class WorldModel(nn.Module):
                         feat = self.dynamics.get_feat(post)
                         feat = feat if grad_head else feat.detach()
                         pred = head(feat)
-                        if type(pred) is dict:
-                            preds.update(pred)
-                        else:
-                            preds[name] = pred
+
+                    if type(pred) is dict:
+                        preds.update(pred)
+                    else:
+                        preds[name] = pred
                 losses = {}
                 for name, pred in preds.items():
                     if name == "language":
                         loss = tools.narration_loss(pred, narrations[:, 1:])
+                        losses[name] = loss
+                    elif name == "action_prediction":
+                        loss = -pred.log_prob(data["action"][:, 1:])
                         losses[name] = loss
                     else:
                         loss = -pred.log_prob(data[name])
@@ -264,9 +303,19 @@ class WorldModel(nn.Module):
                 scaled = {
                     key: value * self._scales.get(key, 1.0)
                     for key, value in losses.items()
+                    if key != "action_prediction"
                 }
                 model_loss = sum(scaled.values()) + kl_loss
-            metrics = self._model_opt(torch.mean(model_loss), self.parameters())
+            if self._config.action_prediction:
+                metrics = self._model_opt(
+                    torch.mean(model_loss) + torch.mean(losses["action_prediction"]),
+                    self.parameters(),
+                )
+            else:
+                metrics = self._model_opt(
+                    torch.mean(model_loss),
+                    self.parameters(),
+                )
 
         metrics.update({f"{name}_loss": to_np(loss) for name, loss in losses.items()})
         metrics["kl_free"] = kl_free
