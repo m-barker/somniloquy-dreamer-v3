@@ -1,8 +1,9 @@
+from typing import Tuple
 import copy
+from copy import deepcopy
 import numpy as np
 import torch
 from torch import nn
-from copy import deepcopy
 import networks
 import tools
 
@@ -118,6 +119,97 @@ class WorldModel(nn.Module):
             cont=config.cont_head["loss_scale"],
         )
 
+    def _get_language_prediction(
+        self,
+        data: dict[str, np.ndarray],
+        post: torch.Tensor,
+        narration_data: np.ndarray,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Generates the language model predictions and ground truth narrations
+
+        Args:
+            data (dict[str, np.ndarray]): replay buffer sample. Each array
+            is of shape (batch_size, batch_length, ...)
+
+            post (torch.Tensor): posterior sample from the world model.
+
+            narration_data (np.ndarray): array containin data to be used
+            as input to the narrator function to generate the ground-truth
+            narrations.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: predicted narrations tokens,
+            ground-truth narratino tokens
+        """
+
+        narrations = tools.generate_batch_narrations(
+            self.narrator,
+            narration_data,
+            self._narration_max_enc_seq,
+            self._narration_max_dec_seq,
+            self.vocab,
+            self.device,
+            data["is_first"],
+        ).reshape(-1, self._narration_max_dec_seq)
+        # Shape (batch, seq_len, latent_state_dim)
+        feat = self.dynamics.get_feat(post)
+        latent_sequences = []
+        padding_masks = []
+        for batch in range(feat.shape[0]):
+            is_first_batch = data["is_first"][batch].cpu().numpy()
+            assert is_first_batch[0] == 1
+            is_first_indices = np.where(is_first_batch == 1)[0]
+            current_index = 0
+            current_is_first_index = 1
+            while current_index < feat.shape[1]:
+                if len(is_first_indices) > current_is_first_index:
+                    end_index = min(
+                        current_index + self._narration_max_enc_seq,
+                        feat.shape[1],
+                        is_first_indices[current_is_first_index],
+                    )
+
+                    latent_sequence = feat[batch, current_index:end_index]
+                    current_index = end_index
+                    if end_index == is_first_indices[current_is_first_index]:
+                        current_is_first_index += 1
+                else:
+                    end_index = min(
+                        current_index + self._narration_max_enc_seq,
+                        feat.shape[1],
+                    )
+                    latent_sequence = feat[batch, current_index:end_index]
+                    current_index = end_index
+
+                if latent_sequence.shape[0] < self._narration_max_enc_seq:
+                    padding = torch.zeros(
+                        self._narration_max_enc_seq - latent_sequence.shape[0],
+                        latent_sequence.shape[1],
+                    ).to(self.device)
+                    padding_mask = torch.ones(self._narration_max_enc_seq).to(
+                        self.device
+                    )
+                    padding_mask[latent_sequence.shape[0] :] = 0
+                    latent_sequence = torch.cat([latent_sequence, padding], dim=0)
+                else:
+                    padding_mask = torch.zeros(self._narration_max_enc_seq).to(
+                        self.device
+                    )
+                latent_sequences.append(latent_sequence)
+
+        # Shapes (batch, seq_len, dim)
+        feat = torch.stack(latent_sequences)
+        padding_masks = torch.stack(padding_masks)
+
+        pred = self.heads["language"].forward(
+            feat,
+            narrations[:, :-1],
+            generate_mask=True,
+            src_mask=padding_masks,
+        )
+
+        return pred, narrations
+
     def _train(self, data):
         # action (batch_size, batch_length, act_dim)
         # image (batch_size, batch_length, h, w, ch)
@@ -142,86 +234,9 @@ class WorldModel(nn.Module):
                 preds = {}
                 for name, head in self.heads.items():
                     if name == "language":
-                        narrations = tools.generate_batch_narrations(
-                            self.narrator,
-                            narration_data,
-                            self._narration_max_enc_seq,
-                            self._narration_max_dec_seq,
-                            self.vocab,
-                            self.device,
-                            data["image"],
-                            data["is_first"],
-                        ).reshape(-1, self._narration_max_dec_seq)
-                        # Shape (batch, seq_len, latent_state_dim)
-                        feat = self.dynamics.get_feat(post)
-                        latent_sequences = []
-                        padding_masks = []
-                        for batch in range(feat.shape[0]):
-                            is_first_batch = data["is_first"][batch].cpu().numpy()
-                            assert is_first_batch[0] == 1
-                            is_first_indices = np.where(is_first_batch == 1)[0]
-                            current_index = 0
-                            current_is_first_index = 1
-                            while current_index < feat.shape[1]:
-                                if len(is_first_indices) > current_is_first_index:
-                                    end_index = min(
-                                        current_index + self._narration_max_enc_seq,
-                                        feat.shape[1],
-                                        is_first_indices[current_is_first_index],
-                                    )
-
-                                    latent_sequence = feat[
-                                        batch, current_index:end_index
-                                    ]
-                                    current_index = end_index
-                                    if (
-                                        end_index
-                                        == is_first_indices[current_is_first_index]
-                                    ):
-                                        current_is_first_index += 1
-                                else:
-                                    end_index = min(
-                                        current_index + self._narration_max_enc_seq,
-                                        feat.shape[1],
-                                    )
-                                    latent_sequence = feat[
-                                        batch, current_index:end_index
-                                    ]
-                                    current_index = end_index
-
-                                if (
-                                    latent_sequence.shape[0]
-                                    < self._narration_max_enc_seq
-                                ):
-                                    padding = torch.zeros(
-                                        self._narration_max_enc_seq
-                                        - latent_sequence.shape[0],
-                                        latent_sequence.shape[1],
-                                    ).to(self.device)
-                                    padding_mask = torch.ones(
-                                        self._narration_max_enc_seq
-                                    ).to(self.device)
-                                    padding_mask[latent_sequence.shape[0] :] = 0
-                                    latent_sequence = torch.cat(
-                                        [latent_sequence, padding], dim=0
-                                    )
-                                else:
-                                    padding_mask = torch.zeros(
-                                        self._narration_max_enc_seq
-                                    ).to(self.device)
-                                latent_sequences.append(latent_sequence)
-
-                        # Shapes (batch, seq_len, dim)
-                        feat = torch.stack(latent_sequences)
-                        padding_masks = torch.stack(padding_masks)
-
-                        pred = self.heads["language"].forward(
-                            feat,
-                            narrations[:, :-1],
-                            generate_mask=True,
-                            src_mask=padding_masks,
+                        pred, narrations = self._get_language_prediction(
+                            data, post, narration_data
                         )
-
                         if type(pred) is dict:
                             preds.update(pred)
                         else:
