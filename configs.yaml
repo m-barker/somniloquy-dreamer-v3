@@ -278,7 +278,7 @@ minigrid:
   video_pred_log: false
   task: "minigrid_teleport_complex"
   time_limit: 1024
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-test/dreamer-agent-step-10984.pt"
+  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-action-pred-test/dreamer-agent-step-5424.pt"
 
 minedojo:
   steps: 4e5

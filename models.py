@@ -238,6 +238,7 @@ class WorldModel(nn.Module):
         Returns:
             torch.Tensor: KL divergence loss between predicted and actual posterior distributions.
         """
+        
         return torch.zeros(1)
 
     def _train(self, data):
