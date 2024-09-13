@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 import copy
 from copy import deepcopy
 import numpy as np
@@ -138,24 +138,24 @@ class WorldModel(nn.Module):
     def _get_language_prediction(
         self,
         data: dict[str, np.ndarray],
-        post: torch.Tensor,
+        post: dict[str, torch.Tensor],
         narration_data: np.ndarray,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Generates the language model predictions and ground truth narrations
 
         Args:
             data (dict[str, np.ndarray]): replay buffer sample. Each array
             is of shape (batch_size, batch_length, ...)
 
-            post (torch.Tensor): posterior sample from the world model.
+            post (dict[str, torch.Tensor]): posterior sample from the world model.
 
             narration_data (np.ndarray): array containin data to be used
             as input to the narrator function to generate the ground-truth
             narrations.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]: predicted narrations tokens,
-            ground-truth narratino tokens
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: predicted narrations tokens,
+            ground-truth narration tokens, stochastic logit sequences, padding masks
         """
 
         narrations = tools.generate_batch_narrations(
@@ -169,6 +169,9 @@ class WorldModel(nn.Module):
         ).reshape(-1, self._narration_max_dec_seq)
         # Shape (batch, seq_len, latent_state_dim)
         feat = self.dynamics.get_feat(post)
+        # Shape (batch, seq_len, n_categories, n_classes)
+        stoch_logits = post["logit"]
+        logit_sequences = []
         latent_sequences = []
         padding_masks = []
         for batch in range(feat.shape[0]):
@@ -186,6 +189,7 @@ class WorldModel(nn.Module):
                     )
 
                     latent_sequence = feat[batch, current_index:end_index]
+                    logit_sequence = stoch_logits[batch, current_index:end_index]
                     current_index = end_index
                     if end_index == is_first_indices[current_is_first_index]:
                         current_is_first_index += 1
@@ -195,6 +199,7 @@ class WorldModel(nn.Module):
                         feat.shape[1],
                     )
                     latent_sequence = feat[batch, current_index:end_index]
+                    logit_sequence = stoch_logits[batch, current_index:end_index]
                     current_index = end_index
 
                 if latent_sequence.shape[0] < self._narration_max_enc_seq:
@@ -212,6 +217,8 @@ class WorldModel(nn.Module):
                         self.device
                     )
                 latent_sequences.append(latent_sequence)
+                logit_sequences.append(logit_sequence)
+                padding_masks.append(padding_mask)
 
         # Shapes (batch, seq_len, dim)
         feat = torch.stack(latent_sequences)
@@ -224,21 +231,71 @@ class WorldModel(nn.Module):
             src_mask=padding_masks,
         )
 
-        return pred, narrations
+        return pred, narrations, logit_sequences, padding_masks
 
     def _language_to_latent_state(
-        self, posterior_logits: torch.Tensor, true_narrations: torch.Tensor
+        self,
+        posterior_logits: List[torch.Tensor],
+        true_narrations: torch.Tensor,
+        stoch_starting_token: int = 29,
+        bos_token: int = 1,
+        eos_token: int = 2,
     ) -> torch.Tensor:
         """Generates the reverse translation: from language to a sequence of posterior distributions.
 
         Args:
-            posterior_logits (torch.Tensor): Set of posterior logits of shape ...
-            true_narrations (torch.Tensor): Set of ground-truth narration tokens of shape ...
+            posterior_logits (torch.Tensor): Set of posterior logits of shape (batch, seq_len, n_categories, n_classes)
+            true_narrations (torch.Tensor): Set of ground-truth narration tokens of shape (batch, seq_len)
+            stoch_starting_token (int, optional): Starting token number for the stochastic state 'words'
+            in the vocabulary. Defaults to 29.
 
         Returns:
             torch.Tensor: KL divergence loss between predicted and actual posterior distributions.
         """
-        
+        # batch, seq_len, n_categories, n_classes = posterior_logits.shape
+        # posterior_logits = posterior_logits.reshape(
+        #     (batch, seq_len * n_categories, n_classes)
+        # )
+        logit_tokens = []
+        for logit in posterior_logits:
+            posterior_tokens = torch.argmax(logit, dim=-1)
+            posterior_tokens = posterior_tokens + stoch_starting_token
+            posterior_tokens = posterior_tokens.flatten()
+            bos_token = torch.ones(1).to(self._config.device) * bos_token
+            eos_token = torch.ones(1).to(self._config.device) * eos_token
+            posterior_tokens = torch.cat(
+                [bos_token, posterior_tokens, eos_token], dim=0
+            )
+            excpected_token_length = (
+                self._narration_max_enc_seq * self._config.dyn_discrete
+            ) + 2  # Adding two for BOS, EOS tokens
+
+            if posterior_tokens.shape[0] < excpected_token_length:
+                padding = (
+                    torch.ones(
+                        (excpected_token_length - posterior_tokens.shape[0],)
+                    ).to(self.device)
+                    * eos_token
+                )
+                posterior_tokens = torch.cat([posterior_tokens, padding], dim=0)
+
+            logit_tokens.append(posterior_tokens)
+        logit_tokens = torch.stack(logit_tokens).to(dtype=torch.long)
+
+        if logit_tokens.shape[0] != true_narrations.shape[0]:
+            raise ValueError(
+                "The number of predicted posterior distributions and ground-truth narrations should be the same."
+            )
+
+        pred_logits = self.heads["language"].forward(
+            true_narrations,
+            logit_tokens[:, :-1],
+            generate_mask=True,
+            embed_src=True,
+        )
+
+        print(f"Predicted logits shape: {pred_logits.shape}")
+
         return torch.zeros(1)
 
     def _train(self, data):
@@ -265,9 +322,16 @@ class WorldModel(nn.Module):
                 preds = {}
                 for name, head in self.heads.items():
                     if name == "language":
-                        pred, narrations = self._get_language_prediction(
-                            data, post, narration_data
+                        pred, narrations, stoch_logits, padding_masks = (
+                            self._get_language_prediction(data, post, narration_data)
                         )
+
+                        if self._config.enable_language_to_latent:
+                            result = self._language_to_latent_state(
+                                stoch_logits, narrations
+                            )
+                            raise NotImplementedError
+                            kl_loss += self._language_to_latent_state(pred, narrations)
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))

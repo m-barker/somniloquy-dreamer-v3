@@ -912,7 +912,7 @@ class TransformerEncoderDecoder(nn.Module):
         """_summary_
 
         Args:
-            src (torch.Tensor): shape (batch_size, seq_length, d_model)
+            src (torch.Tensor): shape (batch_size, seq_length, d)
             tgt (torch.Tensor): shape (batch_size, seq_length)
             generate_mask (bool, optional): _description_. Defaults to False.
 
@@ -931,11 +931,6 @@ class TransformerEncoderDecoder(nn.Module):
         if embed_tgt:
             tgt = self.tgt_embedding(tgt)
         if embed_src:
-            translation_token = torch.zeros(src.shape[0], dtype=torch.long)
-            translation_token = (
-                torch.fill_(translation_token, 33).to(self.device).unsqueeze(1)
-            )
-            src = torch.cat([src, translation_token], dim=1)
             src = self.tgt_embedding(src)
         src = src.permute(1, 0, 2)
         tgt = tgt.permute(1, 0, 2)

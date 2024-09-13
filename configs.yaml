@@ -31,6 +31,7 @@ defaults:
 
   # Model
   enable_language: false
+  enable_language_to_latent: false
   action_prediction: false
   dyn_hidden: 512
   dyn_deter: 512
@@ -261,7 +262,7 @@ minigrid:
   envs: 1
   action_repeat: 1
   prefill: 1000
-  eval_episode_num: 10
+  eval_episode_num: 0
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
@@ -270,15 +271,16 @@ minigrid:
   narrator: { narration_key: "occupancy_grid" }
   imag_gradient: "reinforce"
   actions: needed
-  enable_language: false
+  enable_language: true
+  enable_language_to_latent: true
   action_prediction: true
-  vocab_path: vocab/minigrid_teleport_complex.json
-  dec_max_length: 150
+  vocab_path: vocab/minigrid_four_squares_reverse_translation.json
+  dec_max_length: 514
   enc_max_length: 16
   video_pred_log: false
-  task: "minigrid_teleport_complex"
+  task: "minigrid_four_squares"
   time_limit: 1024
-  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-action-pred-test/dreamer-agent-step-5424.pt"
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-action-pred-test/dreamer-agent-step-5424.pt"
 
 minedojo:
   steps: 4e5
