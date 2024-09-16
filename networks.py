@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import Optional, Union
 import re
 import numpy as np
 
@@ -908,6 +908,7 @@ class TransformerEncoderDecoder(nn.Module):
         tokens_to_append: Optional[torch.Tensor] = None,
         embed_src: bool = False,
         embed_tgt: bool = True,
+        generate_src_mask: bool = False,
     ) -> torch.Tensor:
         """_summary_
 
@@ -928,6 +929,11 @@ class TransformerEncoderDecoder(nn.Module):
         if src_mask is not None:
             src_pad_mask = src_mask
 
+        if src_pad_mask is None and generate_src_mask:
+            src_pad_mask = src == 0
+        # print(f"Source shape: {src.shape}")
+        # print(f"Target shape: {tgt.shape}")
+        # print(src)
         if embed_tgt:
             tgt = self.tgt_embedding(tgt)
         if embed_src:
@@ -941,13 +947,12 @@ class TransformerEncoderDecoder(nn.Module):
             tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(0)).to(
                 self.device
             )
-        # print(f"Source shape: {src.shape}")
-        # print(f"Target shape: {tgt.shape}")
-        # print(f"Target mask shape: {tgt_mask.shape}")
-        # print(f"Target pad mask shape: {tgt_pad_mask.shape}")
+        print(f"Source shape: {src.shape}")
+        print(f"Target shape: {tgt.shape}")
 
         if tokens_to_append is not None:
             src = torch.cat([src, tokens_to_append.unsqueeze(0)], dim=0)
+
         out = self.transformer(
             src,
             tgt,
@@ -956,6 +961,7 @@ class TransformerEncoderDecoder(nn.Module):
             src_key_padding_mask=src_pad_mask,
         )
         out = self.final_layer(out)
+        # print(f"Token Logits Shape: {out.shape}")
         return out
 
     @torch.no_grad()
@@ -967,7 +973,10 @@ class TransformerEncoderDecoder(nn.Module):
         bos_token: int = 1,
         eos_token: int = 2,
         deterministic: bool = True,
-    ) -> str:
+        embed_src: bool = False,
+        return_tokens: bool = False,
+        prompt: Optional[torch.Tensor] = None,
+    ) -> Union[str, np.ndarray]:
         """Generate a sequence of tokens from the input sequence. And convert the token IDs to words.
 
         Args:
@@ -979,11 +988,19 @@ class TransformerEncoderDecoder(nn.Module):
             str: the generated sequence of words.
         """
         self.eval()
-        translated_input = torch.tensor([[bos_token]], dtype=torch.long).to(self.device)
+        if prompt is None:
+            translated_input = torch.tensor([[bos_token]], dtype=torch.long).to(
+                self.device
+            )
+        else:
+            translated_input = prompt
         done = False
         while not done:
             output_logits = self.forward(
-                input_seq, translated_input, generate_mask=False
+                input_seq,
+                translated_input,
+                generate_mask=False,
+                embed_src=embed_src,
             )
             output_probs = F.softmax(output_logits, dim=-1)
             output_probs = output_probs.squeeze(1)
@@ -1004,11 +1021,14 @@ class TransformerEncoderDecoder(nn.Module):
 
         # Convert the output tokens to a string
         translated_input = translated_input.squeeze(0).cpu().numpy()
-        narration = [
-            list(vocab.keys())[list(vocab.values()).index(token_id)]
-            for token_id in translated_input
-        ]
-        translation = " ".join(narration)
+        if return_tokens:
+            translation = translated_input
+        else:
+            narration = [
+                list(vocab.keys())[list(vocab.values()).index(token_id)]
+                for token_id in translated_input
+            ]
+            translation = " ".join(narration)
 
         self.train()
         return translation

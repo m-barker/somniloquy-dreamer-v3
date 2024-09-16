@@ -275,12 +275,14 @@ minigrid:
   enable_language_to_latent: true
   action_prediction: true
   vocab_path: vocab/minigrid_four_squares_reverse_translation.json
-  dec_max_length: 514
+  dec_max_length: 30
   enc_max_length: 16
   video_pred_log: false
   task: "minigrid_four_squares"
   time_limit: 1024
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-action-pred-test/dreamer-agent-step-5424.pt"
+  dyn_stoch: 16
+  dyn_discrete: 16
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-54000.pt"
 
 minedojo:
   steps: 4e5

@@ -1232,4 +1232,8 @@ def narration_loss(
     # reshape to (batch_size * seq_len)
     true_tokens = true_tokens.reshape(-1)
 
+    argmax_tokens = torch.argmax(predicted_tokens, dim=-1)
+    print(f"Predicted Tokens: {argmax_tokens}")
+    print(f"True Tokens: {true_tokens}")
+
     return nn.CrossEntropyLoss(ignore_index=pad_idx)(predicted_tokens, true_tokens)

@@ -59,5 +59,7 @@
     "stoch_word_29": 57,
     "stoch_word_30": 58,
     "stoch_word_31": 59,
-    "stoch_word_32": 60
+    "stoch_word_32": 60,
+    "<ENG>": 61,
+    "<LATENT>": 62
 }

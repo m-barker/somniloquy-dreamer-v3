@@ -240,6 +240,8 @@ class WorldModel(nn.Module):
         stoch_starting_token: int = 29,
         bos_token: int = 1,
         eos_token: int = 2,
+        padding_token: int = 0,
+        translation_token: int = 62,
     ) -> torch.Tensor:
         """Generates the reverse translation: from language to a sequence of posterior distributions.
 
@@ -275,7 +277,7 @@ class WorldModel(nn.Module):
                     torch.ones(
                         (excpected_token_length - posterior_tokens.shape[0],)
                     ).to(self.device)
-                    * eos_token
+                    * padding_token
                 )
                 posterior_tokens = torch.cat([posterior_tokens, padding], dim=0)
 
@@ -286,17 +288,26 @@ class WorldModel(nn.Module):
             raise ValueError(
                 "The number of predicted posterior distributions and ground-truth narrations should be the same."
             )
-
+        translation_token = (
+            torch.ones_like(true_narrations[:, 0]).to(self._config.device)
+            * translation_token
+        ).unsqueeze(1)
+        # Remove BOS and EOS tokens from the true narrations
+        bos_mask = true_narrations == bos_token
+        true_narrations = true_narrations[~bos_mask]
+        eos_mask = true_narrations == eos_token
+        true_narrations = true_narrations[~eos_mask]
+        true_narrations = true_narrations.reshape((logit_tokens.shape[0], -1))
+        true_narrations = torch.cat([translation_token, true_narrations], dim=1)
         pred_logits = self.heads["language"].forward(
             true_narrations,
             logit_tokens[:, :-1],
             generate_mask=True,
             embed_src=True,
+            generate_src_mask=True,
         )
 
-        print(f"Predicted logits shape: {pred_logits.shape}")
-
-        return torch.zeros(1)
+        return pred_logits, logit_tokens
 
     def _train(self, data):
         # action (batch_size, batch_length, act_dim)
@@ -327,11 +338,13 @@ class WorldModel(nn.Module):
                         )
 
                         if self._config.enable_language_to_latent:
-                            result = self._language_to_latent_state(
+                            pred_tokens, true_tokens = self._language_to_latent_state(
                                 stoch_logits, narrations
                             )
-                            raise NotImplementedError
-                            kl_loss += self._language_to_latent_state(pred, narrations)
+                            if type(pred_tokens) is dict:
+                                preds.update(pred_tokens)
+                            else:
+                                preds["language-to-latent"] = pred_tokens
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))
@@ -358,6 +371,13 @@ class WorldModel(nn.Module):
                     if name == "language":
                         loss = tools.narration_loss(pred, narrations[:, 1:])
                         losses[name] = loss
+                        print(f"Language loss: {loss}")
+                    elif name == "language-to-latent":
+
+                        loss = tools.narration_loss(pred, true_tokens[:, 1:])
+                        losses[name] = loss
+                        print(f"Language to latent loss: {loss}")
+                        print("----------------------------------------------")
                     elif name == "action_prediction":
                         loss = -pred.log_prob(data["action"][:, 1:])
                         losses[name] = loss
