@@ -26,7 +26,7 @@ class MineDojoEnv(gym.Env):
         self.log = log
         if "milk" in task_id:
             self.env = AnimalZooDenseRewardWrapper(
-                self.env, entity="cow", step_penalty=0, nav_reward_scale=0.1
+                self.env, entity="cow", step_penalty=0, nav_reward_scale=0.1, log=log,
             )
         self.action_size = 89  # following frome MineCLIP implementation
         self.sticky_action_length = 30
@@ -161,6 +161,7 @@ class AnimalZooDenseRewardWrapper(Wrapper):
         entity: Literal["cow", "sheep"],
         step_penalty: float | int,
         nav_reward_scale: float | int,
+        log: bool = False,
     ):
         assert (
             "rays" in env.observation_space.keys()
@@ -171,6 +172,7 @@ class AnimalZooDenseRewardWrapper(Wrapper):
         assert step_penalty >= 0, f"penalty must be non-negative"
         self._step_penalty = step_penalty
         self._nav_reward_scale = nav_reward_scale
+        self._log = log
 
         self._consecutive_distances = deque(maxlen=2)  # type: ignore
 
@@ -198,7 +200,7 @@ class AnimalZooDenseRewardWrapper(Wrapper):
             nav_reward = self._consecutive_distances[0] - self._consecutive_distances[1]
         nav_reward = max(0, nav_reward)
         nav_reward *= self._nav_reward_scale
-        if self.log:
+        if self._log:
             print(f"nav_reward: {nav_reward}")
         reward = nav_reward - self._step_penalty + _reward
         return obs, reward, done, info
