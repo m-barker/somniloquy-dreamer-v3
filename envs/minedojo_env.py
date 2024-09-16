@@ -7,6 +7,7 @@ import cv2  # type: ignore
 from gym import Wrapper
 from collections import deque
 from typing import Literal
+from minedojo.sim.inventory import InventoryItem
 
 
 class MineDojoEnv(gym.Env):
@@ -24,9 +25,12 @@ class MineDojoEnv(gym.Env):
             task_id=task_id, image_size=(160, 256), world_seed=world_seed
         )
         self.log = log
-        if "milk" in task_id:
-            self.env = AnimalZooDenseRewardWrapper(
-                self.env, entity="cow", step_penalty=0, nav_reward_scale=0.1, log=log,
+        if "hunt" in task_id:
+            self.env = HuntCowDenseRewardEnv(
+                step_penalty=0,
+                nav_reward_scale=0.1,
+                attack_reward=1,
+                success_reward=10,
             )
         self.action_size = 89  # following frome MineCLIP implementation
         self.sticky_action_length = 30
@@ -44,6 +48,16 @@ class MineDojoEnv(gym.Env):
                 "compass": gym.spaces.Box(-180, 180, (2,), np.float32),
                 # xyz position of the agent
                 "position": gym.spaces.Box(-np.inf, np.inf, (3,), np.float32),
+                "rays": gym.spaces.Dict(
+                    {
+                        "entity_name": gym.spaces.Box(
+                            -np.inf, np.inf, (36,), np.float32
+                        ),
+                        "entity_distance": gym.spaces.Box(
+                            -np.inf, np.inf, (36,), np.float32
+                        ),
+                    }
+                ),
             }
         )
 
@@ -123,6 +137,7 @@ class MineDojoEnv(gym.Env):
             "compass": flattened_compass,
             "position": posistion,
             "voxel_meta": voxel_meta,
+            "rays": obs["rays"],
         }
 
     def reset(self):
@@ -150,18 +165,15 @@ class MineDojoEnv(gym.Env):
         return obs, reward, done, info
 
 
+# Taken from https://github.com/MineDojo/MineCLIP/blob/main/mineclip/dense_reward/animal_zoo/dense_reward.py
 class AnimalZooDenseRewardWrapper(Wrapper):
-    """Modified from MineCLIP implementation
-    https://github.com/MineDojo/MineCLIP/tree/main/mineclip/mineclip
-    """
-
     def __init__(
         self,
         env,
         entity: Literal["cow", "sheep"],
         step_penalty: float | int,
         nav_reward_scale: float | int,
-        log: bool = False,
+        attack_reward: float | int,
     ):
         assert (
             "rays" in env.observation_space.keys()
@@ -172,37 +184,56 @@ class AnimalZooDenseRewardWrapper(Wrapper):
         assert step_penalty >= 0, f"penalty must be non-negative"
         self._step_penalty = step_penalty
         self._nav_reward_scale = nav_reward_scale
-        self._log = log
+        self._attack_reward = attack_reward
 
-        self._consecutive_distances = deque(maxlen=2)  # type: ignore
+        self._weapon_durability_deque = deque(maxlen=2)
+        self._consecutive_distances = deque(maxlen=2)
+        self._distance_min = np.inf
 
     def reset(self, **kwargs):
+        self._weapon_durability_deque.clear()
         self._consecutive_distances.clear()
+        self._distance_min = np.inf
 
         obs = super().reset(**kwargs)
 
         entity_in_sight, distance = self._find_distance_to_entity_if_in_sight(obs)
         if entity_in_sight:
+            distance = self._distance_min = min(distance, self._distance_min)
             self._consecutive_distances.append(distance)
         else:
             self._consecutive_distances.append(0)
+        self._weapon_durability_deque.append(obs["inventory"]["cur_durability"][0])
 
         return obs
 
     def step(self, action):
         obs, _reward, done, info = super().step(action)
 
+        self._weapon_durability_deque.append(obs["inventory"]["cur_durability"][0])
+        valid_attack = (
+            self._weapon_durability_deque[0] - self._weapon_durability_deque[1]
+        )
+        # when dying, the weapon is gone and durability changes to 0
+        valid_attack = 1.0 if valid_attack == 1.0 else 0.0
+
+        # attack reward
+        attack_reward = valid_attack * self._attack_reward
         # nav reward
         entity_in_sight, distance = self._find_distance_to_entity_if_in_sight(obs)
         nav_reward = 0
         if entity_in_sight:
+            distance = self._distance_min = min(distance, self._distance_min)
             self._consecutive_distances.append(distance)
             nav_reward = self._consecutive_distances[0] - self._consecutive_distances[1]
         nav_reward = max(0, nav_reward)
         nav_reward *= self._nav_reward_scale
-        if self._log:
-            print(f"nav_reward: {nav_reward}")
-        reward = nav_reward - self._step_penalty + _reward
+        print(f"Nav reward: {nav_reward}")
+        # reset distance min if attacking the entity because entity will run away
+        if valid_attack > 0:
+            self._distance_min = np.inf
+        # total reward
+        reward = attack_reward + nav_reward - self._step_penalty + _reward
         return obs, reward, done, info
 
     def _find_distance_to_entity_if_in_sight(self, obs):
@@ -216,3 +247,81 @@ class AnimalZooDenseRewardWrapper(Wrapper):
             in_sight = True
             min_distance = np.min(distances[entity_idx])
         return in_sight, min_distance
+
+
+# Taken from https://github.com/MineDojo/MineCLIP/blob/main/mineclip/dense_reward/animal_zoo/dense_reward.py
+class HuntCowDenseRewardEnv(AnimalZooDenseRewardWrapper):
+    def __init__(
+        self,
+        step_penalty: float | int,
+        nav_reward_scale: float | int,
+        attack_reward: float | int,
+        success_reward: float | int,
+    ):
+        max_spawn_range = 10
+        distance_to_axis = int(max_spawn_range / np.sqrt(2))
+        spawn_range_low = (-distance_to_axis, 1, -distance_to_axis)
+        spawn_range_high = (distance_to_axis, 1, distance_to_axis)
+
+        env = minedojo.make(
+            "Combat",
+            target_names=["pig", "cow", "sheep"],
+            target_quantities=1,
+            reward_weights={
+                "pig": 0.0,
+                "cow": success_reward,
+                "sheep": 0.0,
+            },
+            # start_position=pos,
+            initial_inventory=[
+                InventoryItem(slot=0, name="diamond_sword", variant=None, quantity=1)
+            ],
+            initial_mobs=["cow", "pig", "sheep"],
+            initial_mob_spawn_range_low=spawn_range_low,
+            initial_mob_spawn_range_high=spawn_range_high,
+            image_size=(160, 256),
+            world_seed=123,
+            specified_biome="sunflower_plains",
+            fast_reset=True,
+            fast_reset_random_teleport_range=0,
+            use_voxel=True,
+            use_lidar=True,
+            lidar_rays=[
+                (pitch, yaw, 9999)
+                for pitch in [np.deg2rad(x) for x in np.linspace(0, 30, 3)]
+                for yaw in [np.deg2rad(x) for x in np.linspace(-60, 60, 9)]
+            ],
+        )
+        super().__init__(
+            env=env,
+            entity="cow",
+            step_penalty=step_penalty,
+            nav_reward_scale=nav_reward_scale,
+            attack_reward=attack_reward,
+        )
+
+        # reset cmds, call before `env.reset()`
+        self._reset_cmds = ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]
+
+        self._episode_len = 500
+        self._elapsed_steps = 0
+        self._first_reset = True
+
+    def reset(self, **kwargs):
+        self._elapsed_steps = 0
+
+        if not self._first_reset:
+            for cmd in self._reset_cmds:
+                self.env.unwrapped.execute_cmd(cmd)
+            self.unwrapped.set_time(6000)
+            self.unwrapped.set_weather("clear")
+        self._first_reset = False
+
+        return super().reset(**kwargs)
+
+    def step(self, action):
+        obs, reward, done, info = super().step(action)
+        self._elapsed_steps += 1
+        if self._elapsed_steps >= self._episode_len:
+            done = True
+        return obs, reward, done, info
