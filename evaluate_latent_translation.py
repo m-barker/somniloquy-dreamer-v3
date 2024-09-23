@@ -78,7 +78,9 @@ def main(args):
     init_stoch = init_state["stoch"]
     init_stoch = init_stoch.argmax(dim=-1)
     init_stoch = init_stoch.flatten() + 29
-    test_sentence = "<LATENT> the agent moved towards the blue square which is the goal"
+    test_sentence = (
+        "<LATENT> the agent moved towards the grey square which is not the goal"
+    )
     tokenized_sentence = tokenize_sentence(test_sentence, agent._wm.vocab)
     tokenized_tensor = torch.tensor(tokenized_sentence).to(
         agent._config.device, dtype=torch.long
@@ -87,13 +89,14 @@ def main(args):
     translation = agent._wm.heads["language"].generate(
         tokenized_tensor,
         vocab=agent._wm.vocab,
-        max_sequence_length=255,
+        max_sequence_length=256,
         embed_src=True,
         return_tokens=True,
-        prompt=init_stoch.unsqueeze(0),
+        # prompt=init_stoch.unsqueeze(0),
     )
     print(translation)
     print(translation.shape)
+    translation = translation[1:]
     translation = translation.reshape((16, 16))
 
     stochastic_states = []
@@ -113,6 +116,45 @@ def main(args):
         predicted_action = agent._wm.heads["action_prediction"](action_input).mode()
         predicted_actions.append(predicted_action)
         print(predicted_action)
+
+    # Get Deterministic States
+    states = [init_state]
+    for i in range(15):
+        prev_stoch = stochastic_states[i].flatten()
+        prev_determ = states[i]["deter"].flatten()
+        prev_action = predicted_actions[i]
+        print(f"Previous Stoch shape: {prev_stoch.shape}")
+        print(f"Previous Determ shape: {prev_determ.shape}")
+        prev_state = {
+            "stoch": prev_stoch,
+            "deter": prev_determ,
+        }
+
+        state = agent._wm.dynamics.img_step(prev_state, prev_action)
+        states.append(
+            {
+                "stoch": stochastic_states[i + 1],
+                "deter": state["deter"],
+            }
+        )
+
+    # Get Imagined Observations
+    imagined_observations = []
+    for i in range(16):
+        state = states[i]
+        feat = agent._wm.dynamics.get_feat(state)
+        if feat.dim() == 1:
+            feat = feat.unsqueeze(0).unsqueeze(0)
+        else:
+            feat = feat.unsqueeze(0)
+        print(f"Feat shape: {feat.shape}")
+        imagined_observation = agent._wm.heads["decoder"](feat)["image"].mode()
+        imagined_observations.append(imagined_observation)
+        imagined_observation = imagined_observation.detach().cpu().numpy()
+        imagined_image = imagined_observation[0, 0]
+        imagined_image = np.clip(255 * imagined_image, 0, 255).astype(np.uint8)
+        # cv2.imshow("Imagined Image", cv2.cvtColor(imagined_image, cv2.COLOR_BGR2RGB))
+        # cv2.waitKey(0)
 
     for action in predicted_actions:
         action = action.detach().cpu().numpy()

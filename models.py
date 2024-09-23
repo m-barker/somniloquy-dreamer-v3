@@ -135,6 +135,74 @@ class WorldModel(nn.Module):
             cont=config.cont_head["loss_scale"],
         )
 
+    def _reshape_to_narration_sequence(
+        self, data_to_reshape: torch.Tensor, is_first: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Reshapes a set of input data of shape (batch_size, batch_length, ...) into a sequence that corresponds
+        to the length of textual narrations of shape (batch_size, seq_length, ...). Where seq_length is the maximum
+        number of timesteps that a narration sequence covers.
+
+        Args:
+            data_to_reshape (torch.Tensor): Shape (batch_size, batch_length, ...)
+            is_first (torch.Tensor): Shape (batch_size, batch_length) indicating
+            if the transition is the first in the sequence.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: Reshaped data, padding mask
+        """
+
+        data_sequences = []
+        padding_masks = []
+        batch_size, batch_length = data_to_reshape.shape[:2]
+        for batch in range(batch_size):
+            is_first_batch = is_first[batch].cpu().numpy()
+            assert is_first_batch[0] == 1
+            is_first_indices = np.where(is_first_batch == 1)[0]
+            current_index = 0
+            current_is_first_index = 1
+            while current_index < batch_length:
+                if len(is_first_indices) > current_is_first_index:
+                    end_index = min(
+                        current_index + self._narration_max_enc_seq,
+                        batch_length,
+                        is_first_indices[current_is_first_index],
+                    )
+
+                    data_sequence = data_to_reshape[batch, current_index:end_index]
+                    current_index = end_index
+                    if end_index == is_first_indices[current_is_first_index]:
+                        current_is_first_index += 1
+                else:
+                    end_index = min(
+                        current_index + self._narration_max_enc_seq,
+                        batch_length,
+                    )
+                    data_sequence = data_to_reshape[batch, current_index:end_index]
+                    current_index = end_index
+
+                if data_sequence.shape[0] < self._narration_max_enc_seq:
+                    padding = torch.zeros(
+                        self._narration_max_enc_seq - data_sequence.shape[0],
+                        data_sequence.shape[1],
+                    ).to(self.device)
+                    padding_mask = torch.ones(self._narration_max_enc_seq).to(
+                        self.device
+                    )
+                    padding_mask[data_sequence.shape[0] :] = 0
+                    data_sequence = torch.cat([data_sequence, padding], dim=0)
+                else:
+                    padding_mask = torch.zeros(self._narration_max_enc_seq).to(
+                        self.device
+                    )
+                data_sequences.append(data_sequence)
+                padding_masks.append(padding_mask)
+
+        # Shapes (batch, seq_len, dim)
+        reshaped_data = torch.stack(data_sequences)
+        padding_masks = torch.stack(padding_masks)
+
+        return reshaped_data, padding_masks
+
     def _get_language_prediction(
         self,
         data: dict[str, np.ndarray],
@@ -242,7 +310,7 @@ class WorldModel(nn.Module):
         eos_token: int = 2,
         padding_token: int = 0,
         translation_token: int = 62,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Generates the reverse translation: from language to a sequence of posterior distributions.
 
         Args:
@@ -309,6 +377,47 @@ class WorldModel(nn.Module):
 
         return pred_logits, logit_tokens
 
+    def _language_to_action_tokens(
+        self,
+        actions: torch.Tensor,
+        true_narrations: torch.Tensor,
+        is_first: torch.Tensor,
+        action_starting_token: int = 3,
+        bos_token: int = 1,
+        eos_token: int = 2,
+        padding_token: int = 0,
+        translation_token: int = 62,
+    ) -> torch.Tensor:
+        """Translates from a sequence of English tokens describing an agent's
+        behaviour into the sequence of action tokens that the agent took
+        when realising this behaviour.
+
+        Args:
+            actions (torch.Tensor): batch of actions taken of shape
+            (batch_size, batch_length, act_dim)
+            true_narrations (torch.Tensor): _description_
+            action_starting_token (int, optional): _description_. Defaults to 3.
+            bos_token (int, optional): _description_. Defaults to 1.
+            eos_token (int, optional): _description_. Defaults to 2.
+            padding_token (int, optional): _description_. Defaults to 0.
+            translation_token (int, optional): _description_. Defaults to 62.
+
+        Returns:
+            torch.Tensor: _description_
+        """
+
+        actions, action_padding_mask = self._reshape_to_narration_sequence(
+            actions, is_first
+        )
+
+        # Tokenise actions. Actions are shape (batch, seq_len, act_dim)
+        actions = actions.argmax(dim=-1)
+        actions = actions + action_starting_token
+        print(actions)
+        raise ValueError
+
+        return actions
+
     def _train(self, data):
         # action (batch_size, batch_length, act_dim)
         # image (batch_size, batch_length, h, w, ch)
@@ -345,6 +454,14 @@ class WorldModel(nn.Module):
                                 preds.update(pred_tokens)
                             else:
                                 preds["language-to-latent"] = pred_tokens
+
+                        if self._config.enable_language_to_action:
+                            action_tokens = self._language_to_action_tokens(
+                                data["action"],
+                                narrations,
+                                data["is_first"],
+                            )
+                            preds["language-to-action"] = action_tokens
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))

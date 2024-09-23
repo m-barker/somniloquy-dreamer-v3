@@ -272,17 +272,19 @@ minigrid:
   imag_gradient: "reinforce"
   actions: needed
   enable_language: true
-  enable_language_to_latent: true
+  enable_language_to_action: true
   action_prediction: true
-  vocab_path: vocab/minigrid_four_squares_reverse_translation.json
+  vocab_path: vocab/minigrid_four_squares_action_translation.json
   dec_max_length: 30
   enc_max_length: 16
   video_pred_log: false
+  # task: "minigrid_teleport_complex"
   task: "minigrid_four_squares"
   time_limit: 1024
-  dyn_stoch: 16
-  dyn_discrete: 16
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-54000.pt"
+  # dyn_stoch: 16
+  # dyn_discrete: 16
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-test/dreamer-agent-step-10984.pt"
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-57000.pt"
 
 minedojo:
   steps: 4e5

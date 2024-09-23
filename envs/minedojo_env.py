@@ -150,12 +150,6 @@ class MineDojoEnv(gym.Env):
         return obs
 
     def step(self, action):
-        if np.argmax(action) == 88:
-            self._sticky_attack_counter = self.sticky_action_length
-        if self._sticky_attack_counter > 0:
-            action = np.zeros(self.action_size)
-            action[88] = 1
-            self._sticky_attack_counter -= 1
         action = self._action(action)
         obs, reward, done, info = self.env.step(action)
         obs = self._obs(obs)

@@ -6,23 +6,33 @@ import numpy as np
 
 
 def load_reconstruction_images(
-    image_folder: str, num_timesteps: int
+    image_folder: str, num_timesteps: int, rollout_number: int = 1
 ) -> list[list[np.ndarray]]:
     true_imgs = []
     reconstructed_imgs = []
     imagined_imgs = []
     for i in range(num_timesteps):
-        true_img = cv2.imread(os.path.join(image_folder, f"true_img_t{i}.png"))
+        true_img = cv2.imread(
+            os.path.join(
+                image_folder, f"true_img_rollout_{rollout_number}_step_{i+1}.png"
+            )
+        )
         true_img = cv2.cvtColor(true_img, cv2.COLOR_BGR2RGB)
         reconstructed_img = cv2.imread(
-            os.path.join(image_folder, f"reconstructed_img_t{i}.png")
+            os.path.join(
+                image_folder,
+                f"reconstructed_img_rollout_{rollout_number}_step_{i+1}.png",
+            )
         )
         reconstructed_img = cv2.cvtColor(reconstructed_img, cv2.COLOR_BGR2RGB)
         if i == 0:
             imagined_img = np.zeros_like(true_img)
         else:
             imagined_img = cv2.imread(
-                os.path.join(image_folder, f"imagined_img_t{i}.png")
+                os.path.join(
+                    image_folder,
+                    f"imagined_img_rollout_{rollout_number}_step_{i + 1}.png",
+                )
             )
             imagined_img = cv2.cvtColor(imagined_img, cv2.COLOR_BGR2RGB)
 
@@ -77,7 +87,7 @@ def generate_image_reconstruction_plot(
 
 
 if __name__ == "__main__":
-    image_folder = "/home/mattbarker/dev/somniloquy-dreamer-v3/world_model_evaluation/minigrid-stochastic"
+    image_folder = "/home/mattbarker/dev/somniloquy-dreamer-v3/world_model_evaluation/minigrid-occupancy-grid"
     num_timesteps = 16
     images = load_reconstruction_images(image_folder, num_timesteps)
     generate_image_reconstruction_plot(images, num_rows=3, num_cols=num_timesteps)

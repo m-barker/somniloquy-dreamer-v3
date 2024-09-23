@@ -165,3 +165,5 @@ logdir*
 *.png
 *.pth
 wandb*
+.envrc
+.direnv/*
