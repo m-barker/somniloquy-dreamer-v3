@@ -154,6 +154,7 @@ def simulate(
     steps: int = 0,
     episodes: int = 0,
     state: Optional[Tuple] = None,
+    obs_to_ignore: Optional[List[str]] = None,
 ) -> Tuple:
     """Runs agent interaction with the environment.
 
@@ -190,6 +191,7 @@ def simulate(
             Reward from simulation
         )
     """
+    ignore = obs_to_ignore if obs_to_ignore else []
     with Timer("Simulate Function"):
         # initialize or unpack simulation state
         if state is None:
@@ -210,7 +212,7 @@ def simulate(
                 results = [r() for r in results]
                 for index, result in zip(indices, results):
                     t = result.copy()
-                    t = {k: convert(v) for k, v in t.items()}
+                    t = {k: convert(v) for k, v in t.items() if k not in ignore}
                     # action will be added to transition in add_to_cache
                     t["reward"] = 0.0
                     t["discount"] = 1.0
@@ -244,7 +246,7 @@ def simulate(
             # add to cache
             for a, result, env in zip(action, results, envs):
                 o, r, d, info = result
-                o = {k: convert(v) for k, v in o.items()}
+                o = {k: convert(v) for k, v in o.items() if k not in ignore}
                 transition = o.copy()
                 if isinstance(a, dict):
                     transition.update(a)
@@ -322,10 +324,14 @@ def add_to_cache(cache: dict, id: str, transition: dict) -> None:
     if id not in cache:
         cache[id] = dict()
         for key, val in transition.items():
+            if key == "ray":
+                continue    
             cache[id][key] = [convert(val)]
     else:
         for key, val in transition.items():
             if key not in cache[id]:
+                if key == "ray":
+                    continue
                 # fill missing data(action, etc.) at second time
                 cache[id][key] = [convert(0 * val)]
                 cache[id][key].append(convert(val))

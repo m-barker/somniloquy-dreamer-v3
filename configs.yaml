@@ -285,7 +285,7 @@ minigrid:
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-54000.pt"
 
 minedojo:
-  steps: 4e5
+  steps: 1e8
   envs: 1
   eval_episode_num: 0
   eval_every: 1e4
@@ -295,9 +295,9 @@ minedojo:
   resize: opencv
   actions: needed
   video_pred_log: true
-  task: "minedojo_harvest_milk_with_empty_bucket_and_cow"
-  minedojo_task_id: "harvest_milk_with_empty_bucket_and_cow"
-  time_limit: 36000
+  task: "minedojo_hunt_cow"
+  minedojo_task_id: "hunt_cow"
+  time_limit: 1000
   enable_language: false
   world_seed: 128
   # vocab_path: vocab/mindojo_harvest_1_dirt.json
@@ -305,9 +305,9 @@ minedojo:
   # mineclip_ckpt_path: attn.pth
   dec_max_length: 50
   enc_max_length: 16
-  dyn_hidden: 512
-  dyn_deter: 512
-  units: 512
+  dyn_hidden: 1024
+  dyn_deter: 4096
+  units: 1024
   encoder:
     {
       mlp_keys: "compass|position|voxel_meta",
@@ -324,8 +324,12 @@ minedojo:
       mlp_layers: 5,
       mlp_units: 1024,
     }
-  actor: { dist: "onehot", std: "none" }
+  actor: { layers: 5, dist: "onehot", std: "none" }
+  value: { layers: 5 }
+  reward_head: { layers: 5 }
+  cont_head: { layers: 5 }
   imag_gradient: "reinforce"
+  checkpoint: "/data/Matt/dev/somniloquy-dreamer-v3/logdir/minedojo-hunt-cow/dreamer-agent-step-412500.pt"
 
 debug:
   debug: True

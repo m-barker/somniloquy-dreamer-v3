@@ -21,9 +21,6 @@ class MineDojoEnv(gym.Env):
         self.task_id = task_id
         self.image_size = image_size
 
-        self.env = minedojo.make(
-            task_id=task_id, image_size=(160, 256), world_seed=world_seed
-        )
         self.log = log
         if "hunt" in task_id:
             self.env = HuntCowDenseRewardEnv(
@@ -32,6 +29,8 @@ class MineDojoEnv(gym.Env):
                 attack_reward=1,
                 success_reward=10,
             )
+        else:
+            raise NotImplementedError
         self.action_size = 89  # following frome MineCLIP implementation
         self.sticky_action_length = 30
         self._sticky_attack_counter = 0
@@ -48,16 +47,6 @@ class MineDojoEnv(gym.Env):
                 "compass": gym.spaces.Box(-180, 180, (2,), np.float32),
                 # xyz position of the agent
                 "position": gym.spaces.Box(-np.inf, np.inf, (3,), np.float32),
-                "rays": gym.spaces.Dict(
-                    {
-                        "entity_name": gym.spaces.Box(
-                            -np.inf, np.inf, (36,), np.float32
-                        ),
-                        "entity_distance": gym.spaces.Box(
-                            -np.inf, np.inf, (36,), np.float32
-                        ),
-                    }
-                ),
             }
         )
 
@@ -150,12 +139,6 @@ class MineDojoEnv(gym.Env):
         return obs
 
     def step(self, action):
-        if np.argmax(action) == 88:
-            self._sticky_attack_counter = self.sticky_action_length
-        if self._sticky_attack_counter > 0:
-            action = np.zeros(self.action_size)
-            action[88] = 1
-            self._sticky_attack_counter -= 1
         action = self._action(action)
         obs, reward, done, info = self.env.step(action)
         obs = self._obs(obs)
@@ -175,9 +158,9 @@ class AnimalZooDenseRewardWrapper(Wrapper):
         nav_reward_scale: float | int,
         attack_reward: float | int,
     ):
-        assert (
-            "rays" in env.observation_space.keys()
-        ), "Dense reward function requires lidar observation"
+        # assert (
+        #     "rays" in env.observation_space.keys()
+        # ), "Dense reward function requires lidar observation"
         super().__init__(env)
 
         self._entity = entity
@@ -229,6 +212,7 @@ class AnimalZooDenseRewardWrapper(Wrapper):
         nav_reward = max(0, nav_reward)
         nav_reward *= self._nav_reward_scale
         print(f"Nav reward: {nav_reward}")
+        print(f"Attack reward: {attack_reward}")
         # reset distance min if attacking the entity because entity will run away
         if valid_attack > 0:
             self._distance_min = np.inf
