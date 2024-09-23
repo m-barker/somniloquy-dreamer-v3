@@ -555,7 +555,11 @@ class WorldModel(nn.Module):
         # 'is_terminal' is necesarry to train cont_head
         assert "is_terminal" in obs
         obs["cont"] = torch.Tensor(1.0 - obs["is_terminal"]).unsqueeze(-1)
-        obs = {k: torch.Tensor(v).to(self._config.device) for k, v in obs.items() if k != "rays"}
+        obs = {
+            k: torch.Tensor(v).to(self._config.device)
+            for k, v in obs.items()
+            if k != "rays"
+        }
         return obs
 
     def video_pred(self, data):

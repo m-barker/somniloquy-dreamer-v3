@@ -1159,7 +1159,7 @@ def generate_batch_narrations(
     max_narration_length: int,
     vocab: dict,
     device: torch.device,
-    is_first: torch.Tensor,
+    is_first: Union[np.ndarray, torch.Tensor],
 ) -> torch.Tensor:
     """Generates a batch of narrations given a batch
     of observations.

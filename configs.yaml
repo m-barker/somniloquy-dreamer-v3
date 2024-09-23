@@ -300,11 +300,12 @@ minedojo:
   task: "minedojo_hunt_cow"
   minedojo_task_id: "hunt_cow"
   time_limit: 1000
-  enable_language: false
+  enable_language: true
+  narrator: { narration_key: "image" }
   world_seed: 128
-  # vocab_path: vocab/mindojo_harvest_1_dirt.json
-  # prompt_path: captions/minedojo.json
-  # mineclip_ckpt_path: attn.pth
+  vocab_path: vocab/mindojo_hunt_cow.json
+  prompt_path: captions/minedojo.json
+  mineclip_ckpt_path: attn.pth
   dec_max_length: 50
   enc_max_length: 16
   dyn_hidden: 1024
@@ -331,7 +332,7 @@ minedojo:
   reward_head: { layers: 5 }
   cont_head: { layers: 5 }
   imag_gradient: "reinforce"
-  checkpoint: "/data/Matt/dev/somniloquy-dreamer-v3/logdir/minedojo-hunt-cow/dreamer-agent-step-412500.pt"
+  # checkpoint: "/data/Matt/dev/somniloquy-dreamer-v3/logdir/minedojo-hunt-cow/dreamer-agent-step-412500.pt"
 
 debug:
   debug: True
