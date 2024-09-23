@@ -72,6 +72,7 @@ def setup_agent_and_env(args):
         agent.load_state_dict(checkpoint["agent_state_dict"])
         recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
         agent._should_pretrain._once = False
+    agent.eval()
     return agent, train_env
 
 
@@ -122,62 +123,62 @@ def generate_trajectory_plot(latent_states: List[List[torch.Tensor]]):
 
 def main(args):
     agent, env = setup_agent_and_env(args)
+    with torch.no_grad():
+        trajectory_length = 16
+        n_rollouts = 20
 
-    trajectory_length = 16
-    n_rollouts = 20
-
-    # Get initial state
-    obs = env.reset()()  # Nasty
-    transition = obs.copy()
-    transition = add_batch_to_obs(transition)
-    transition = {k: convert(v) for k, v in transition.items()}
-    transition = agent._wm.preprocess(transition)
-    embed = agent._wm.encoder(transition)
-    init_state, _ = agent._wm.dynamics.obs_step(
-        embed=embed,
-        is_first=transition["is_first"],
-        prev_state=None,
-        prev_action=None,
-    )
-
-    all_trajectories = []
-    # Sample rollouts
-    for t in range(n_rollouts):
-        imagained_states, imagined_actions = sample_rollouts(
-            agent,
-            initial_state=init_state,
-            trajectory_length=trajectory_length,
+        # Get initial state
+        obs = env.reset()()  # Nasty
+        transition = obs.copy()
+        transition = add_batch_to_obs(transition)
+        transition = {k: convert(v) for k, v in transition.items()}
+        transition = agent._wm.preprocess(transition)
+        embed = agent._wm.encoder(transition)
+        init_state, _ = agent._wm.dynamics.obs_step(
+            embed=embed,
+            is_first=transition["is_first"],
+            prev_state=None,
+            prev_action=None,
         )
-        # Reshape to (T, N, C)
-        imagined_tensor = torch.cat(imagained_states, dim=0).permute(1, 0, 2)
-        imagined_narration = agent._wm.heads["language"].generate(
-            imagined_tensor, agent._wm.vocab, 150, deterministic=False
-        )
-        true_obs = []
-        for action in imagined_actions:
-            numpy_action = action.squeeze(0).detach().cpu().numpy()
-            obs, reward, done, info = env.step({"action": numpy_action})()
-            true_obs.append(info["encoded_image"])
-            if done:
-                break
-        true_narration = agent._wm.narrator.narrate(true_obs)
-        print(f"Imagined: {imagined_narration}")
-        print(f"True: {true_narration}")
-        print(
-            "-----------------------------------------------------------------------------------------------------"
-        )
-        env.reset()()
-        all_trajectories.append(imagained_states)
 
-        for index, state in enumerate(imagained_states):
-            imagined_img = agent._wm.heads["decoder"](state)["image"].mode()
-            imagined_img = imagined_img[0, 0].detach().cpu().numpy()
-            imagined_img = np.clip(255 * imagined_img, 0, 255).astype(np.uint8)
-
-            cv2.imwrite(
-                f"imagined_img_rollout_{t+1}_step_{index+1}.png",
-                cv2.cvtColor(imagined_img, cv2.COLOR_RGB2BGR),
+        all_trajectories = []
+        # Sample rollouts
+        for t in range(n_rollouts):
+            imagained_states, imagined_actions = sample_rollouts(
+                agent,
+                initial_state=init_state,
+                trajectory_length=trajectory_length,
             )
+            # Reshape to (T, N, C)
+            imagined_tensor = torch.cat(imagained_states, dim=0).permute(1, 0, 2)
+            imagined_narration = agent._wm.heads["language"].generate(
+                imagined_tensor, agent._wm.vocab, 150, deterministic=False
+            )
+            true_obs = []
+            for action in imagined_actions:
+                numpy_action = action.squeeze(0).detach().cpu().numpy()
+                obs, reward, done, info = env.step({"action": numpy_action})()
+                true_obs.append(info["encoded_image"])
+                if done:
+                    break
+            true_narration = agent._wm.narrator.narrate(true_obs)
+            print(f"Imagined: {imagined_narration}")
+            print(f"True: {true_narration}")
+            print(
+                "-----------------------------------------------------------------------------------------------------"
+            )
+            env.reset()()
+            all_trajectories.append(imagained_states)
+
+            for index, state in enumerate(imagained_states):
+                imagined_img = agent._wm.heads["decoder"](state)["image"].mode()
+                imagined_img = imagined_img[0, 0].detach().cpu().numpy()
+                imagined_img = np.clip(255 * imagined_img, 0, 255).astype(np.uint8)
+
+                cv2.imwrite(
+                    f"imagined_img_rollout_{t+1}_step_{index+1}.png",
+                    cv2.cvtColor(imagined_img, cv2.COLOR_RGB2BGR),
+                )
 
     # generate_trajectory_plot(all_trajectories[:2])
 

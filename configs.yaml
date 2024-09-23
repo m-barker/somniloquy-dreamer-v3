@@ -261,7 +261,8 @@ minigrid:
   steps: 4e5
   envs: 1
   action_repeat: 1
-  prefill: 1000
+  prefill: 100
+  pretrain: 1
   eval_episode_num: 0
   eval_every: 1000
   log_every: 500
@@ -273,8 +274,8 @@ minigrid:
   actions: needed
   enable_language: true
   enable_language_to_action: true
-  action_prediction: true
-  vocab_path: vocab/minigrid_four_squares_action_translation.json
+  action_prediction: false
+  vocab_path: vocab/minigrid_four_squares_with_actions.json
   dec_max_length: 30
   enc_max_length: 16
   video_pred_log: false

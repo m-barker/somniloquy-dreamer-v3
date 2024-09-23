@@ -230,6 +230,7 @@ if __name__ == "__main__":
         train_dataset=None,
     )
     load_weights(model_path, agent)
+    agent.eval()
 
     evaluate_world_model(
         env, agent, results_folder, trajectory_length=16, actions="keyboard"
