@@ -334,6 +334,17 @@ minedojo:
   imag_gradient: "reinforce"
   # checkpoint: "/data/Matt/dev/somniloquy-dreamer-v3/logdir/minedojo-hunt-cow/dreamer-agent-step-412500.pt"
 
+panda_push:
+  steps: 1e6
+  action_repeat: 1
+  envs: 1
+  train_ratio: 512
+  video_pred_log: true
+  eval_episode_num: 1
+  eval_every: 10000
+  log_every: 1000
+  task: "panda_push_colour"
+
 debug:
   debug: True
   pretrain: 1

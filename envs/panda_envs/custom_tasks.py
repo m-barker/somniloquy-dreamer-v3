@@ -147,7 +147,7 @@ class PushColour(Task):
             return -d.astype(np.float32)
 
 
-class MyEnv(RobotTaskEnv):
+class PushColourTask(RobotTaskEnv):
     def __init__(self, render_mode="human", renderer="Tiny"):
         sim = PyBullet(render_mode=render_mode, renderer=renderer)
         robot = Panda(sim)
@@ -190,16 +190,14 @@ class MyEnv(RobotTaskEnv):
 def main():
     import cv2
 
-    env = MyEnv(render_mode="rgb_array", renderer="Tiny")
+    env = PushColourTask(render_mode="rgb_array", renderer="Tiny")
     env = PixelObservationWrapper(env, pixels_only=True, pixel_keys=["image"])
     env.reset()
     while True:
         action = env.action_space.sample()
+        action_space = env.action_space
+        print(action_space)
         obs, reward, terminated, truncated, info = env.step(action)
-        print(obs["image"].shape)
-        cv2.imshow("image", obs["image"])
-        cv2.waitKey(0)
-        print(obs.keys())
         env.render()
         print("reward: ", reward)
         if terminated:
