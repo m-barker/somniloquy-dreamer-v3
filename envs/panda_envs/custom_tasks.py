@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 import numpy as np
 
 from panda_gym.envs.core import Task, RobotTaskEnv
@@ -79,6 +79,16 @@ class PushColour(Task):
         )
         return observation
 
+    def is_failure(self) -> bool:
+        """Returns True if any of the boxes fall off the table."""
+
+        red_box_pos = np.array(self.sim.get_base_position("red_box"))
+        green_box_pos = np.array(self.sim.get_base_position("green_box"))
+        blue_box_pos = np.array(self.sim.get_base_position("blue_box"))
+        if red_box_pos[2] < -0.3 or green_box_pos[2] < -0.3 or blue_box_pos[2] < -0.3:
+            return True
+        return False
+
     def get_achieved_goal(self) -> np.ndarray:
         object_position = np.array(
             self.sim.get_base_position(f"{self._colour_to_push}_box")
@@ -128,6 +138,8 @@ class PushColour(Task):
         desired_goal: np.ndarray,
         info: Dict[str, Any] = {},
     ) -> np.ndarray:
+        if self.is_failure():
+            return -np.array(10.0, dtype=np.float32)
         d = distance(achieved_goal, desired_goal)
         if self.reward_type == "sparse":
             return -np.array(d > self.distance_threshold, dtype=np.float32)
@@ -136,32 +148,62 @@ class PushColour(Task):
 
 
 class MyEnv(RobotTaskEnv):
-    def __init__(self, render_mode="human"):
-        sim = PyBullet(render_mode=render_mode)
+    def __init__(self, render_mode="human", renderer="Tiny"):
+        sim = PyBullet(render_mode=render_mode, renderer=renderer)
         robot = Panda(sim)
         task = PushColour(sim)
 
         super().__init__(
             robot,
             task,
-            render_target_position=np.array([-1.0, 0.0, 0.0]),
+            render_target_position=np.array([-0.5, 0.0, 0.0]),
             render_yaw=275,
             render_pitch=-60,
-            render_distance=0.7,
+            render_distance=1.0,
             render_roll=0,
+            render_height=64,
+            render_width=64,
         )
+
+    def step(
+        self, action: np.ndarray
+    ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
+        self.robot.set_action(action)
+        self.sim.step()
+        observation = self._get_obs()
+        # An episode is terminated if the agent has reached the target
+        # or if a box has fallen off of the table
+        terminated = bool(
+            self.task.is_success(observation["achieved_goal"], self.task.get_goal())
+            or self.task.is_failure()
+        )
+        truncated = False
+        info = {"is_success": terminated}
+        reward = float(
+            self.task.compute_reward(
+                observation["achieved_goal"], self.task.get_goal(), info
+            )
+        )
+        return observation, reward, terminated, truncated, info
 
 
 def main():
-    env = MyEnv(render_mode="human")
+    import cv2
+
+    env = MyEnv(render_mode="rgb_array", renderer="Tiny")
+    env = PixelObservationWrapper(env, pixels_only=True, pixel_keys=["image"])
     env.reset()
     while True:
         action = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
+        print(obs["image"].shape)
+        cv2.imshow("image", obs["image"])
+        cv2.waitKey(0)
+        print(obs.keys())
         env.render()
-        if terminated or truncated:
+        print("reward: ", reward)
+        if terminated:
             break
-        print(obs)
 
 
 if __name__ == "__main__":
