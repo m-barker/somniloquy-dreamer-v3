@@ -67,7 +67,10 @@ def get_posteriors(agent, initial_state, trajectory_length: int, env, actions):
     prev_state = initial_state
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
     for t in range(trajectory_length):
-        action_arr = actions[t].squeeze(0).detach().cpu().numpy()
+        try:
+            action_arr = actions[t].squeeze(0).detach().cpu().numpy()
+        except IndexError:
+            break
         action_dict = {"action": action_arr}
         obs, reward, done, info = env.step(action_dict)()
         true_obs.append(obs["occupancy_grid"])
@@ -170,7 +173,7 @@ def main(args):
     agent, env = setup_agent_and_env(args)
     with torch.no_grad():
         trajectory_length = 16
-        n_rollouts = 20
+        n_rollouts = 5
 
         init_state = get_initial_state(agent, env)
 

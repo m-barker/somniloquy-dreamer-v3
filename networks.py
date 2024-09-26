@@ -947,8 +947,8 @@ class TransformerEncoderDecoder(nn.Module):
             tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(0)).to(
                 self.device
             )
-        print(f"Source shape: {src.shape}")
-        print(f"Target shape: {tgt.shape}")
+        # print(f"Source shape: {src.shape}")
+        # print(f"Target shape: {tgt.shape}")
 
         if tokens_to_append is not None:
             src = torch.cat([src, tokens_to_append.unsqueeze(0)], dim=0)

@@ -125,25 +125,24 @@ def main(args):
     agent, env = setup_agent_and_env(args)
     with torch.no_grad():
         trajectory_length = 16
-        n_rollouts = 20
-
-        # Get initial state
+        n_rollouts = 5
         obs = env.reset()()  # Nasty
-        transition = obs.copy()
-        transition = add_batch_to_obs(transition)
-        transition = {k: convert(v) for k, v in transition.items()}
-        transition = agent._wm.preprocess(transition)
-        embed = agent._wm.encoder(transition)
-        init_state, _ = agent._wm.dynamics.obs_step(
-            embed=embed,
-            is_first=transition["is_first"],
-            prev_state=None,
-            prev_action=None,
-        )
 
         all_trajectories = []
         # Sample rollouts
         for t in range(n_rollouts):
+            # Get initial state
+            transition = obs.copy()
+            transition = add_batch_to_obs(transition)
+            transition = {k: convert(v) for k, v in transition.items()}
+            transition = agent._wm.preprocess(transition)
+            embed = agent._wm.encoder(transition)
+            init_state, _ = agent._wm.dynamics.obs_step(
+                embed=embed,
+                is_first=transition["is_first"],
+                prev_state=None,
+                prev_action=None,
+            )
             imagained_states, imagined_actions = sample_rollouts(
                 agent,
                 initial_state=init_state,
@@ -158,7 +157,7 @@ def main(args):
             for action in imagined_actions:
                 numpy_action = action.squeeze(0).detach().cpu().numpy()
                 obs, reward, done, info = env.step({"action": numpy_action})()
-                true_obs.append(info["encoded_image"])
+                true_obs.append(obs["occupancy_grid"])
                 if done:
                     break
             true_narration = agent._wm.narrator.narrate(true_obs)
@@ -167,7 +166,7 @@ def main(args):
             print(
                 "-----------------------------------------------------------------------------------------------------"
             )
-            env.reset()()
+            obs = env.reset()()
             all_trajectories.append(imagained_states)
 
             for index, state in enumerate(imagained_states):

@@ -261,9 +261,7 @@ minigrid:
   steps: 4e5
   envs: 1
   action_repeat: 1
-  prefill: 100
-  pretrain: 1
-  eval_episode_num: 0
+  eval_episode_num: 10
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
@@ -273,9 +271,9 @@ minigrid:
   imag_gradient: "reinforce"
   actions: needed
   enable_language: true
-  enable_language_to_action: true
+  enable_language_to_action: false
   action_prediction: false
-  vocab_path: vocab/minigrid_four_squares_with_actions.json
+  vocab_path: vocab/minigrid_four_squares.json
   dec_max_length: 30
   enc_max_length: 16
   video_pred_log: false
@@ -284,8 +282,9 @@ minigrid:
   time_limit: 1024
   # dyn_stoch: 16
   # dyn_discrete: 16
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-test/dreamer-agent-step-10984.pt"
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-grid-longer-train/dreamer-agent-step-19500.pt"
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-57000.pt"
+  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-four-squares/dreamer-agent-step-42256.pt"
 
 minedojo:
   steps: 1e8
