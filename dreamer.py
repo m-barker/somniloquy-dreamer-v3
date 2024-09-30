@@ -25,6 +25,7 @@ from torch import distributions as torchd
 
 # from evaluate_narration_model import plot_trajectory_graph
 from narration.mineclip_narrator import MineCLIPNarrator
+from narration.panda_narrator import PandaPushColourNarrator
 from narration.minigrd_narrator import (
     MiniGridFourSquareNarrator,
     MiniGridTeleportNarrator,
@@ -180,6 +181,9 @@ def configure_narrator(config):
                 narrator = MiniGridComplexTeleportNarrator()
             else:
                 narrator = MiniGridTeleportNarrator()
+
+    elif "panda" in config.task:
+        narrator = PandaPushColourNarrator()
 
     return narrator
 

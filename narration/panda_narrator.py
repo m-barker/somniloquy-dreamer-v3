@@ -228,18 +228,23 @@ class PandaPushColourNarrator:
 
                     if box_moved_count > 1:
                         narration_str += "and"
-                    narration_str = f"I will move the {box_name} to the "
+                    if box_end_z < -0.3:
+                        narration_str = (
+                            f"I will knock the {box_name} off the table clumsy me and "
+                        )
+                    else:
+                        narration_str = f"I will move the {box_name} to the "
 
-                    if box_start_x < box_end_x:
-                        narration_str += "right and "
-                    elif box_start_x > box_end_x:
-                        narration_str += "left and "
-                    if box_start_y < box_end_y:
-                        narration_str += "forwards and "
-                    elif box_start_y > box_end_y:
-                        narration_str += "backwards and "
+                        if box_start_x < box_end_x:
+                            narration_str += "right and "
+                        elif box_start_x > box_end_x:
+                            narration_str += "left and "
+                        if box_start_y < box_end_y:
+                            narration_str += "forwards and "
+                        elif box_start_y > box_end_y:
+                            narration_str += "backwards and "
 
-                    if narration_str[-4:] == "and ":
-                        narration_str = narration_str[:-4]
+                        if narration_str[-4:] == "and ":
+                            narration_str = narration_str[:-4]
 
         return narration_str

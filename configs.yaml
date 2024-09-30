@@ -342,9 +342,11 @@ panda_push:
   video_pred_log: true
   eval_episode_num: 0
   eval_every: 10000
+  enable_language: true
   time_limit: 1024
   log_every: 1000
   task: "panda_push_colour"
+  vocab_path: vocab/panda_push_colour.json
 
 debug:
   debug: True
