@@ -21,10 +21,10 @@ class PushColour(Task):
         self.distance_threshold = distance_threshold
         self._colour_to_push = colour_to_push
         self._object_size = 0.04
-        self.goal_range_low = np.array([-0.4, -0.3, 0])
+        self.goal_range_low = np.array([-0.4, 0.1, 0])
         self.goal_range_high = np.array([-0.05, 0.3, 0])
         self.obj_range_low = np.array([-0.4, -0.3, 0])
-        self.obj_range_high = np.array([-0.05, 0.3, 0])
+        self.obj_range_high = np.array([-0.05, 0.0, 0])
         with self.sim.no_rendering():
             self._create_scene()
 
@@ -61,22 +61,27 @@ class PushColour(Task):
             rgba_color=np.array([0.5, 0.5, 0.0, 0.3]),
         )
 
-    def get_obs(self) -> np.ndarray:
-        # position, rotation of the object
-        object_position = np.array(self.sim.get_base_position("red_box"))
-        object_rotation = np.array(self.sim.get_base_rotation("red_box"))
-        object_velocity = np.array(self.sim.get_base_velocity("red_box"))
-        object_angular_velocity = np.array(
-            self.sim.get_base_angular_velocity("red_box")
-        )
-        observation = np.concatenate(
-            [
-                object_position,
-                object_rotation,
-                object_velocity,
-                object_angular_velocity,
-            ]
-        )
+    def get_obs(self) -> Dict[str, np.ndarray]:
+        # position of the boxes.
+        red_box_pos = np.array(self.sim.get_base_position("red_box"))
+        red_box_rot = np.array(self.sim.get_base_rotation("red_box"))
+        blue_box_pos = np.array(self.sim.get_base_position("blue_box"))
+        blue_box_rot = np.array(self.sim.get_base_rotation("blue_box"))
+        green_box_pos = np.array(self.sim.get_base_position("green_box"))
+        green_box_rot = np.array(self.sim.get_base_rotation("green_box"))
+        achieved_goal = self.get_achieved_goal()
+        desired_goal = self.get_goal()
+
+        observation = {
+            "red_box_pos": red_box_pos,
+            "red_box_rot": red_box_rot,
+            "green_box_pos": green_box_pos,
+            "green_box_rot": green_box_rot,
+            "blue_box_pos": blue_box_pos,
+            "blue_box_rot": blue_box_rot,
+            "achieved_goal": achieved_goal,
+            "desired_goal": desired_goal,
+        }
         return observation
 
     def is_failure(self) -> bool:
@@ -85,9 +90,9 @@ class PushColour(Task):
         red_box_pos = np.array(self.sim.get_base_position("red_box"))
         green_box_pos = np.array(self.sim.get_base_position("green_box"))
         blue_box_pos = np.array(self.sim.get_base_position("blue_box"))
-        if red_box_pos[2] < -0.3 or green_box_pos[2] < -0.3 or blue_box_pos[2] < -0.3:
-            return True
-        return False
+        return (
+            red_box_pos[2] < -0.3 or green_box_pos[2] < -0.3 or blue_box_pos[2] < -0.3
+        )
 
     def get_achieved_goal(self) -> np.ndarray:
         object_position = np.array(
@@ -138,8 +143,6 @@ class PushColour(Task):
         desired_goal: np.ndarray,
         info: Dict[str, Any] = {},
     ) -> np.ndarray:
-        if self.is_failure():
-            return -np.array(10.0, dtype=np.float32)
         d = distance(achieved_goal, desired_goal)
         if self.reward_type == "sparse":
             return -np.array(d > self.distance_threshold, dtype=np.float32)
@@ -165,6 +168,21 @@ class PushColourTask(RobotTaskEnv):
             render_width=64,
         )
 
+    def _get_obs(self) -> Dict[str, np.ndarray]:
+        """Gets the environment observation, in this case a dictionary containing the
+        position and rotation of the coloured boxes on the table.
+
+        Returns:
+            Dict[str, np.ndarray]: Obs name: Obs value
+        """
+        obs: Dict[str, np.ndarray] = self.task.get_obs()
+        obs["desired_goal"] = self.task.get_goal().astype(np.float32)
+        robot_obs = self.robot.get_obs().astype(np.float32)
+        # ee position (x,y,z), velocity (x,y,z), fingers width
+        # so shape (7,)
+        obs["robot_obs"] = robot_obs
+        return obs
+
     def step(
         self, action: np.ndarray
     ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
@@ -173,10 +191,10 @@ class PushColourTask(RobotTaskEnv):
         observation = self._get_obs()
         # An episode is terminated if the agent has reached the target
         # or if a box has fallen off of the table
-        terminated = bool(
-            self.task.is_success(observation["achieved_goal"], self.task.get_goal())
-            or self.task.is_failure()
+        success = self.task.is_success(
+            observation["achieved_goal"], self.task.get_goal()
         )
+        terminated = bool(success or self.task.is_failure())
         truncated = False
         info = {"is_success": terminated}
         reward = float(
@@ -184,14 +202,16 @@ class PushColourTask(RobotTaskEnv):
                 observation["achieved_goal"], self.task.get_goal(), info
             )
         )
+        if success:
+            reward += 1000.0
         return observation, reward, terminated, truncated, info
 
 
 def main():
     import cv2
 
-    env = PushColourTask(render_mode="rgb_array", renderer="Tiny")
-    env = PixelObservationWrapper(env, pixels_only=True, pixel_keys=["image"])
+    env = PushColourTask(render_mode="human")
+    # env = PixelObservationWrapper(env, pixels_only=True, pixel_keys=["image"])
     env.reset()
     while True:
         action = env.action_space.sample()

@@ -337,11 +337,12 @@ minedojo:
 panda_push:
   steps: 1e6
   action_repeat: 1
-  envs: 1
-  train_ratio: 512
+  envs: 16
+  train_ratio: 16
   video_pred_log: true
-  eval_episode_num: 1
+  eval_episode_num: 0
   eval_every: 10000
+  time_limit: 1024
   log_every: 1000
   task: "panda_push_colour"
 
