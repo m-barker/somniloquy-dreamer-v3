@@ -1,4 +1,4 @@
-from typing import Tuple, Optional
+from typing import Tuple, Dict
 
 import cv2
 import gymnasium as gym
@@ -32,7 +32,7 @@ class PandaEnv:
             env = PushColourTask(render_mode="rgb_array")
         else:
             raise NotImplementedError(f"Panda Task {task_name} not implemented.")
-        env = PixelObservationWrapper(env, pixel_keys=["image"], pixels_only=True)
+        env = PixelObservationWrapper(env, pixel_keys=["image"], pixels_only=False)  # type: ignore
         return env
 
     @property
@@ -42,6 +42,35 @@ class PandaEnv:
         return gym.spaces.Dict(
             {
                 "image": gym.spaces.Box(0, 255, img_shape, np.uint8),
+                "privileged_obs": gym.spaces.Dict(
+                    {
+                        "red_box_pos": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "red_box_rot": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "green_box_pos": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "green_box_rot": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "blue_box_pos": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "blue_box_rot": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "desired_goal": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "achieved_goal": gym.spaces.Box(
+                            -np.inf, np.inf, (3,), np.float32
+                        ),
+                        "robot_obs": gym.spaces.Box(-np.inf, np.inf, (7,), np.float32),
+                    }
+                ),
             }
         )
 
@@ -62,7 +91,7 @@ class PandaEnv:
         )
 
         return self._obs(
-            obs["image"],
+            obs,
             reward,
             is_last=self._done,
             is_terminal=over or truncated,
@@ -73,7 +102,7 @@ class PandaEnv:
         self._done = False
         self._step = 0
         result = self._obs(
-            obs["image"],
+            obs,
             0.0,
             is_first=True,
         )[0]
@@ -81,18 +110,19 @@ class PandaEnv:
 
     def _obs(
         self,
-        img: np.ndarray,
+        obs: Dict,
         reward: float,
         is_first: bool = False,
         is_last: bool = False,
         is_terminal: bool = False,
     ) -> Tuple[dict, float, bool, dict]:
-        image = img
+        image = obs["image"]
         if image.shape[:2] != self._img_size:
             image = cv2.resize(image, self._img_size, interpolation=cv2.INTER_AREA)
         return (
             {
                 "image": image,
+                "privileged_obs": {k: obs[k] for k in obs if k != "image"},
                 "is_terminal": is_terminal,
                 "is_first": is_first,
             },

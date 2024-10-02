@@ -342,7 +342,7 @@ def prefill_dataset(
         logger,
         limit=config.dataset_size,
         steps=prefill,
-        obs_to_ignore=["rays"],
+        obs_to_ignore=["rays", "privileged_obs"],
     )
     logger.step += prefill * config.action_repeat
     print(f"Logger: ({logger.step} steps).")
@@ -452,7 +452,7 @@ def main(config):
                 logger,
                 is_eval=True,
                 episodes=config.eval_episode_num,
-                obs_to_ignore=["rays"],
+                obs_to_ignore=["rays", "privileged_obs"],
             )
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(next(eval_dataset))
@@ -469,7 +469,7 @@ def main(config):
             limit=config.dataset_size,
             steps=config.eval_every,
             state=state,
-            obs_to_ignore=["rays"],
+            obs_to_ignore=["rays", "privileged_obs"],
         )
         items_to_save = {
             "agent_state_dict": agent.state_dict(),

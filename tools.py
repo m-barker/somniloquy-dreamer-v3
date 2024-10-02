@@ -213,6 +213,7 @@ def simulate(
                 for index, result in zip(indices, results):
                     t = result.copy()
                     t = {k: convert(v) for k, v in t.items() if k not in ignore}
+                    t["privileged_obs"] = result["privileged_obs"]
                     # action will be added to transition in add_to_cache
                     t["reward"] = 0.0
                     t["discount"] = 1.0
@@ -254,6 +255,7 @@ def simulate(
                     transition["action"] = a
                 transition["reward"] = r
                 transition["discount"] = info.get("discount", np.array(1 - float(d)))
+                transition["privileged_obs"] = result[0]["privileged_obs"]
                 add_to_cache(cache, env.id, transition)
 
             if done.any():
@@ -325,8 +327,11 @@ def add_to_cache(cache: dict, id: str, transition: dict) -> None:
         cache[id] = dict()
         for key, val in transition.items():
             if key == "ray":
-                continue    
-            cache[id][key] = [convert(val)]
+                continue
+            if type(val) == dict:
+                cache[id][key] = [val]
+            else:
+                cache[id][key] = [convert(val)]
     else:
         for key, val in transition.items():
             if key not in cache[id]:
@@ -336,7 +341,10 @@ def add_to_cache(cache: dict, id: str, transition: dict) -> None:
                 cache[id][key] = [convert(0 * val)]
                 cache[id][key].append(convert(val))
             else:
-                cache[id][key].append(convert(val))
+                if type(val) == dict:
+                    cache[id][key].append(val)
+                else:
+                    cache[id][key].append(convert(val))
 
 
 def erase_over_episodes(cache: dict, dataset_size: int) -> int:
@@ -412,7 +420,10 @@ def from_generator(generator, batch_size):
             data[key] = []
             for i in range(batch_size):
                 data[key].append(batch[i][key])
-            data[key] = np.stack(data[key], 0)
+            try:
+                data[key] = np.stack(data[key], 0)
+            except ValueError:
+                pass
         yield data
 
 
@@ -1239,7 +1250,7 @@ def narration_loss(
     true_tokens = true_tokens.reshape(-1)
 
     argmax_tokens = torch.argmax(predicted_tokens, dim=-1)
-    print(f"Predicted Tokens: {argmax_tokens}")
-    print(f"True Tokens: {true_tokens}")
+    # print(f"Predicted Tokens: {argmax_tokens}")
+    # print(f"True Tokens: {true_tokens}")
 
     return nn.CrossEntropyLoss(ignore_index=pad_idx)(predicted_tokens, true_tokens)

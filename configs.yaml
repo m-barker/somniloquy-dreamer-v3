@@ -32,6 +32,7 @@ defaults:
   # Model
   enable_language: false
   enable_language_to_latent: false
+  enable_language_to_action: false
   action_prediction: false
   dyn_hidden: 512
   dyn_deter: 512
@@ -335,7 +336,7 @@ minedojo:
   # checkpoint: "/data/Matt/dev/somniloquy-dreamer-v3/logdir/minedojo-hunt-cow/dreamer-agent-step-412500.pt"
 
 panda_push:
-  steps: 1e6
+  steps: 1e8
   action_repeat: 1
   envs: 16
   train_ratio: 16
@@ -347,6 +348,10 @@ panda_push:
   log_every: 1000
   task: "panda_push_colour"
   vocab_path: vocab/panda_push_colour.json
+  narrator: { narration_key: "privileged_obs" }
+  dec_max_length: 50
+  enc_max_length: 16
+  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/panda-push-colour-with-lang/dreamer-agent-step-102500.pt"
 
 debug:
   debug: True

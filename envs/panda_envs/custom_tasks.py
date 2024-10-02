@@ -194,7 +194,7 @@ class PushColourTask(RobotTaskEnv):
         success = self.task.is_success(
             observation["achieved_goal"], self.task.get_goal()
         )
-        terminated = bool(success or self.task.is_failure())
+        terminated = success
         truncated = False
         info = {"is_success": terminated}
         reward = float(

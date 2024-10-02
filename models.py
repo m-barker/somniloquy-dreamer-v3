@@ -35,7 +35,12 @@ class WorldModel(nn.Module):
         self._step = step
         self._use_amp = True if config.precision == 16 else False
         self._config = config
-        shapes = {k: tuple(v.shape) for k, v in obs_space.spaces.items()}
+        print(obs_space.spaces.items())
+        shapes = {
+            k: tuple(v.shape)
+            for k, v in obs_space.spaces.items()
+            if k != "privileged_obs"
+        }
         self.encoder = networks.MultiEncoder(shapes, **config.encoder)
         self.embed_size = self.encoder.outdim
         self.dynamics = networks.RSSM(
@@ -597,7 +602,7 @@ class WorldModel(nn.Module):
                     if name == "language":
                         loss = tools.narration_loss(pred, narrations[:, 1:])
                         losses[name] = loss
-                        print(f"Language loss: {loss}")
+                        # print(f"Language loss: {loss}")
                     elif name == "language-to-latent":
 
                         loss = tools.narration_loss(pred, true_tokens[:, 1:])
@@ -672,7 +677,7 @@ class WorldModel(nn.Module):
         obs = {
             k: torch.Tensor(v).to(self._config.device)
             for k, v in obs.items()
-            if k != "rays"
+            if k not in ["rays", "privileged_obs"]
         }
         return obs
 

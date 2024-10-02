@@ -55,7 +55,7 @@ class PandaPushColourNarrator:
             for box in ["red_box", "green_box", "blue_box"]:
                 prev_pos = observations[t - 1][f"{box}_pos"]
                 curr_pos = observations[t][f"{box}_pos"]
-                if np.linalg.norm(prev_pos - curr_pos) > 0:
+                if np.linalg.norm(prev_pos - curr_pos) > 0.01:
                     masks[box][t] = 1
         return masks
 
@@ -137,7 +137,6 @@ class PandaPushColourNarrator:
             movement_str += "and I will open my fingers "
         elif finger_width_start > finger_width_end:
             movement_str += "and I will close my fingers "
-
         return movement_str
 
     def _narrate_ee_box_trajectory(
@@ -183,7 +182,6 @@ class PandaPushColourNarrator:
             trajectory_str += "and I will open my fingers "
         elif finger_width_start > finger_width_end:
             trajectory_str += "and I will close my fingers "
-
         return trajectory_str
 
     def narrate(self, observations: List[Dict[str, np.ndarray]]) -> str:
@@ -198,10 +196,6 @@ class PandaPushColourNarrator:
         Returns:j
             str:  A string containing the description.
         """
-        assert all(
-            set(obs.keys()) == set(self._REQUIRED_OBS_KEYS) for obs in observations
-        ), f"Observations must contain the required keys {self._REQUIRED_OBS_KEYS}."
-
         robot_positions = [obs["robot_obs"] for obs in observations]
         box_movement_masks = self._get_box_movement_masks(observations)
 
@@ -246,5 +240,4 @@ class PandaPushColourNarrator:
 
                         if narration_str[-4:] == "and ":
                             narration_str = narration_str[:-4]
-
         return narration_str
