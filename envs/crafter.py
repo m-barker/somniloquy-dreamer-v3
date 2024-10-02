@@ -41,7 +41,7 @@ class Crafter:
         return action_space
 
     def step(self, action):
-        image, reward, done, info = self._env.step(action)
+        image, reward, terminated, truncated, info = self._env.step(action)
         reward = np.float32(reward)
         log_achievements = {
             f"log_achievement_{k}": info["achievements"][k] if info else 0
@@ -50,12 +50,12 @@ class Crafter:
         obs = {
             "image": image,
             "is_first": False,
-            "is_last": done,
+            "is_last": terminated or truncated,
             "is_terminal": info["discount"] == 0,
             "log_reward": np.float32(info["reward"] if info else 0.0),
             **log_achievements,
         }
-        return obs, reward, done, info
+        return obs, reward, terminated or truncated, info
 
     def render(self):
         return self._env.render()
