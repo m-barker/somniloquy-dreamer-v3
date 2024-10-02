@@ -7,7 +7,7 @@ import pathlib
 import time
 import random
 import json
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Dict
 import numpy as np
 
 import torch
@@ -155,6 +155,7 @@ def simulate(
     episodes: int = 0,
     state: Optional[Tuple] = None,
     obs_to_ignore: Optional[List[str]] = None,
+    info_keys_to_store: Optional[List[str]] = None,
 ) -> Tuple:
     """Runs agent interaction with the environment.
 
@@ -192,6 +193,7 @@ def simulate(
         )
     """
     ignore = obs_to_ignore if obs_to_ignore else []
+    info_keys = info_keys_to_store if info_keys_to_store else []
     with Timer("Simulate Function"):
         # initialize or unpack simulation state
         if state is None:
@@ -212,8 +214,7 @@ def simulate(
                 results = [r() for r in results]
                 for index, result in zip(indices, results):
                     t = result.copy()
-                    t = {k: convert(v) for k, v in t.items() if k not in ignore}
-                    t["privileged_obs"] = result["privileged_obs"]
+                    t = {k: (v if k in ignore else convert(v)) for k, v in t.items()}
                     # action will be added to transition in add_to_cache
                     t["reward"] = 0.0
                     t["discount"] = 1.0
@@ -247,7 +248,7 @@ def simulate(
             # add to cache
             for a, result, env in zip(action, results, envs):
                 o, r, d, info = result
-                o = {k: convert(v) for k, v in o.items() if k not in ignore}
+                o = {k: (v if k in ignore else convert(v)) for k, v in o.items()}
                 transition = o.copy()
                 if isinstance(a, dict):
                     transition.update(a)
@@ -255,8 +256,11 @@ def simulate(
                     transition["action"] = a
                 transition["reward"] = r
                 transition["discount"] = info.get("discount", np.array(1 - float(d)))
-                transition["privileged_obs"] = result[0]["privileged_obs"]
-                add_to_cache(cache, env.id, transition)
+
+                for key in info_keys:
+                    transition[key] = info.get(key, 0)
+
+                add_to_cache(cache, env.id, transition, no_convert=info_keys)
 
             if done.any():
                 indices = [index for index, d in enumerate(done) if d]
@@ -310,7 +314,9 @@ def simulate(
     return (step - steps, episode - episodes, done, length, obs, agent_state, reward)
 
 
-def add_to_cache(cache: dict, id: str, transition: dict) -> None:
+def add_to_cache(
+    cache: dict, id: str, transition: dict, no_convert: Optional[List[str]] = None
+) -> None:
     """Adds a transition to the cache, in the episode
     specified by a given ID.
 
@@ -322,26 +328,27 @@ def add_to_cache(cache: dict, id: str, transition: dict) -> None:
         containing the keys 'action', 'reward', 'discount', "image", etc.
 
     """
+    no_convert_keys = no_convert if no_convert else []
     # Cache contains current image, current reward, previous action
     if id not in cache:
         cache[id] = dict()
         for key, val in transition.items():
-            if key == "ray":
-                continue
-            if type(val) == dict:
+            if key in no_convert_keys:
                 cache[id][key] = [val]
             else:
                 cache[id][key] = [convert(val)]
     else:
         for key, val in transition.items():
             if key not in cache[id]:
-                if key == "ray":
-                    continue
                 # fill missing data(action, etc.) at second time
-                cache[id][key] = [convert(0 * val)]
-                cache[id][key].append(convert(val))
+                if key in no_convert_keys:
+                    cache[id][key] = [0 * val]
+                    cache[id][key].append(val)
+                else:
+                    cache[id][key] = [convert(0 * val)]
+                    cache[id][key].append(convert(val))
             else:
-                if type(val) == dict:
+                if key in no_convert_keys:
                     cache[id][key].append(val)
                 else:
                     cache[id][key].append(convert(val))
@@ -1165,7 +1172,7 @@ def word_tokenise_text(
 
 def generate_batch_narrations(
     narrator,
-    observations: Union[np.ndarray, torch.Tensor],
+    observations: Union[np.ndarray, torch.Tensor, Dict],
     obs_per_narration: int,
     max_narration_length: int,
     vocab: dict,
@@ -1190,7 +1197,8 @@ def generate_batch_narrations(
     """
 
     narration_batches: List[np.ndarray] = []
-    is_first = is_first.detach().cpu().numpy()
+    if type(is_first) == torch.Tensor:
+        is_first = is_first.detach().cpu().numpy()
     for idx, batch in enumerate(observations):
         narrations: List[str] = []
         is_first_batch = is_first[idx]

@@ -116,8 +116,9 @@ class CrafterNarrator:
                 inventory_history[-1][crafting_item]  # type: ignore
                 - starting_counts[crafting_item]  # type: ignore
             )
+            crafting_str = crafting_item.replace("_", " ")
             if crafted_count > 0:
-                crafting_str += f"I will craft {crafted_count} {crafting_item}."
+                crafting_str += f"I will craft {crafted_count} {crafting_str}."
 
         if crafting_str == "":
             crafting_str = "I will not craft anything."
@@ -333,7 +334,7 @@ class CrafterNarrator:
         return achievement_str
 
     def narrate(
-        self, observations: List[Dict[str, Union[np.ndarray, Dict[str, int]]]]
+        self, observations: Dict[str, List[Union[np.ndarray, Dict[str, int]]]]
     ) -> str:
         """Converts a sequence of player observations into a string describing
         what has happened in the sequence.
@@ -349,9 +350,9 @@ class CrafterNarrator:
             str: Textual description of the player's observations
         """
 
-        occupancy_observations = [obs["semantic"] for obs in observations]
-        player_inventory_obs = [obs["inventory"] for obs in observations]
-        achievement_obs = [obs["achievements"] for obs in observations]
+        occupancy_observations = observations["semantic"]
+        player_inventory_obs = observations["inventory"]
+        achievement_obs = observations["achievements"]
 
         narration_str = ""
         narration_str += self._get_seen_objects(occupancy_observations) + " "  # type: ignore

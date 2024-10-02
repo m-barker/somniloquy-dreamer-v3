@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Optional, Dict, Union
 import copy
 from copy import deepcopy
 import numpy as np
@@ -211,9 +211,9 @@ class WorldModel(nn.Module):
 
     def _get_language_prediction(
         self,
-        data: dict[str, np.ndarray],
-        post: dict[str, torch.Tensor],
-        narration_data: np.ndarray,
+        data: Dict[str, np.ndarray],
+        post: Dict[str, torch.Tensor],
+        narration_data: Union[np.ndarray, Dict],
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         """Generates the language model predictions and ground truth narrations
 
@@ -487,8 +487,17 @@ class WorldModel(nn.Module):
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
         if self._config.enable_language:
-            narration_data = deepcopy(data[self._config.narrator["narration_key"]])
-        data = self.preprocess(data)
+            narration_keys = self._config.narrator["narration_key"]
+            if type(narration_keys) is list:
+                narration_data = {k: deepcopy(data[k]) for k in narration_keys}
+            else:
+                narration_data = deepcopy(data[narration_keys])
+        data = self.preprocess(
+            data,
+            keys_to_ignore=(
+                [narration_keys] if type(narration_keys) is str else narration_keys
+            ),
+        )
         with tools.RequiresGrad(self):
             with torch.cuda.amp.autocast(self._use_amp):
                 embed = self.encoder(data)
@@ -662,7 +671,8 @@ class WorldModel(nn.Module):
         return post, context, metrics
 
     # this function is called during both rollout and training
-    def preprocess(self, obs):
+    def preprocess(self, obs, keys_to_ignore: Optional[List[str]] = None):
+        ignore = keys_to_ignore or []
         obs = obs.copy()
         obs["image"] = torch.Tensor(obs["image"]) / 255.0
         if "discount" in obs:
@@ -677,7 +687,7 @@ class WorldModel(nn.Module):
         obs = {
             k: torch.Tensor(v).to(self._config.device)
             for k, v in obs.items()
-            if k not in ["rays", "privileged_obs"]
+            if k not in ignore
         }
         return obs
 

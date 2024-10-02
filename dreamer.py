@@ -26,6 +26,7 @@ from torch import distributions as torchd
 # from evaluate_narration_model import plot_trajectory_graph
 from narration.mineclip_narrator import MineCLIPNarrator
 from narration.panda_narrator import PandaPushColourNarrator
+from narration.crafter_narrator import CrafterNarrator
 from narration.minigrd_narrator import (
     MiniGridFourSquareNarrator,
     MiniGridTeleportNarrator,
@@ -184,6 +185,8 @@ def configure_narrator(config):
 
     elif "panda" in config.task:
         narrator = PandaPushColourNarrator()
+    elif "crafter" in config.task:
+        narrator = CrafterNarrator()
 
     return narrator
 
@@ -259,7 +262,6 @@ def make_env(config, mode, id):
         print(f"ACTION SPACE: {env.action_space}")
     elif suite == "panda":
         import envs.panda_env as panda_env
-        from gymnasium.wrappers import PixelObservationWrapper
 
         env = panda_env.PandaEnv(task, img_size=config.size, seed=config.seed + id)
     else:
