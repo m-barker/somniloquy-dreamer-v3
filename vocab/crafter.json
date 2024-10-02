@@ -31,7 +31,7 @@
     "plants": 29,
     "place": 30,
     "tables": 31,
-    "furnances": 32,
+    "furnaces": 32,
     "stones": 33,
     "be": 34,
     "attacked": 35,
@@ -88,5 +88,12 @@
     "path": 86,
     "sand": 87,
     "tree": 88,
-    "lava": 89
+    "lava": 89,
+    "cow": 90,
+    "plant": 91,
+    "skeleton": 92,
+    "water": 93,
+    "my": 94,
+    "table": 95,
+    "furnace": 96
 }

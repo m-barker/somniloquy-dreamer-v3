@@ -90,9 +90,15 @@ class Dreamer(nn.Module):
                     self._metrics[name] = []
                 # plot_trajectory_graph(self, step=self._logger.step)
                 if self._config.video_pred_log:
-                    openl = self._wm.video_pred(next(self._dataset))
+                    openl = self._wm.video_pred(
+                        next(self._dataset),
+                        ignore_keys=["semantic", "inventory", "achievements"],
+                    )
                     if self._config.enable_language:
-                        self._wm.intent_prediction(next(self._dataset))
+                        self._wm.intent_prediction(
+                            next(self._dataset),
+                            ignore_keys=["semantic", "inventory", "achievements"],
+                        )
                     self._logger.video("train_openl", to_np(openl))
                     pass
                 self._logger.write(fps=True)
@@ -345,6 +351,7 @@ def prefill_dataset(
         limit=config.dataset_size,
         steps=prefill,
         obs_to_ignore=["rays", "privileged_obs"],
+        info_keys_to_store=["semantic", "inventory", "achievements"],
     )
     logger.step += prefill * config.action_repeat
     print(f"Logger: ({logger.step} steps).")
@@ -454,12 +461,25 @@ def main(config):
                 logger,
                 is_eval=True,
                 episodes=config.eval_episode_num,
-                obs_to_ignore=["rays", "privileged_obs"],
+                obs_to_ignore=[
+                    "rays",
+                    "privileged_obs",
+                    "semantic",
+                    "inventory",
+                    "achievements",
+                ],
+                info_keys_to_store=["semantic", "inventory", "achievements"],
             )
             if config.video_pred_log:
-                video_pred = agent._wm.video_pred(next(eval_dataset))
+                video_pred = agent._wm.video_pred(
+                    next(eval_dataset),
+                    ignore_keys=["semantic", "inventory", "achievements"],
+                )
                 if config.enable_language:
-                    agent._wm.intent_prediction(next(eval_dataset))
+                    agent._wm.intent_prediction(
+                        next(eval_dataset),
+                        ignore_keys=["semantic", "inventory", "achievements"],
+                    )
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
         state = tools.simulate(
@@ -471,7 +491,14 @@ def main(config):
             limit=config.dataset_size,
             steps=config.eval_every,
             state=state,
-            obs_to_ignore=["rays", "privileged_obs"],
+            obs_to_ignore=[
+                "rays",
+                "privileged_obs",
+                "semantic",
+                "inventory",
+                "achievements",
+            ],
+            info_keys_to_store=["semantic", "inventory", "achievements"],
         )
         items_to_save = {
             "agent_state_dict": agent.state_dict(),

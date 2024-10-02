@@ -219,7 +219,9 @@ def simulate(
                     t["reward"] = 0.0
                     t["discount"] = 1.0
                     # initial state should be added to cache
-                    add_to_cache(cache, envs[index].id, t)
+
+                    add_to_cache(cache, envs[index].id, t, no_convert=info_keys)
+
                     # replace obs with done by initial state
                     obs[index] = result
             # step agents
@@ -342,8 +344,12 @@ def add_to_cache(
             if key not in cache[id]:
                 # fill missing data(action, etc.) at second time
                 if key in no_convert_keys:
-                    cache[id][key] = [0 * val]
-                    cache[id][key].append(val)
+                    if type(val) == Dict:
+                        cache[id][key] = [0]
+                        cache[id][key].append(val)
+                    else:
+                        cache[id][key] = [val]
+                        cache[id][key].append(val)
                 else:
                     cache[id][key] = [convert(0 * val)]
                     cache[id][key].append(convert(val))
@@ -352,6 +358,13 @@ def add_to_cache(
                     cache[id][key].append(val)
                 else:
                     cache[id][key].append(convert(val))
+
+        required_keys = ["semantic", "achievements", "inventory"]
+        if not all(key in cache[id] for key in required_keys):
+            print(f"Transition keys: {transition.keys()}")
+            raise ValueError(
+                f"Missing keys in cache: {required_keys}, cache has keys: {cache[id].keys()}"
+            )
 
 
 def erase_over_episodes(cache: dict, dataset_size: int) -> int:
@@ -388,6 +401,7 @@ def convert(value, precision=32):
     elif np.issubdtype(value.dtype, bool):
         dtype = bool
     else:
+        print(value)
         raise NotImplementedError(value.dtype)
     return value.astype(dtype)
 
@@ -427,10 +441,8 @@ def from_generator(generator, batch_size):
             data[key] = []
             for i in range(batch_size):
                 data[key].append(batch[i][key])
-            try:
-                data[key] = np.stack(data[key], 0)
-            except ValueError:
-                pass
+
+            data[key] = np.stack(data[key], 0)
         yield data
 
 
@@ -487,7 +499,7 @@ def load_episodes(directory, limit=None, reverse=True):
         for filename in reversed(sorted(directory.glob("*.npz"))):
             try:
                 with filename.open("rb") as f:
-                    episode = np.load(f)
+                    episode = np.load(f, allow_pickle=True)
                     episode = {k: episode[k] for k in episode.keys()}
 
             except Exception as e:
@@ -502,7 +514,7 @@ def load_episodes(directory, limit=None, reverse=True):
         for filename in sorted(directory.glob("*.npz")):
             try:
                 with filename.open("rb") as f:
-                    episode = np.load(f)
+                    episode = np.load(f, allow_pickle=True)
                     episode = {k: episode[k] for k in episode.keys()}
             except Exception as e:
                 print(f"Could not load episode: {e}")
@@ -1150,7 +1162,7 @@ def word_tokenise_text(
     """
     tokenised_text = []
     for sentence in text:
-        sentence = sentence.replace(",", "").replace(".", "")
+        sentence = sentence.replace(",", "").replace(".", "").replace("'", "")
         sentence = sentence.lower()
         tokenised_sentence: list[int] = [vocab[word] for word in sentence.split()]
         if tokenised_sentence[0] != vocab["<BOS>"]:
@@ -1199,33 +1211,75 @@ def generate_batch_narrations(
     narration_batches: List[np.ndarray] = []
     if type(is_first) == torch.Tensor:
         is_first = is_first.detach().cpu().numpy()
-    for idx, batch in enumerate(observations):
-        narrations: List[str] = []
-        is_first_batch = is_first[idx]
-        assert is_first_batch[0] == 1
-        is_first_indices = np.where(is_first_batch == 1)[0]
-        current_index = 0
-        current_is_first_index = 1
-        while current_index < len(batch):
-            if len(is_first_indices) > current_is_first_index:
-                # Determine the next index to use
-                end_index = min(
-                    current_index + obs_per_narration,
-                    len(batch),
-                    is_first_indices[current_is_first_index],
-                )
-                narration = narrator.narrate(batch[current_index:end_index])
-                narrations.append(narration)
-                current_index = end_index
-                if current_index == is_first_indices[current_is_first_index]:
-                    current_is_first_index += 1
-            else:
-                end_index = min(current_index + obs_per_narration, len(batch))
-                narration = narrator.narrate(batch[current_index:end_index])
-                narrations.append(narration)
-                current_index = end_index
-        batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
-        narration_batches.append(batch_arr)
+    if isinstance(observations, dict):
+        for batch_idx in range(list(observations.values())[0].shape[0]):
+            batch = {key: value[batch_idx] for key, value in observations.items()}
+            batch_length = list(batch.values())[0].shape[0]
+            narrations: List[str] = []
+            is_first_batch = is_first[batch_idx]
+            assert is_first_batch[0] == 1
+            is_first_indices = np.where(is_first_batch == 1)[0]
+            current_index = 0
+            current_is_first_index = 1
+            while current_index < batch_length:
+                if len(is_first_indices) > current_is_first_index:
+                    # Determine the next index to use
+                    end_index = min(
+                        current_index + obs_per_narration,
+                        batch_length,
+                        is_first_indices[current_is_first_index],
+                    )
+                    narration = narrator.narrate(
+                        {
+                            key: value[current_index:end_index]
+                            for key, value in batch.items()
+                        }
+                    )
+                    narrations.append(narration)
+                    current_index = end_index
+                    if current_index == is_first_indices[current_is_first_index]:
+                        current_is_first_index += 1
+                else:
+                    end_index = min(current_index + obs_per_narration, batch_length)
+                    narration = narrator.narrate(
+                        {
+                            key: value[current_index:end_index]
+                            for key, value in batch.items()
+                        }
+                    )
+                    narrations.append(narration)
+                    current_index = end_index
+            batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
+            narration_batches.append(batch_arr)
+
+    else:
+        for idx, batch in enumerate(observations):
+            narrations: List[str] = []
+            is_first_batch = is_first[idx]
+            assert is_first_batch[0] == 1
+            is_first_indices = np.where(is_first_batch == 1)[0]
+            current_index = 0
+            current_is_first_index = 1
+            while current_index < len(batch):
+                if len(is_first_indices) > current_is_first_index:
+                    # Determine the next index to use
+                    end_index = min(
+                        current_index + obs_per_narration,
+                        len(batch),
+                        is_first_indices[current_is_first_index],
+                    )
+                    narration = narrator.narrate(batch[current_index:end_index])
+                    narrations.append(narration)
+                    current_index = end_index
+                    if current_index == is_first_indices[current_is_first_index]:
+                        current_is_first_index += 1
+                else:
+                    end_index = min(current_index + obs_per_narration, len(batch))
+                    narration = narrator.narrate(batch[current_index:end_index])
+                    narrations.append(narration)
+                    current_index = end_index
+            batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
+            narration_batches.append(batch_arr)
 
     narration_arr = np.concatenate(narration_batches, axis=0)
     narrations_tens = torch.tensor(narration_arr, dtype=torch.long).to(device)

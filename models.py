@@ -691,8 +691,8 @@ class WorldModel(nn.Module):
         }
         return obs
 
-    def video_pred(self, data):
-        data = self.preprocess(data)
+    def video_pred(self, data, ignore_keys: Optional[List[str]] = None):
+        data = self.preprocess(data, ignore_keys)
         embed = self.encoder(data)
         states, _ = self.dynamics.observe(
             embed[:6, :5], data["action"][:6, :5], data["is_first"][:6, :5]
@@ -713,12 +713,20 @@ class WorldModel(nn.Module):
 
         return torch.cat([truth, model, error], 2)
 
-    def intent_prediction(self, data):
-        narration_data = data[self._config.narrator["narration_key"]]
-        data = self.preprocess(data)
+    def intent_prediction(self, data, ignore_keys: Optional[List[str]] = None):
+        if type(self._config.narrator["narration_key"]) is list:
+            narration_data = {
+                k: data[k] for k in self._config.narrator["narration_key"]
+            }
+        else:
+            narration_data = data[self._config.narrator["narration_key"]]
+        data = self.preprocess(data, ignore_keys)
         embed = self.encoder(data)
         embed = embed[0, :16].unsqueeze(0)
-        narration_data_list = [narration_data[0][i] for i in range(16)]
+        if type(self._config.narrator["narration_key"]) is list:
+            narration_data_list = {k: v[0, :16] for k, v in narration_data.items()}
+        else:
+            narration_data_list = [narration_data[0][i] for i in range(16)]
         ground_truth_intent = self.narrator.narrate(narration_data_list)
         states, _ = self.dynamics.observe(
             embed,

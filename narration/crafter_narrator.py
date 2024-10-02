@@ -116,9 +116,9 @@ class CrafterNarrator:
                 inventory_history[-1][crafting_item]  # type: ignore
                 - starting_counts[crafting_item]  # type: ignore
             )
-            crafting_str = crafting_item.replace("_", " ")
+            crafting_item_str = crafting_item.replace("_", " ")
             if crafted_count > 0:
-                crafting_str += f"I will craft {crafted_count} {crafting_str}."
+                crafting_str += f"I will craft {crafted_count} {crafting_item_str}."
 
         if crafting_str == "":
             crafting_str = "I will not craft anything."

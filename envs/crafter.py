@@ -47,6 +47,17 @@ class Crafter:
             f"log_achievement_{k}": info["achievements"][k] if info else 0
             for k in self._achievements
         }
+
+        # Want to focus the occupancy grid to only be what the agent actually
+        # sees
+        occupancy_grid = info["semantic"]
+        player_x, player_y = np.where(occupancy_grid == 13)
+        player_x, player_y = player_x[0], player_y[0]
+        local_grid = occupancy_grid[
+            player_x - 4 : player_x + 5, player_y - 3 : player_y + 4
+        ].T
+        info["semantic"] = local_grid
+
         obs = {
             "image": image,
             "is_first": False,
@@ -61,7 +72,7 @@ class Crafter:
         return self._env.render()
 
     def reset(self):
-        image = self._env.reset()
+        image, _ = self._env.reset()
         obs = {
             "image": image,
             "is_first": True,
