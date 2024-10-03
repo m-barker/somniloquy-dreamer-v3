@@ -409,6 +409,10 @@ def setup(config: argparse.Namespace) -> Tuple[argparse.Namespace, pathlib.Path]
 
 
 def main(config):
+    import wandb
+
+    # Start a wandb run with `sync_tensorboard=True`
+    wandb.init(project="crafer-with-lang", sync_tensorboard=True)
     config, logdir = setup(config)
     step = count_steps(config.traindir)
     # step in logger is environmental step

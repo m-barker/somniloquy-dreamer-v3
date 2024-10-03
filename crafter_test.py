@@ -396,4 +396,4 @@ while not done:
     if step_count % narrate_every == 0 or done:
         print(narrator.narrate(obs_hist))
         obs_hist = []
-        # input("Press Enter to continue...")  # Pause between narration sequences
+        input("Press Enter to continue...")  # Pause between narration sequences

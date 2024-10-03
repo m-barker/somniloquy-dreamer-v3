@@ -172,28 +172,30 @@ crafter:
   envs: 1
   train_ratio: 512
   video_pred_log: true
-  # dyn_hidden: 1024
-  # dyn_deter: 4096
-  # units: 1024
+  dyn_hidden: 1024
+  dyn_deter: 4096
+  units: 1024
   log_every: 500
   enable_language: true
   enc_max_length: 16
-  dec_max_length: 100
+  dec_max_length: 150
   vocab_path: vocab/crafter.json
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
-  encoder: {
+  encoder:
+    {
       mlp_keys: "$^",
       cnn_keys: "image",
-      # cnn_depth: 96,
-      # mlp_layers: 5,
-      # mlp_units: 1024,
+      cnn_depth: 96,
+      mlp_layers: 5,
+      mlp_units: 1024,
     }
-  decoder: {
+  decoder:
+    {
       mlp_keys: "$^",
       cnn_keys: "image",
-      # cnn_depth: 96,
-      # mlp_layers: 5,
-      # mlp_units: 1024,
+      cnn_depth: 96,
+      mlp_layers: 5,
+      mlp_units: 1024,
     }
   actor: { layers: 5, dist: "onehot", std: "none" }
   value: { layers: 5 }
