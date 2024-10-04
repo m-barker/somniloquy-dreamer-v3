@@ -118,10 +118,10 @@ class CrafterNarrator:
             )
             crafting_item_str = crafting_item.replace("_", " ")
             if crafted_count > 0:
-                crafting_str += f"I will craft {crafted_count} {crafting_item_str}."
+                crafting_str += f"I will craft {crafted_count} {crafting_item_str}. "
 
         if crafting_str == "":
-            crafting_str = "I will not craft anything."
+            crafting_str = "I will not craft anything. "
 
         return crafting_str
 
