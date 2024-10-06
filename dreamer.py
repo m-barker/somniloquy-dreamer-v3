@@ -92,12 +92,22 @@ class Dreamer(nn.Module):
                 if self._config.video_pred_log:
                     openl = self._wm.video_pred(
                         next(self._dataset),
-                        ignore_keys=["semantic", "inventory", "achievements"],
+                        ignore_keys=[
+                            "semantic",
+                            "inventory",
+                            "achievements",
+                            "privileged_obs",
+                        ],
                     )
                     if self._config.enable_language:
                         self._wm.intent_prediction(
                             next(self._dataset),
-                            ignore_keys=["semantic", "inventory", "achievements"],
+                            ignore_keys=[
+                                "semantic",
+                                "inventory",
+                                "achievements",
+                                "privileged_obs",
+                            ],
                         )
                     self._logger.video("train_openl", to_np(openl))
                     pass

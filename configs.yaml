@@ -352,34 +352,34 @@ panda_push:
   enable_language: true
   time_limit: 1024
   log_every: 1000
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
+  # dyn_hidden: 1024
+  # dyn_deter: 4096
+  # units: 1024
   task: "panda_push_colour"
   vocab_path: vocab/panda_push_colour.json
   narrator: { narration_key: "privileged_obs" }
-  encoder:
-    {
-      mlp_keys: "$^",
-      cnn_keys: "image",
-      cnn_depth: 96,
-      mlp_layers: 5,
-      mlp_units: 1024,
-    }
-  decoder:
-    {
-      mlp_keys: "$^",
-      cnn_keys: "image",
-      cnn_depth: 96,
-      mlp_layers: 5,
-      mlp_units: 1024,
-    }
+  # encoder:
+  #   {
+  #     mlp_keys: "$^",
+  #     cnn_keys: "image",
+  #     cnn_depth: 96,
+  #     mlp_layers: 5,
+  #     mlp_units: 1024,
+  #   }
+  # decoder:
+  #   {
+  #     mlp_keys: "$^",
+  #     cnn_keys: "image",
+  #     cnn_depth: 96,
+  #     mlp_layers: 5,
+  #     mlp_units: 1024,
+  #   }
   dec_max_length: 100
   enc_max_length: 16
-  actor: { layers: 5 }
-  value: { layers: 5 }
-  reward_head: { layers: 5 }
-  cont_head: { layers: 5 }
+  # actor: { layers: 5 }
+  # value: { layers: 5 }
+  # reward_head: { layers: 5 }
+  # cont_head: { layers: 5 }
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/panda-push-colour-with-lang/dreamer-agent-step-102500.pt"
 
 debug:
