@@ -308,7 +308,6 @@ class WorldModel(nn.Module):
         # Shapes (batch, seq_len, dim)
         feat = torch.stack(latent_sequences)
         padding_masks = torch.stack(padding_masks)
-
         pred = self.heads["language"].forward(
             feat,
             narrations[:, :-1],

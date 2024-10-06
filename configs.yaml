@@ -268,7 +268,7 @@ minigrid:
   steps: 4e5
   envs: 1
   action_repeat: 1
-  eval_episode_num: 10
+  eval_episode_num: 1
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
@@ -291,7 +291,7 @@ minigrid:
   # dyn_discrete: 16
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-grid-longer-train/dreamer-agent-step-19500.pt"
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-57000.pt"
-  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-four-squares/dreamer-agent-step-42256.pt"
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-four-squares/dreamer-agent-step-42256.pt"
 
 minedojo:
   steps: 1e8

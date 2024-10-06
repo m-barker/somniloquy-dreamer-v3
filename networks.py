@@ -866,6 +866,8 @@ class TransformerEncoderDecoder(nn.Module):
         activation: str = "relu",
         target_vocab_size: int = 22,
         max_seq_length: int = 25,
+        embedding_layer: bool = True,
+        embed_size: int = 128,
     ) -> None:
         """Transformer encoder-decoder model used for translation.
 
@@ -880,9 +882,16 @@ class TransformerEncoderDecoder(nn.Module):
                                         Defaults to "relu".
             target_vocab_size (int, optional): number of tokens in the target vocabulary. Defaults to 100.
             max_seq_length (int, optional): maximum sequence length in inpu/output. Defaults to 100.
-            device (torch.device, optional): cpu or GPU. Defaults to torch.
+            embedding_layer (bool, optional): whether to use an embedding layer to embed the src input
+            to a vector space. Defaults to True.
+            embed_size (int, optional): size of the embedding layer. Defaults to 128.
+
         """
         super(TransformerEncoderDecoder, self).__init__()
+        self._initial_embed = None
+        if embedding_layer:
+            self._initial_embed = nn.Linear(d_model, embed_size)
+            d_model = embed_size
         self.transformer = nn.Transformer(
             d_model=d_model,
             nhead=n_head,
@@ -906,7 +915,6 @@ class TransformerEncoderDecoder(nn.Module):
         generate_mask: bool = False,
         src_mask: Optional[torch.Tensor] = None,
         tokens_to_append: Optional[torch.Tensor] = None,
-        embed_src: bool = False,
         embed_tgt: bool = True,
         generate_src_mask: bool = False,
     ) -> torch.Tensor:
@@ -920,6 +928,9 @@ class TransformerEncoderDecoder(nn.Module):
         Returns:
             torch.Tensor: _description_
         """
+        if self._initial_embed is not None:
+            src = self._initial_embed(src)
+
         tgt_pad_mask = None
         src_pad_mask = None
 
@@ -931,13 +942,12 @@ class TransformerEncoderDecoder(nn.Module):
 
         if src_pad_mask is None and generate_src_mask:
             src_pad_mask = src == 0
-        # print(f"Source shape: {src.shape}")
-        # print(f"Target shape: {tgt.shape}")
+        print(f"Source shape: {src.shape}")
+        print(f"Target shape: {tgt.shape}")
         # print(src)
         if embed_tgt:
             tgt = self.tgt_embedding(tgt)
-        if embed_src:
-            src = self.tgt_embedding(src)
+
         src = src.permute(1, 0, 2)
         tgt = tgt.permute(1, 0, 2)
         src = self.pe(src)
@@ -973,7 +983,6 @@ class TransformerEncoderDecoder(nn.Module):
         bos_token: int = 1,
         eos_token: int = 2,
         deterministic: bool = True,
-        embed_src: bool = False,
         return_tokens: bool = False,
         prompt: Optional[torch.Tensor] = None,
     ) -> Union[str, np.ndarray]:
@@ -1000,7 +1009,6 @@ class TransformerEncoderDecoder(nn.Module):
                 input_seq,
                 translated_input,
                 generate_mask=False,
-                embed_src=embed_src,
             )
             output_probs = F.softmax(output_logits, dim=-1)
             output_probs = output_probs.squeeze(1)

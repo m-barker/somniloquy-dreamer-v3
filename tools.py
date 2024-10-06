@@ -1307,16 +1307,15 @@ def narration_loss(
     Returns:
         torch.Tensor: The cross entropy loss between the predicted and true tokens.
     """
-    # Reshape to (batch_size, seq_len, target_vocab_size)
+    T, N, V = predicted_tokens.shape
+
+    # (seq, batch, vocab) -> (batch, seq, vocab)
     predicted_tokens = predicted_tokens.permute(1, 0, 2)
 
     # reshape to (batch_size * seq_len, target_vocab_size)
-    predicted_tokens = predicted_tokens.reshape(-1, predicted_tokens.shape[-1])
+    predicted_tokens = predicted_tokens.reshape(-1, V)
+
     # reshape to (batch_size * seq_len)
     true_tokens = true_tokens.reshape(-1)
 
-    argmax_tokens = torch.argmax(predicted_tokens, dim=-1)
-    # print(f"Predicted Tokens: {argmax_tokens}")
-    # print(f"True Tokens: {true_tokens}")
-
-    return nn.CrossEntropyLoss(ignore_index=pad_idx)(predicted_tokens, true_tokens)
+    return nn.CrossEntropyLoss(ignore_index=pad_idx, label_smoothing=0.1)(predicted_tokens, true_tokens)
