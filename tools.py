@@ -154,7 +154,8 @@ def simulate(
     steps: int = 0,
     episodes: int = 0,
     state: Optional[Tuple] = None,
-    obs_to_ignore: Optional[List[str]] = None,
+    no_convert_obs: Optional[List[str]] = None,
+    no_save_obs: Optional[List[str]] = None,
     info_keys_to_store: Optional[List[str]] = None,
 ) -> Tuple:
     """Runs agent interaction with the environment.
@@ -192,7 +193,8 @@ def simulate(
             Reward from simulation
         )
     """
-    ignore = obs_to_ignore if obs_to_ignore else []
+    ignore = no_save_obs if no_save_obs else []
+    no_convert = no_convert_obs if no_convert_obs else []
     info_keys = info_keys_to_store if info_keys_to_store else []
     with Timer("Simulate Function"):
         # initialize or unpack simulation state
@@ -214,13 +216,17 @@ def simulate(
                 results = [r() for r in results]
                 for index, result in zip(indices, results):
                     t = result.copy()
-                    t = {k: (v if k in ignore else convert(v)) for k, v in t.items()}
+                    t = {
+                        k: (v if k in no_convert else convert(v))
+                        for k, v in t.items()
+                        if k not in ignore
+                    }
                     # action will be added to transition in add_to_cache
                     t["reward"] = 0.0
                     t["discount"] = 1.0
                     # initial state should be added to cache
 
-                    add_to_cache(cache, envs[index].id, t, no_convert=info_keys)
+                    add_to_cache(cache, envs[index].id, t, no_convert=no_convert)
 
                     # replace obs with done by initial state
                     obs[index] = result
@@ -250,7 +256,11 @@ def simulate(
             # add to cache
             for a, result, env in zip(action, results, envs):
                 o, r, d, info = result
-                o = {k: (v if k in ignore else convert(v)) for k, v in o.items()}
+                o = {
+                    k: (v if k in no_convert else convert(v))
+                    for k, v in o.items()
+                    if k not in ignore
+                }
                 transition = o.copy()
                 if isinstance(a, dict):
                     transition.update(a)
@@ -260,9 +270,10 @@ def simulate(
                 transition["discount"] = info.get("discount", np.array(1 - float(d)))
 
                 for key in info_keys:
-                    transition[key] = info.get(key, 0)
+                    if key in info:
+                        transition[key] = info[key]
 
-                add_to_cache(cache, env.id, transition, no_convert=info_keys)
+                add_to_cache(cache, env.id, transition, no_convert=no_convert)
 
             if done.any():
                 indices = [index for index, d in enumerate(done) if d]
@@ -358,13 +369,6 @@ def add_to_cache(
                     cache[id][key].append(val)
                 else:
                     cache[id][key].append(convert(val))
-
-        required_keys = ["semantic", "achievements", "inventory"]
-        if not all(key in cache[id] for key in required_keys):
-            print(f"Transition keys: {transition.keys()}")
-            raise ValueError(
-                f"Missing keys in cache: {required_keys}, cache has keys: {cache[id].keys()}"
-            )
 
 
 def erase_over_episodes(cache: dict, dataset_size: int) -> int:

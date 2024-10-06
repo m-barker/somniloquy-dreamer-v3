@@ -350,7 +350,8 @@ def prefill_dataset(
         logger,
         limit=config.dataset_size,
         steps=prefill,
-        obs_to_ignore=["rays", "privileged_obs"],
+        no_convert_obs=["semantic", "inventory", "achievements", "privileged_obs"],
+        no_save_obs=["rays"],
         info_keys_to_store=["semantic", "inventory", "achievements"],
     )
     logger.step += prefill * config.action_repeat
@@ -465,13 +466,13 @@ def main(config):
                 logger,
                 is_eval=True,
                 episodes=config.eval_episode_num,
-                obs_to_ignore=[
-                    "rays",
-                    "privileged_obs",
+                no_convert_obs=[
                     "semantic",
                     "inventory",
                     "achievements",
+                    "privileged_obs",
                 ],
+                no_save_obs=["rays"],
                 info_keys_to_store=["semantic", "inventory", "achievements"],
             )
             if config.video_pred_log:
@@ -495,13 +496,8 @@ def main(config):
             limit=config.dataset_size,
             steps=config.eval_every,
             state=state,
-            obs_to_ignore=[
-                "rays",
-                "privileged_obs",
-                "semantic",
-                "inventory",
-                "achievements",
-            ],
+            no_convert_obs=["semantic", "inventory", "achievements", "privileged_obs"],
+            no_save_obs=["rays"],
             info_keys_to_store=["semantic", "inventory", "achievements"],
         )
         items_to_save = {
