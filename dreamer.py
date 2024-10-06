@@ -508,7 +508,7 @@ def main(config):
             "agent_state_dict": agent.state_dict(),
             "optims_state_dict": tools.recursively_collect_optim_state_dict(agent),
         }
-        torch.save(items_to_save, logdir / f"dreamer-agent-step-{agent._step}.pt")
+        torch.save(items_to_save, logdir / f"latest.pt")
     for env in train_envs + eval_envs:
         try:
             env.close()
