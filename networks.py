@@ -942,8 +942,8 @@ class TransformerEncoderDecoder(nn.Module):
 
         if src_pad_mask is None and generate_src_mask:
             src_pad_mask = src == 0
-        print(f"Source shape: {src.shape}")
-        print(f"Target shape: {tgt.shape}")
+        # print(f"Source shape: {src.shape}")
+        # print(f"Target shape: {tgt.shape}")
         # print(src)
         if embed_tgt:
             tgt = self.tgt_embedding(tgt)
