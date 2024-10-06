@@ -125,7 +125,7 @@ class Dreamer(nn.Module):
             latent = action = None
         else:
             latent, action = state
-        obs = self._wm.preprocess(obs)
+        obs = self._wm.preprocess(obs, keys_to_ignore=["privileged_obs"])
         embed = self._wm.encoder(obs)
         latent, _ = self._wm.dynamics.obs_step(latent, action, embed, obs["is_first"])
         if self._config.eval_state_mean:
