@@ -351,7 +351,7 @@ def prefill_dataset(
         limit=config.dataset_size,
         steps=prefill,
         no_convert_obs=["semantic", "inventory", "achievements", "privileged_obs"],
-        no_save_obs=["rays"],
+        no_save_obs=["rays"],  #
         info_keys_to_store=["semantic", "inventory", "achievements"],
     )
     logger.step += prefill * config.action_repeat
@@ -478,12 +478,22 @@ def main(config):
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(
                     next(eval_dataset),
-                    ignore_keys=["semantic", "inventory", "achievements"],
+                    ignore_keys=[
+                        "semantic",
+                        "inventory",
+                        "achievements",
+                        "privileged_obs",
+                    ],
                 )
                 if config.enable_language:
                     agent._wm.intent_prediction(
                         next(eval_dataset),
-                        ignore_keys=["semantic", "inventory", "achievements"],
+                        ignore_keys=[
+                            "semantic",
+                            "inventory",
+                            "achievements",
+                            "privileged_obs",
+                        ],
                     )
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
