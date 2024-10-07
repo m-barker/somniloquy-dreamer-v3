@@ -868,6 +868,9 @@ class TransformerEncoderDecoder(nn.Module):
         max_seq_length: int = 25,
         embedding_layer: bool = True,
         embed_size: int = 128,
+        bos_token: int = 1,
+        eos_token: int = 2,
+        padding_token: int = 0,
     ) -> None:
         """Transformer encoder-decoder model used for translation.
 
@@ -885,6 +888,9 @@ class TransformerEncoderDecoder(nn.Module):
             embedding_layer (bool, optional): whether to use an embedding layer to embed the src input
             to a vector space. Defaults to True.
             embed_size (int, optional): size of the embedding layer. Defaults to 128.
+            bos_token (int, optional): beginning of sentence token. Defaults to 1.
+            eos_token (int, optional): end of sentence token. Defaults to 2.
+            padding_token (int, optional): padding token. Defaults to 0.
 
         """
         super(TransformerEncoderDecoder, self).__init__()
@@ -903,6 +909,9 @@ class TransformerEncoderDecoder(nn.Module):
         )
         self._target_vocab_size = target_vocab_size
         self._max_seq_length = max_seq_length
+        self._bos_token = bos_token
+        self._eos_token = eos_token
+        self._padding_token = padding_token
         self.final_layer = nn.Linear(d_model, target_vocab_size)
         self.pe = PositionalEncoding(d_model, dropout)
         self.tgt_embedding = TokenEmbedding(target_vocab_size, d_model)
@@ -935,13 +944,13 @@ class TransformerEncoderDecoder(nn.Module):
         src_pad_mask = None
 
         if generate_mask:
-            tgt_pad_mask = tgt == 0
+            tgt_pad_mask = tgt == self._padding_token
 
         if src_mask is not None:
             src_pad_mask = src_mask
 
         if src_pad_mask is None and generate_src_mask:
-            src_pad_mask = src == 0
+            src_pad_mask = src == self._padding_token
         # print(f"Source shape: {src.shape}")
         # print(f"Target shape: {tgt.shape}")
         # print(src)
@@ -974,15 +983,39 @@ class TransformerEncoderDecoder(nn.Module):
         # print(f"Token Logits Shape: {out.shape}")
         return out
 
+    def _nuclueus_sampling(self, logits: torch.Tensor, p: float = 0.9) -> torch.Tensor:
+        """Performs nucleus sampling on the logits. Heavily based on the
+        implementation https://nn.labml.ai/sampling/nucleus.html
+        and https://gist.github.com/bsantraigi/5752667525d88d375207f099bd78818b
+
+        Args:
+            logits (torch.Tensor): logits of shape (vocab_size)
+            p (float, optional): Nucleus probability mass. Defaults to 0.9.
+
+        Returns:
+            torch.Tensor: sampled token
+        """
+
+        probs = F.softmax(logits, dim=-1)
+        sorted_probs, sorted_indices = torch.sort(probs, dim=-1, descending=True)
+        cum_sum_probs = torch.cumsum(sorted_probs, dim=-1)
+        nucleus_mask = cum_sum_probs < p
+        # Add an extra token to ensure we have cum_sum <= p
+        nucleus_mask = torch.cat([nucleus_mask, torch.tensor([True]).to(self.device)])
+        sorted_log_probs = torch.log(sorted_probs)
+        sorted_log_probs[~nucleus_mask] = float("-inf")
+
+        logits = torch.gather(sorted_log_probs, 0, sorted_indices.argsort(-1))
+
+        return torch.multinomial(F.softmax(logits, dim=-1), 1)
+
     @torch.no_grad()
     def generate(
         self,
         input_seq: torch.Tensor,
         vocab: dict,
         max_sequence_length: int,
-        bos_token: int = 1,
-        eos_token: int = 2,
-        deterministic: bool = True,
+        sampling_method: str = "greedy",
         return_tokens: bool = False,
         prompt: Optional[torch.Tensor] = None,
     ) -> Union[str, np.ndarray]:
@@ -998,7 +1031,7 @@ class TransformerEncoderDecoder(nn.Module):
         """
         self.eval()
         if prompt is None:
-            translated_input = torch.tensor([[bos_token]], dtype=torch.long).to(
+            translated_input = torch.tensor([[self._bos_token]], dtype=torch.long).to(
                 self.device
             )
         else:
@@ -1013,12 +1046,18 @@ class TransformerEncoderDecoder(nn.Module):
             output_probs = F.softmax(output_logits, dim=-1)
             output_probs = output_probs.squeeze(1)
 
-            if deterministic:
+            if sampling_method == "greedy":
                 predicted_token_ids = torch.argmax(output_probs, dim=-1)
+            elif sampling_method == "nucleus":
+                predicted_token_ids = self._nuclueus_sampling(
+                    output_logits.squeeze(1), p=0.9
+                )
             else:
-                predicted_token_ids = torch.multinomial(output_probs, 1).squeeze(dim=-1)
+                raise NotImplementedError(
+                    f"Sampling method {sampling_method} not found."
+                )
             if (
-                predicted_token_ids[-1] == eos_token
+                predicted_token_ids[-1] == self._eos_token
                 or len(predicted_token_ids) >= max_sequence_length
             ):
                 done = True
@@ -1036,7 +1075,7 @@ class TransformerEncoderDecoder(nn.Module):
                 list(vocab.keys())[list(vocab.values()).index(token_id)]
                 for token_id in translated_input
             ]
-            translation = " ".join(narration)
+            translation = " ".join(narration)  # type: ignore
 
         self.train()
-        return translation
+        return translation  # type: ignore
