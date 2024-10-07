@@ -283,7 +283,7 @@ minigrid:
   vocab_path: vocab/minigrid_four_squares.json
   dec_max_length: 30
   enc_max_length: 16
-  video_pred_log: false
+  video_pred_log: true
   # task: "minigrid_teleport_complex"
   task: "minigrid_four_squares"
   time_limit: 1024

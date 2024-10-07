@@ -935,7 +935,7 @@ class TransformerEncoderDecoder(nn.Module):
             generate_mask (bool, optional): _description_. Defaults to False.
 
         Returns:
-            torch.Tensor: _description_
+            torch.Tensor: logits of shape (out_seq_length, batch_size, vocab_size)
         """
         if self._initial_embed is not None:
             src = self._initial_embed(src)
@@ -988,6 +988,8 @@ class TransformerEncoderDecoder(nn.Module):
         implementation https://nn.labml.ai/sampling/nucleus.html
         and https://gist.github.com/bsantraigi/5752667525d88d375207f099bd78818b
 
+        and first proposed in Holtzman et al. (2019, https://arxiv.org/abs/1904.09751)
+
         Args:
             logits (torch.Tensor): logits of shape (vocab_size)
             p (float, optional): Nucleus probability mass. Defaults to 0.9.
@@ -995,27 +997,27 @@ class TransformerEncoderDecoder(nn.Module):
         Returns:
             torch.Tensor: sampled token
         """
-
         probs = F.softmax(logits, dim=-1)
         sorted_probs, sorted_indices = torch.sort(probs, dim=-1, descending=True)
         cum_sum_probs = torch.cumsum(sorted_probs, dim=-1)
         nucleus_mask = cum_sum_probs < p
-        # Add an extra token to ensure we have cum_sum <= p
-        nucleus_mask = torch.cat([nucleus_mask, torch.tensor([True]).to(self.device)])
+        # Convert the first false value to true to enforce <=p
+        nucleus_mask[torch.argmax(~nucleus_mask.int())] = True
+
         sorted_log_probs = torch.log(sorted_probs)
         sorted_log_probs[~nucleus_mask] = float("-inf")
 
-        logits = torch.gather(sorted_log_probs, 0, sorted_indices.argsort(-1))
+        logits_remapped = torch.gather(sorted_log_probs, 0, sorted_indices.argsort(-1))
 
-        return torch.multinomial(F.softmax(logits, dim=-1), 1)
-
+        return torch.multinomial(F.softmax(logits_remapped, dim=-1), 1)
+ 
     @torch.no_grad()
     def generate(
         self,
         input_seq: torch.Tensor,
         vocab: dict,
         max_sequence_length: int,
-        sampling_method: str = "greedy",
+        sampling_method: str = "nucleus",
         return_tokens: bool = False,
         prompt: Optional[torch.Tensor] = None,
     ) -> Union[str, np.ndarray]:
@@ -1041,17 +1043,15 @@ class TransformerEncoderDecoder(nn.Module):
             output_logits = self.forward(
                 input_seq,
                 translated_input,
-                generate_mask=False,
-            )
+                generate_mask=True,
+            )[-1]
             output_probs = F.softmax(output_logits, dim=-1)
-            output_probs = output_probs.squeeze(1)
 
             if sampling_method == "greedy":
                 predicted_token_ids = torch.argmax(output_probs, dim=-1)
             elif sampling_method == "nucleus":
-                predicted_token_ids = self._nuclueus_sampling(
-                    output_logits.squeeze(1), p=0.9
-                )
+                # squeeze to drop batch dimension
+                predicted_token_ids = self._nuclueus_sampling(output_logits.squeeze())
             else:
                 raise NotImplementedError(
                     f"Sampling method {sampling_method} not found."
