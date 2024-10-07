@@ -867,7 +867,7 @@ class TransformerEncoderDecoder(nn.Module):
         target_vocab_size: int = 22,
         max_seq_length: int = 25,
         embedding_layer: bool = True,
-        embed_size: int = 128,
+        embed_size: int = 512,
         bos_token: int = 1,
         eos_token: int = 2,
         padding_token: int = 0,
@@ -1010,7 +1010,7 @@ class TransformerEncoderDecoder(nn.Module):
         logits_remapped = torch.gather(sorted_log_probs, 0, sorted_indices.argsort(-1))
 
         return torch.multinomial(F.softmax(logits_remapped, dim=-1), 1)
- 
+
     @torch.no_grad()
     def generate(
         self,
