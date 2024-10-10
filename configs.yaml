@@ -345,12 +345,12 @@ panda_push:
   steps: 1e8
   action_repeat: 1
   envs: 16
-  train_ratio: 512
+  train_ratio: 64
   video_pred_log: true
   eval_episode_num: 0
   eval_every: 10000
   enable_language: true
-  time_limit: 1024
+  time_limit: 36000 
   log_every: 1000
   dyn_hidden: 1024
   dyn_deter: 4096
