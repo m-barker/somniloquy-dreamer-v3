@@ -29,6 +29,15 @@ def symexp(x):
     return torch.sign(x) * (torch.exp(torch.abs(x)) - 1.0)
 
 
+def add_batch_to_obs(obs):
+    for k, v in obs.items():
+        if isinstance(v, np.ndarray):
+            obs[k] = np.expand_dims(v, axis=0)
+        else:
+            obs[k] = np.array([v])
+    return obs
+
+
 class RequiresGrad:
     def __init__(self, model):
         self._model = model
@@ -181,6 +190,12 @@ def simulate(
 
         state (Optional[Tuple], optional): Previous world model state used for the Actor.
         To decide on which action to take. Defaults to None.
+
+        no_convert_obs (Optional[List[str]], optional): List of observation keys to not convert. Defaults to None.
+
+        no_save_obs (Optional[List[str]], optional): List of observation keys to not save. Defaults to None.
+
+        info_keys_to_store (Optional[List[str]], optional): List of info keys to store. Defaults to None.
 
     Returns:
         Tuple: Tuple containing (
