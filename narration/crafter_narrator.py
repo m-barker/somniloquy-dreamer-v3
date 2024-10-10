@@ -6,7 +6,7 @@ import numpy as np
 class CrafterNarrator:
     def __init__(self):
         self.OBJECT_IDS = {
-            "none": 0,
+            # "none": 0,
             "water": 1,
             "grass": 2,
             "stone": 3,
@@ -67,6 +67,7 @@ class CrafterNarrator:
 
         object_str = "I will see "
         for i, obj in enumerate(objects_seen):
+
             if i == len(objects_seen) - 1:
                 object_str += f"and {obj}."
             else:

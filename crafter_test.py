@@ -375,16 +375,29 @@ narrate_every = 16
 obs_hist = []
 narrator = CrafterNarrator()
 while not done:
-    action = env.action_space.sample()
+    action = int(input("Enter action (0-16)"))
+    # action = env.action_space.sample()
     obs, reward, terminated, truncated, info = env.step(action)
-    if terminated or truncated:
-        done = True
+    # if terminated or truncated:
+    #     done = True
     occupancy_grid = info["semantic"]
     player_x, player_y = np.where(occupancy_grid == 13)
     player_x, player_y = player_x[0], player_y[0]
     local_grid = occupancy_grid[
         player_x - 4 : player_x + 5, player_y - 3 : player_y + 4
     ].T
+    expected_shape = (7, 9)
+
+    # Add padding to the local grid if it is smaller than the expected shape
+    if local_grid.shape != expected_shape:
+        pad_width = (
+            (0, expected_shape[0] - local_grid.shape[0]),
+            (0, expected_shape[1] - local_grid.shape[1]),
+        )
+        local_grid = np.pad(
+            local_grid, pad_width=pad_width, mode="constant", constant_values=0
+        )
+
     obs_hist.append(
         {
             "semantic": local_grid,

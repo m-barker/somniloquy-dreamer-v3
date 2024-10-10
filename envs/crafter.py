@@ -12,6 +12,7 @@ class Crafter:
         self._env = crafter.Env(size=size, reward=(task == "reward"), seed=seed)
         self._achievements = crafter.constants.achievements.copy()
         self.reward_range = [-np.inf, np.inf]
+        self._local_grid_shape = (7, 9)
 
     @property
     def observation_space(self):
@@ -56,7 +57,18 @@ class Crafter:
         local_grid = occupancy_grid[
             player_x - 4 : player_x + 5, player_y - 3 : player_y + 4
         ].T
-        info["semantic"] = local_grid
+
+        # Add padding to the local grid if it is smaller than the expected shape
+        if local_grid.shape != self._local_grid_shape:
+            pad_width = (
+                (0, self._local_grid_shape[0] - local_grid.shape[0]),
+                (0, self._local_grid_shape[1] - local_grid.shape[1]),
+            )
+            local_grid = np.pad(
+                local_grid, pad_width=pad_width, mode="constant", constant_values=0
+            )
+
+            info["semantic"] = local_grid
 
         obs = {
             "image": image,
