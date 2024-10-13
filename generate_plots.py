@@ -44,8 +44,8 @@ def load_reconstruction_images(
 
 
 def generate_image_reconstruction_plot(
-    images: list[list[np.ndarray]], num_rows: int, num_cols: int
-):
+    images: list[list[np.ndarray]], num_rows: int, num_cols: int, start_time: int = 1
+) -> plt.Figure:
 
     assert len(images) == num_rows
 
@@ -75,7 +75,7 @@ def generate_image_reconstruction_plot(
             # Adding time labels
             if row == num_rows - 1:
                 ax.annotate(
-                    f"t={col+1}",
+                    f"t={start_time + col + 1}",
                     xy=(0.5, -0.35),
                     xycoords="axes fraction",
                     ha="center",
@@ -83,7 +83,7 @@ def generate_image_reconstruction_plot(
                     fontsize=12,
                 )
 
-    plt.savefig("image_reconstruction_plot.png")
+    return fig
 
 
 if __name__ == "__main__":

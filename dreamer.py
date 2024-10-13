@@ -32,6 +32,7 @@ from narration.minigrd_narrator import (
     MiniGridTeleportNarrator,
     MiniGridComplexTeleportNarrator,
 )
+from evaluation import sample_rollouts, evaluate_rollouts
 
 
 to_np = lambda x: x.detach().cpu().numpy()
@@ -484,6 +485,21 @@ def main(config):
                 ],
                 no_save_obs=["rays"],
                 info_keys_to_store=["semantic", "inventory", "achievements"],
+            )
+            rollout_samples = sample_rollouts(
+                agent,
+                eval_envs[0],
+                config.n_eval_samples,
+                trajectory_length=config.eval_trajectory_length,
+                n_consecutive_trajectories=config.eval_n_consecutive_trajectories,
+            )
+            evaluate_rollouts(
+                agent,
+                rollout_samples["imagined_state_samples"],
+                rollout_samples["imagined_action_samples"],
+                rollout_samples["posterior_state_samples"],
+                rollout_samples["observation_samples"],
+                trajectory_length=config.eval_trajectory_length,
             )
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(

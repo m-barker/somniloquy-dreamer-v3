@@ -167,3 +167,4 @@ logdir*
 wandb*
 .envrc
 .direnv/*
+*.vscode
