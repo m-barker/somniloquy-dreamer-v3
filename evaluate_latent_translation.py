@@ -94,7 +94,7 @@ def main(args):
             embed_src=True,
             return_tokens=True,
             # prompt=init_stoch.unsqueeze(0),
-        )
+        )[0]
         print(translation)
         print(translation.shape)
         translation = translation[1:]

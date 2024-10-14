@@ -152,7 +152,7 @@ def main(args):
             imagined_tensor = torch.cat(imagained_states, dim=0).permute(1, 0, 2)
             imagined_narration = agent._wm.heads["language"].generate(
                 imagined_tensor, agent._wm.vocab, 150, deterministic=False
-            )
+            )[0]
             true_obs = []
             for action in imagined_actions:
                 numpy_action = action.squeeze(0).detach().cpu().numpy()

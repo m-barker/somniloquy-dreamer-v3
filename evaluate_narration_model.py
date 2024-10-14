@@ -187,10 +187,10 @@ def evaluate_narration_model(env, agent, actions=None):
         # T, B, D
         narration = agent._wm.heads["language"].generate(
             latent_states, agent._wm.vocab, 50
-        )
+        )[0]
         intent = agent._wm.heads["language"].generate(
             imagined_states, agent._wm.vocab, 50
-        )
+        )[0]
         actual_narration = agent._wm.narrator.narrate(encoded_obs)
     print(f"Non-imagined Narration: {narration}")
     print(f"Ground Truth Narration: {actual_narration}")

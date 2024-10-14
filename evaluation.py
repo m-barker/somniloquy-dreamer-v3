@@ -320,7 +320,7 @@ def evaluate_rollouts(
                     agent._wm.vocab,
                     config.dec_max_length,
                     sampling_method=config.token_sampling_method,
-                )
+                )[0]
 
                 actual_narration = agent._wm.narrator.narrate(narration_data)
 

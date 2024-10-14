@@ -1020,23 +1020,21 @@ class TransformerEncoderDecoder(nn.Module):
         and first proposed in Holtzman et al. (2019, https://arxiv.org/abs/1904.09751)
 
         Args:
-            logits (torch.Tensor): logits of shape (vocab_size)
+            logits (torch.Tensor): logits of shape (batch_size, vocab_size)
             p (float, optional): Nucleus probability mass. Defaults to 0.9.
 
         Returns:
             torch.Tensor: sampled token
         """
-        probs = F.softmax(logits, dim=-1)
-        sorted_probs, sorted_indices = torch.sort(probs, dim=-1, descending=True)
-        cum_sum_probs = torch.cumsum(sorted_probs, dim=-1)
-        nucleus_mask = cum_sum_probs < p
-        # Convert the first false value to true to enforce <=p
-        nucleus_mask[torch.argmax(~nucleus_mask.int())] = True
-
-        sorted_log_probs = torch.log(sorted_probs)
-        sorted_log_probs[~nucleus_mask] = float("-inf")
-
-        logits_remapped = torch.gather(sorted_log_probs, 0, sorted_indices.argsort(-1))
+        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+        # Remove tokens with cumulative probability above the threshold
+        sorted_indices_to_remove = cumulative_probs > p
+        # Shift the indices to the right to keep also the first token above the threshold
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+        sorted_logits[sorted_indices_to_remove] = -float("Inf")
+        logits_remapped = torch.gather(sorted_logits, 1, sorted_indices.argsort(-1))
 
         return torch.multinomial(F.softmax(logits_remapped, dim=-1), 1)
 
@@ -1063,14 +1061,14 @@ class TransformerEncoderDecoder(nn.Module):
         """
         self.eval()
         if prompt is None:
-            translated_input = torch.tensor([[self._bos_token]], dtype=torch.long).to(
-                self.device
-            )
+            batch_size = input_seq.size(0)
+            translated_input = torch.tensor(
+                [self._bos_token] * batch_size, device=self.device
+            ).unsqueeze(1)
         else:
             translated_input = prompt
-        done = False
         logits = []
-        while not done:
+        for _ in range(max_sequence_length):
             output_logits = self.forward(
                 input_seq,
                 translated_input,
@@ -1082,33 +1080,37 @@ class TransformerEncoderDecoder(nn.Module):
             if sampling_method == "greedy":
                 predicted_token_ids = torch.argmax(output_probs, dim=-1)
             elif sampling_method == "nucleus":
-                # squeeze to drop batch dimension
-                predicted_token_ids = self._nuclueus_sampling(output_logits.squeeze())
+                predicted_token_ids = self._nuclueus_sampling(output_logits)
             else:
                 raise NotImplementedError(
                     f"Sampling method {sampling_method} not found."
                 )
-            if (
-                predicted_token_ids[-1] == self._eos_token
-                or len(predicted_token_ids) >= max_sequence_length
-            ):
-                done = True
             translated_input = torch.cat(
-                [translated_input, predicted_token_ids[-1].unsqueeze(0).unsqueeze(0)],
+                [translated_input, predicted_token_ids[:, -1].unsqueeze(1)],
                 dim=1,
             )
 
         # Convert the output tokens to a string
-        translated_input = translated_input.squeeze(0).cpu().numpy()
+        translated_input = translated_input.cpu().numpy()
+
+        # Anything after the first EOS token is ignored, so convert to padding
+        for batch in translated_input:
+            eos_idx = np.where(batch == self._eos_token)[0]
+            if eos_idx.size > 0:
+                batch[eos_idx[0] + 1 :] = self._padding_token
+
         if return_tokens:
             translation = translated_input
         else:
-            narration = [
-                list(vocab.keys())[list(vocab.values()).index(token_id)]
-                for token_id in translated_input
-            ]
-            translation = " ".join(narration)  # type: ignore
-
+            narrations = []
+            for batch in translated_input:
+                narration = [
+                    list(vocab.keys())[list(vocab.values()).index(token_id)]
+                    for token_id in batch
+                ]
+                narration = " ".join(narration)
+                narrations.append(narration)
+            translation = narrations  # type: ignore
         self.train()
         if return_logits:
             logits = torch.stack(logits)  # type: ignore

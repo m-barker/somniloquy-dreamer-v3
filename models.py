@@ -557,61 +557,15 @@ class WorldModel(nn.Module):
                                 imagined_states = self.dynamics.get_feat(
                                     imagined_states
                                 )
-                                imagined_narrations = []
-                                for batch in range(imagined_states.shape[0]):
-                                    (
-                                        imagined_narration,
-                                        imagined_narration_logits,
-                                    ) = self.heads["language"].generate(
-                                        imagined_states[batch].unsqueeze(0),
-                                        self.vocab,
-                                        self._narration_max_dec_seq,
-                                        return_tokens=False,
-                                        return_logits=True,
-                                    )
-                                    if (
-                                        len(imagined_narration.split())
-                                        < self._narration_max_dec_seq
-                                    ):
-                                        imagined_narration += " <PAD>" * (
-                                            self._narration_max_dec_seq
-                                            - len(imagined_narration.split())
-                                        )
-                                    # Pad logits to max sequence length
-                                    if (
-                                        imagined_narration_logits.shape[0]
-                                        < self._narration_max_dec_seq - 1
-                                    ):
-                                        padding = torch.zeros(
-                                            self._narration_max_dec_seq
-                                            - imagined_narration_logits.shape[0]
-                                            - 1,
-                                            imagined_narration_logits.shape[1],
-                                            imagined_narration_logits.shape[2],
-                                        ).to(self.device)
-                                        padding[:, :, 0] = (
-                                            1  # Set all logits to 1 for pad token
-                                        )
-                                        imagined_narration_logits = torch.cat(
-                                            [imagined_narration_logits, padding], dim=0
-                                        )
-                                    if (
-                                        imagined_narration_logits.shape[0]
-                                        > self._narration_max_dec_seq - 1
-                                    ):
-                                        imagined_narration_logits = (
-                                            imagined_narration_logits[
-                                                : self._narration_max_dec_seq - 1
-                                            ]
-                                        )
-                                    imagined_narration_logits = (
-                                        imagined_narration_logits.squeeze()
-                                    )
-                                    imagined_narrations.append(
-                                        imagined_narration_logits
-                                    )
-                                imagined_narrations = torch.stack(imagined_narrations)
-                                preds["language_to_action"] = imagined_narrations
+                                generated_narrations, generated_logits = self.heads[
+                                    "language"
+                                ].generate(
+                                    imagined_states,
+                                    self.vocab,
+                                    self._narration_max_dec_seq - 1,
+                                    return_logits=True,
+                                )
+                                preds["language_to_action"] = generated_logits
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))
@@ -775,7 +729,7 @@ class WorldModel(nn.Module):
         imagined_feat = self.dynamics.get_feat(prior)
         intent = self.heads["language"].generate(
             imagined_feat, self.vocab, self._narration_max_dec_seq
-        )
+        )[0]
         print(f"Imagined Intent: {intent}")
         print(f"Ground Truth Intent: {ground_truth_intent}")
         return intent, ground_truth_intent

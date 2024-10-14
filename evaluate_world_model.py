@@ -198,10 +198,10 @@ def evaluate_world_model(
         # T, B, D
         narration = agent._wm.heads["language"].generate(
             latent_states, agent._wm.vocab, 50
-        )
+        )[0]
         intent = agent._wm.heads["language"].generate(
             imagined_states, agent._wm.vocab, 50, deterministic=False
-        )
+        )[0]
         print(f"POSTERIOR NARRATION: {narration}")
         print(f"PRIOR NARRATION: {intent}")
         input("Press Enter to continue...")
