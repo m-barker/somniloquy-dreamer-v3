@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import default_collate
+from torchmetrics.text import BLEUScore
 import networks
 import tools
 
@@ -104,6 +105,16 @@ class WorldModel(nn.Module):
             )
             self._narration_max_enc_seq = config.enc_max_length
             self._narration_max_dec_seq = config.dec_max_length
+
+        if config.enable_language_to_action:
+            self.heads["language_to_action"] = networks.TransformerEncoderDecoder(
+                d_model=512,
+                target_vocab_size=config.num_actions + 3,  # +3 for BOS, EOS, PAD tokens
+                max_seq_length=config.enc_max_length,
+                embedding_layer=False,
+                src_token_embedding=True,
+                src_vocab_size=len(self.vocab),
+            )
 
         if config.action_prediction:
             stochastic_size = config.dyn_stoch * config.dyn_discrete
@@ -214,7 +225,7 @@ class WorldModel(nn.Module):
         data: Dict[str, np.ndarray],
         post: Dict[str, torch.Tensor],
         narration_data: Union[np.ndarray, Dict],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Generates the language model predictions and ground truth narrations
 
         Args:
@@ -248,7 +259,7 @@ class WorldModel(nn.Module):
         logit_sequences = []
         latent_sequences = []
         padding_masks = []
-        state_sequences = []
+        starting_states: List[torch.Tensor] = []
         for batch in range(feat.shape[0]):
             is_first_batch = data["is_first"][batch].cpu().numpy()
             assert is_first_batch[0] == 1
@@ -264,10 +275,7 @@ class WorldModel(nn.Module):
                     )
 
                     latent_sequence = feat[batch, current_index:end_index]
-                    state_sequence = {
-                        key: value[batch, current_index : current_index + 1]
-                        for key, value in post.items()
-                    }
+                    starting_states.append(feat[batch, current_index])
                     logit_sequence = stoch_logits[batch, current_index:end_index]
                     current_index = end_index
                     if end_index == is_first_indices[current_is_first_index]:
@@ -278,10 +286,7 @@ class WorldModel(nn.Module):
                         feat.shape[1],
                     )
                     latent_sequence = feat[batch, current_index:end_index]
-                    state_sequence = {
-                        key: value[batch, current_index : current_index + 1]
-                        for key, value in post.items()
-                    }
+                    starting_states.append(feat[batch, current_index])
                     logit_sequence = stoch_logits[batch, current_index:end_index]
                     current_index = end_index
 
@@ -300,11 +305,10 @@ class WorldModel(nn.Module):
                         self.device
                     )
                 latent_sequences.append(latent_sequence)
-                state_sequences.append(state_sequence)
                 logit_sequences.append(logit_sequence)
                 padding_masks.append(padding_mask)
 
-        starting_states = state_sequences
+        starting_states = torch.stack(starting_states)
         # Shapes (batch, seq_len, dim)
         feat = torch.stack(latent_sequences)
         padding_masks = torch.stack(padding_masks)
@@ -315,7 +319,7 @@ class WorldModel(nn.Module):
             src_mask=padding_masks,
         )
 
-        return pred, narrations, logit_sequences, padding_masks, starting_states
+        return pred, narrations, logit_sequences, padding_masks, starting_states  # type: ignore
 
     def _language_to_latent_state(
         self,
@@ -398,11 +402,11 @@ class WorldModel(nn.Module):
         actions: torch.Tensor,
         true_narrations: torch.Tensor,
         is_first: torch.Tensor,
-        action_starting_token: int = 29,
+        starting_states: torch.Tensor,
+        action_starting_token: int = 3,
         bos_token: int = 1,
         eos_token: int = 2,
         padding_token: int = 0,
-        translation_token: int = 33,
     ) -> torch.Tensor:
         """Translates from a sequence of English tokens describing an agent's
         behaviour into the sequence of action tokens that the agent took
@@ -412,6 +416,8 @@ class WorldModel(nn.Module):
             actions (torch.Tensor): batch of actions taken of shape
             (batch_size, batch_length, act_dim)
             true_narrations (torch.Tensor): _description_
+            starting_states (torch.Tensor): Initial posterior states of shape
+            (batch_size, latent_state_dim)
             action_starting_token (int, optional): _description_. Defaults to 29.
             bos_token (int, optional): _description_. Defaults to 1.
             eos_token (int, optional): _description_. Defaults to 2.
@@ -446,37 +452,36 @@ class WorldModel(nn.Module):
             [bos_token, true_actions_tokens, eos_token], dim=1
         )
 
-        translation_token = (
-            torch.ones((true_narrations.shape[0], 1)).to(
-                self._config.device, dtype=torch.long
-            )
-            * translation_token
-        )
-        true_narrations = torch.cat([translation_token, true_narrations], dim=1)
+        # Embed the starting states using the translation components latent state embedder.
+        starting_states_embed = self.heads["language"]._initial_embed(starting_states)
 
-        predicted_action_token_logits = self.heads["language"].forward(
+        predicted_action_token_logits = self.heads["language_to_action"].forward(
             true_narrations,
             true_actions_tokens[:, :-1],
             generate_mask=True,
-            embed_src=True,
+            tokens_to_prepend=starting_states_embed,
         )
 
-        predicted_action_tokens = torch.argmax(
-            predicted_action_token_logits, dim=-1
-        ).to(dtype=torch.long)
+        # Shape (seq_len, batch)
+        predicted_action_tokens = predicted_action_token_logits.argmax(dim=-1)
 
-        # Remove the BOS and token from the predicted action tokens
-        predicted_action_tokens = predicted_action_tokens[1:]
+        N, B = predicted_action_tokens.shape
+        # (seq_len, batch) -> (batch, seq_len)
+        predicted_action_tokens = predicted_action_tokens.permute(1, 0)
 
-        predicted_actions = predicted_action_tokens - action_starting_token
-        # Clamp the predicted actions to the action space
-        predicted_actions = torch.clamp(
-            predicted_actions, 0, self._config.num_actions - 1
-        )
+        predicted_one_hot_actions = torch.zeros(
+            (B, N, self._config.num_actions), dtype=torch.float32
+        ).to(self._config.device)
 
-        predicted_one_hot_actions = torch.nn.functional.one_hot(
-            predicted_actions, num_classes=self._config.num_actions
-        )
+        for batch in range(B):
+            for seq in range(N):
+                if predicted_action_tokens[batch, seq] in [0, 1, 2]:
+                    continue
+                predicted_one_hot_actions[
+                    batch,
+                    seq,
+                    predicted_action_tokens[batch, seq] - action_starting_token,
+                ] = 1
 
         return predicted_one_hot_actions
 
@@ -535,55 +540,78 @@ class WorldModel(nn.Module):
                                 data["action"],
                                 narrations,
                                 data["is_first"],
+                                starting_states,
                             )
-                            # Imagine a sequence of latent states with the predicted actions
-                            prev_state = default_collate(starting_states)
-                            prev_state = {
-                                k: v.squeeze(1) for k, v in prev_state.items()
-                            }
-                            # Freeze models
-                            for param in self.dynamics.parameters():
-                                param.requires_grad = False
-                            for param in self.heads["language"].parameters():
-                                param.requires_grad = False
-                            for param in self.heads["cont"].parameters():
-                                param.requires_grad = False
-                            imagined_states = [prev_state]
-                            continue_masks = []
-                            for t in range(predicted_actions.shape[0]):
-                                prev_state = self.dynamics.img_step(
-                                    prev_state=prev_state,
-                                    prev_action=predicted_actions[t],
+                            # Shape (batch, seq_len, act_dim)
+                            with torch.no_grad():
+                                starting_state_dict = self.dynamics.get_state_dict(
+                                    starting_states
                                 )
-                                predicted_continue = self.heads["cont"](
-                                    self.dynamics.get_feat(prev_state)
-                                ).mode()
-                                continue_mask = predicted_continue > 0.5
-                                imagined_states.append(prev_state)
-                                continue_masks.append(continue_mask)
-                            imagined_latents = [
-                                self.dynamics.get_feat(state)
-                                for state in imagined_states
-                            ]
-                            imagined_latents = torch.stack(imagined_latents)
-                            predicted_action_narrations = self.heads[
-                                "language"
-                            ].forward(
-                                imagined_latents[1:].permute(1, 0, 2),
-                                narrations[:, :-1].detach(),
-                                generate_mask=True,
-                                src_mask=padding_masks,
-                            )
-                            preds["language-to-action-to-language"] = (
-                                predicted_action_narrations
-                            )
-                            # Unfreeze models
-                            for param in self.dynamics.parameters():
-                                param.requires_grad = True
-                            for param in self.heads["language"].parameters():
-                                param.requires_grad = True
-                            for param in self.heads["cont"].parameters():
-                                param.requires_grad = True
+                                assert torch.equal(
+                                    self.dynamics.get_feat(starting_state_dict),
+                                    starting_states,
+                                )
+                                imagined_states = self.dynamics.imagine_with_action(
+                                    predicted_actions, starting_state_dict
+                                )
+                                imagined_states = self.dynamics.get_feat(
+                                    imagined_states
+                                )
+                                imagined_narrations = []
+                                for batch in range(imagined_states.shape[0]):
+                                    (
+                                        imagined_narration,
+                                        imagined_narration_logits,
+                                    ) = self.heads["language"].generate(
+                                        imagined_states[batch].unsqueeze(0),
+                                        self.vocab,
+                                        self._narration_max_dec_seq,
+                                        return_tokens=False,
+                                        return_logits=True,
+                                    )
+                                    if (
+                                        len(imagined_narration.split())
+                                        < self._narration_max_dec_seq
+                                    ):
+                                        imagined_narration += " <PAD>" * (
+                                            self._narration_max_dec_seq
+                                            - len(imagined_narration.split())
+                                        )
+                                    # Pad logits to max sequence length
+                                    if (
+                                        imagined_narration_logits.shape[0]
+                                        < self._narration_max_dec_seq - 1
+                                    ):
+                                        padding = torch.zeros(
+                                            self._narration_max_dec_seq
+                                            - imagined_narration_logits.shape[0]
+                                            - 1,
+                                            imagined_narration_logits.shape[1],
+                                            imagined_narration_logits.shape[2],
+                                        ).to(self.device)
+                                        padding[:, :, 0] = (
+                                            1  # Set all logits to 1 for pad token
+                                        )
+                                        imagined_narration_logits = torch.cat(
+                                            [imagined_narration_logits, padding], dim=0
+                                        )
+                                    if (
+                                        imagined_narration_logits.shape[0]
+                                        > self._narration_max_dec_seq - 1
+                                    ):
+                                        imagined_narration_logits = (
+                                            imagined_narration_logits[
+                                                : self._narration_max_dec_seq - 1
+                                            ]
+                                        )
+                                    imagined_narration_logits = (
+                                        imagined_narration_logits.squeeze()
+                                    )
+                                    imagined_narrations.append(
+                                        imagined_narration_logits
+                                    )
+                                imagined_narrations = torch.stack(imagined_narrations)
+                                preds["language_to_action"] = imagined_narrations
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))
@@ -593,6 +621,9 @@ class WorldModel(nn.Module):
                             [prev_states, next_states], dim=-1
                         )
                         pred = head(action_pred_input)
+
+                    elif name == "language_to_action":
+                        continue
 
                     else:
                         grad_head = name in self._config.grad_heads
@@ -611,8 +642,13 @@ class WorldModel(nn.Module):
                         loss = tools.narration_loss(pred, narrations[:, 1:])
                         losses[name] = loss
                         # print(f"Language loss: {loss}")
+                    elif name == "language_to_action":
+                        loss = tools.narration_loss(
+                            pred.permute(1, 0, 2), narrations[:, 1:]
+                        )
+                        losses[name] = loss
+                        print(f"Language to action loss: {loss}")
                     elif name == "language-to-latent":
-
                         loss = tools.narration_loss(pred, true_tokens[:, 1:])
                         losses[name] = loss
                         print(f"Language to latent loss: {loss}")

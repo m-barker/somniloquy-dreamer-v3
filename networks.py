@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 import re
 import numpy as np
 
@@ -158,6 +158,19 @@ class RSSM(nn.Module):
             shape = list(stoch.shape[:-2]) + [self._stoch * self._discrete]
             stoch = stoch.reshape(shape)
         return torch.cat([stoch, state["deter"]], -1)
+
+    def get_state_dict(self, state):
+        """This is the inverse of the get_feat function"""
+        if self._discrete:
+            stoch = state[:, : self._stoch * self._discrete]
+            stoch = stoch.reshape(
+                list(stoch.shape[:-1]) + [self._stoch, self._discrete]
+            )
+            deter = state[:, self._stoch * self._discrete :]
+        else:
+            stoch = state[:, : self._stoch]
+            deter = state[:, self._stoch :]
+        return {"stoch": stoch, "deter": deter}
 
     def get_dist(self, state, dtype=None):
         if self._discrete:
@@ -871,6 +884,8 @@ class TransformerEncoderDecoder(nn.Module):
         bos_token: int = 1,
         eos_token: int = 2,
         padding_token: int = 0,
+        src_token_embedding: bool = False,
+        src_vocab_size: Optional[int] = None,
     ) -> None:
         """Transformer encoder-decoder model used for translation.
 
@@ -891,6 +906,8 @@ class TransformerEncoderDecoder(nn.Module):
             bos_token (int, optional): beginning of sentence token. Defaults to 1.
             eos_token (int, optional): end of sentence token. Defaults to 2.
             padding_token (int, optional): padding token. Defaults to 0.
+            src_token_embedding (bool, optional): whether to use a Token embedding layer for the source tokens. Defaults to False.
+            src_vocab_size (Optional[int], optional): size of the source vocabulary. Defaults to None.
 
         """
         super(TransformerEncoderDecoder, self).__init__()
@@ -915,6 +932,12 @@ class TransformerEncoderDecoder(nn.Module):
         self.final_layer = nn.Linear(d_model, target_vocab_size)
         self.pe = PositionalEncoding(d_model, dropout)
         self.tgt_embedding = TokenEmbedding(target_vocab_size, d_model)
+        self.src_embedding = None
+        if src_token_embedding:
+            assert (
+                src_vocab_size is not None
+            ), "src_vocab_size must be provided if using src token embeddings."
+            self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def forward(
@@ -924,6 +947,7 @@ class TransformerEncoderDecoder(nn.Module):
         generate_mask: bool = False,
         src_mask: Optional[torch.Tensor] = None,
         tokens_to_append: Optional[torch.Tensor] = None,
+        tokens_to_prepend: Optional[torch.Tensor] = None,
         embed_tgt: bool = True,
         generate_src_mask: bool = False,
     ) -> torch.Tensor:
@@ -940,37 +964,42 @@ class TransformerEncoderDecoder(nn.Module):
         if self._initial_embed is not None:
             src = self._initial_embed(src)
 
+        elif self.src_embedding is not None:
+            src = self.src_embedding(src)
+
         tgt_pad_mask = None
         src_pad_mask = None
 
         if generate_mask:
             tgt_pad_mask = tgt == self._padding_token
 
+        if embed_tgt:
+            tgt = self.tgt_embedding(tgt)
+
         if src_mask is not None:
             src_pad_mask = src_mask
 
         if src_pad_mask is None and generate_src_mask:
             src_pad_mask = src == self._padding_token
-        # print(f"Source shape: {src.shape}")
-        # print(f"Target shape: {tgt.shape}")
-        # print(src)
-        if embed_tgt:
-            tgt = self.tgt_embedding(tgt)
 
+        # (batch_size, seq_length, d) -> (seq_length, batch_size, d)
         src = src.permute(1, 0, 2)
         tgt = tgt.permute(1, 0, 2)
+
         src = self.pe(src)
         tgt = self.pe(tgt)
+
         tgt_mask = None
         if generate_mask:
             tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(0)).to(
                 self.device
             )
-        # print(f"Source shape: {src.shape}")
-        # print(f"Target shape: {tgt.shape}")
 
         if tokens_to_append is not None:
             src = torch.cat([src, tokens_to_append.unsqueeze(0)], dim=0)
+
+        if tokens_to_prepend is not None:
+            src = torch.cat([tokens_to_prepend.unsqueeze(0), src], dim=0)
 
         out = self.transformer(
             src,
@@ -980,7 +1009,7 @@ class TransformerEncoderDecoder(nn.Module):
             src_key_padding_mask=src_pad_mask,
         )
         out = self.final_layer(out)
-        # print(f"Token Logits Shape: {out.shape}")
+
         return out
 
     def _nuclueus_sampling(self, logits: torch.Tensor, p: float = 0.9) -> torch.Tensor:
@@ -1020,7 +1049,8 @@ class TransformerEncoderDecoder(nn.Module):
         sampling_method: str = "nucleus",
         return_tokens: bool = False,
         prompt: Optional[torch.Tensor] = None,
-    ) -> Union[str, np.ndarray]:
+        return_logits: bool = False,
+    ) -> Union[str, np.ndarray, Tuple[Union[str, np.ndarray], torch.Tensor]]:
         """Generate a sequence of tokens from the input sequence. And convert the token IDs to words.
 
         Args:
@@ -1039,12 +1069,14 @@ class TransformerEncoderDecoder(nn.Module):
         else:
             translated_input = prompt
         done = False
+        logits = []
         while not done:
             output_logits = self.forward(
                 input_seq,
                 translated_input,
                 generate_mask=True,
             )[-1]
+            logits.append(output_logits)
             output_probs = F.softmax(output_logits, dim=-1)
 
             if sampling_method == "greedy":
@@ -1078,4 +1110,7 @@ class TransformerEncoderDecoder(nn.Module):
             translation = " ".join(narration)  # type: ignore
 
         self.train()
+        if return_logits:
+            logits = torch.stack(logits)  # type: ignore
+            return translation, logits  # type: ignore
         return translation  # type: ignore

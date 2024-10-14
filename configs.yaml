@@ -176,6 +176,7 @@ crafter:
   step: 1e6
   action_repeat: 1
   envs: 1
+  eval_episode_num: 0
   eval_every: 500
   train_ratio: 512
   video_pred_log: true
@@ -186,6 +187,7 @@ crafter:
   enable_language: true
   enc_max_length: 16
   dec_max_length: 150
+  enable_language_to_action: true
   vocab_path: vocab/crafter.json
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
