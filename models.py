@@ -560,6 +560,7 @@ class WorldModel(nn.Module):
                                 self._narration_max_dec_seq - 1,
                                 return_logits=True,
                             )
+                            print(generated_narrations[0])
                             preds["language_to_action"] = generated_logits
 
                     elif name == "action_prediction":

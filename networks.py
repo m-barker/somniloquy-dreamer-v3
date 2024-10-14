@@ -1092,13 +1092,15 @@ class TransformerEncoderDecoder(nn.Module):
 
         # Convert the output tokens to a string
         translated_input = translated_input.cpu().numpy()
+        logits = torch.stack(logits)  # type: ignore
 
         # Anything after the first EOS token is ignored, so convert to padding
-        for batch in translated_input:
+        for batch_num, batch in enumerate(translated_input):
             eos_idx = np.where(batch == self._eos_token)[0]
             if eos_idx.size > 0:
                 batch[eos_idx[0] + 1 :] = self._padding_token
-
+                logits[eos_idx[0] + 1 :, batch_num, :] = 0.0
+                logits[eos_idx[0] + 1 :, batch_num, self._padding_token] = 1.0
         if return_tokens:
             translation = translated_input
         else:
@@ -1113,6 +1115,5 @@ class TransformerEncoderDecoder(nn.Module):
             translation = narrations  # type: ignore
         self.train()
         if return_logits:
-            logits = torch.stack(logits)  # type: ignore
             return translation, logits  # type: ignore
         return translation  # type: ignore

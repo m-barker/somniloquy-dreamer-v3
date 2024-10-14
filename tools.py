@@ -1332,5 +1332,7 @@ def narration_loss(
 
     # reshape to (batch_size * seq_len)
     true_tokens = true_tokens.reshape(-1)
+    print(f"Predicted tokens: {predicted_tokens.argmax(dim=-1)[:20]}")
+    print(f"True tokens: {true_tokens[:20]}")
 
     return nn.CrossEntropyLoss(ignore_index=pad_idx)(predicted_tokens, true_tokens)
