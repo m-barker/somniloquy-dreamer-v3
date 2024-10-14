@@ -555,7 +555,7 @@ class WorldModel(nn.Module):
                             generated_narrations, generated_logits = self.heads[
                                 "language"
                             ].generate(
-                                imagined_states.detach(),
+                                imagined_states,
                                 self.vocab,
                                 self._narration_max_dec_seq - 1,
                                 return_logits=True,
