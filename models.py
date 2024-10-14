@@ -541,29 +541,26 @@ class WorldModel(nn.Module):
                                 starting_states,
                             )
                             # Shape (batch, seq_len, act_dim)
-                            with torch.no_grad():
-                                starting_state_dict = self.dynamics.get_state_dict(
-                                    starting_states
-                                )
-                                assert torch.equal(
-                                    self.dynamics.get_feat(starting_state_dict),
-                                    starting_states,
-                                )
-                                imagined_states = self.dynamics.imagine_with_action(
-                                    predicted_actions, starting_state_dict
-                                )
-                                imagined_states = self.dynamics.get_feat(
-                                    imagined_states
-                                )
-                                generated_narrations, generated_logits = self.heads[
-                                    "language"
-                                ].generate(
-                                    imagined_states,
-                                    self.vocab,
-                                    self._narration_max_dec_seq - 1,
-                                    return_logits=True,
-                                )
-                                preds["language_to_action"] = generated_logits
+                            starting_state_dict = self.dynamics.get_state_dict(
+                                starting_states
+                            )
+                            assert torch.equal(
+                                self.dynamics.get_feat(starting_state_dict),
+                                starting_states,
+                            )
+                            imagined_states = self.dynamics.imagine_with_action(
+                                predicted_actions, starting_state_dict
+                            )
+                            imagined_states = self.dynamics.get_feat(imagined_states)
+                            generated_narrations, generated_logits = self.heads[
+                                "language"
+                            ].generate(
+                                imagined_states.detach(),
+                                self.vocab,
+                                self._narration_max_dec_seq - 1,
+                                return_logits=True,
+                            )
+                            preds["language_to_action"] = generated_logits
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))
