@@ -4,8 +4,6 @@ from copy import deepcopy
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import default_collate
-from torchmetrics.text import BLEUScore
 import networks
 import tools
 
@@ -597,9 +595,7 @@ class WorldModel(nn.Module):
                         losses[name] = loss
                         # print(f"Language loss: {loss}")
                     elif name == "language_to_action":
-                        loss = tools.narration_loss(
-                            pred.permute(1, 0, 2), narrations[:, 1:]
-                        )
+                        loss = tools.narration_loss(pred, narrations[:, 1:])
                         losses[name] = loss
                         print(f"Language to action loss: {loss}")
                     elif name == "language-to-latent":
