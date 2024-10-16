@@ -1048,6 +1048,7 @@ class TransformerEncoderDecoder(nn.Module):
         return_tokens: bool = False,
         prompt: Optional[torch.Tensor] = None,
         return_logits: bool = False,
+        tokens_to_prepend: Optional[torch.Tensor] = None,
     ) -> Union[str, np.ndarray, Tuple[Union[str, np.ndarray], torch.Tensor]]:
         """Generate a sequence of tokens from the input sequence. And convert the token IDs to words.
 
@@ -1073,6 +1074,7 @@ class TransformerEncoderDecoder(nn.Module):
                 input_seq,
                 translated_input,
                 generate_mask=True,
+                tokens_to_prepend=tokens_to_prepend,
             )[-1]
             logits.append(output_logits)
             output_probs = F.softmax(output_logits, dim=-1)

@@ -1,3 +1,4 @@
+from typing import Optional, List
 import os
 import cv2
 import matplotlib.pyplot as plt
@@ -44,7 +45,11 @@ def load_reconstruction_images(
 
 
 def generate_image_reconstruction_plot(
-    images: list[list[np.ndarray]], num_rows: int, num_cols: int, start_time: int = 1
+    images: list[list[np.ndarray]],
+    num_rows: int,
+    num_cols: int,
+    start_time: int = 1,
+    row_titles: Optional[List[str]] = None,
 ) -> plt.Figure:
 
     assert len(images) == num_rows
@@ -52,7 +57,8 @@ def generate_image_reconstruction_plot(
     fig = plt.figure(figsize=(20, 5))
     gs = gridspec.GridSpec(num_rows, num_cols, wspace=0.1, hspace=0.1)
 
-    row_titles = ["Imagined", "Reconstructed", "Actual"]
+    if row_titles is None:
+        row_titles = ["Imagined", "Reconstructed", "Actual"]
 
     for row in range(num_rows):
         for col in range(num_cols):

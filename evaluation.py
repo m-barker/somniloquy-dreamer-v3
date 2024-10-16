@@ -1,16 +1,17 @@
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Union, Dict, Any
+import random
 
 import wandb
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-import re
 
 
-from tools import add_batch_to_obs, convert
+from tools import add_batch_to_obs, convert, word_tokenise_text
 from generate_plots import generate_image_reconstruction_plot
 
 
+@torch.no_grad()
 def imagine_trajectory(
     agent,
     initial_state: Dict[str, torch.Tensor],
@@ -52,11 +53,12 @@ def imagine_trajectory(
     return imagained_states, imagined_actions
 
 
+@torch.no_grad()
 def rollout_trajectory(
     agent,
     initial_state: Dict[str, torch.Tensor],
     trajectory_length: int,
-    actions: List[torch.Tensor],
+    actions: Union[List[torch.Tensor], torch.Tensor],
     env,
 ) -> Tuple[List[torch.Tensor], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Rolls out a trajectory given the planned actions. Returns the posterior
@@ -135,6 +137,7 @@ def rollout_trajectory(
     return posterior_states, observations, posterior_info
 
 
+@torch.no_grad()
 def sample_rollouts(
     agent,
     env,
@@ -240,6 +243,7 @@ def convert_images_to_numpy(images: List[torch.Tensor]) -> List[np.ndarray]:
     return [np.clip(255 * img, 0, 255).astype(np.uint8) for img in images]
 
 
+@torch.no_grad()
 def evaluate_rollouts(
     agent,
     imagined_state_samples: List[List[torch.Tensor]],
@@ -357,3 +361,188 @@ def evaluate_rollouts(
                         "actual_narration": actual_narration,
                     }
                 )
+
+
+@torch.no_grad()
+def evaluate_language_to_action(
+    agent,
+    env,
+    source_strings: List[str],
+    n_prev_actions: int = 0,
+    prev_action_policy: str = "actor",
+):
+    """Evaluates the language-to-action component of the world model that translates
+    a input string into a sequence of actions that should result in a sequence of
+    environment steps that are described by this string.
+
+    Args:
+        agent: Dreamer Agent containing all model components.
+
+        env : Evaluation environment to rollout in.
+
+        source_strings (List[str]): Possible set of string to test that
+        are sampled from.
+
+        n_prev_actions (int, optional): Number of actions to take in the environment
+        before landing in the starting state for the evaluation. Used to help robustness test
+        the component to ensure diversity of starting state. Defaults to 0.
+
+        prev_action_policy (str, optional): If using previous actions, this sets the type of.
+        policy to use. Must be one of "actor" (use the learned policy to take actions) or
+        "random" (take random actions). Defaults to "actor".
+    """
+
+    config = agent._config
+
+    input_string = random.choice(source_strings)
+    tokenised_input = word_tokenise_text([input_string], agent._wm.vocab)
+    tokenised_input_tensor = torch.tensor(tokenised_input, dtype=torch.long).to(
+        config.device
+    )
+
+    no_convert = config.no_convert_list
+    ignore = config.ignore_list
+
+    obs = env.reset()()
+    transition = obs.copy()
+    transition = add_batch_to_obs(transition)
+    transition = {
+        k: (v if k in no_convert else convert(v))
+        for k, v in transition.items()
+        if k not in ignore
+    }
+    transition = agent._wm.preprocess(transition)
+    embed = agent._wm.encoder(transition)
+    current_state, _ = agent._wm.dynamics.obs_step(
+        embed=embed,
+        is_first=transition["is_first"],
+        prev_state=None,
+        prev_action=None,
+    )
+
+    n_actions = config.num_actions
+    if n_prev_actions > 0:
+        prev_state = current_state
+        action = None
+        for warmup_step in range(n_prev_actions):
+            if prev_action_policy == "random":
+                action_arr = np.zeros(n_actions)
+                action = np.random.randint(n_actions)
+                action_arr[action] = 1  # one-hot representation
+                env_action = {"action": action_arr}
+                obs, reward, done, info = env.step(env_action)()
+            elif prev_action_policy == "actor":
+                action_tensor = agent._task_behavior.actor(prev_state).sample()
+                obs, reward, done, info = env.step(
+                    {"action": action_tensor.squeeze().detach().numpy().cpu()}
+                )()
+                transition = obs.copy()
+                transition = add_batch_to_obs(transition)
+                transition = {
+                    k: (v if k in no_convert else convert(v))
+                    for k, v in transition.items()
+                    if k not in ignore
+                }
+                transition = agent._wm.preprocess(transition)
+                embed = agent._wm.encoder(transition)
+                current_state, _ = agent._wm.dynamics.obs_step(
+                    embed=embed,
+                    is_first=transition["is_first"],
+                    prev_state=prev_state,
+                    prev_action=action,
+                )
+                prev_state = current_state
+
+            else:
+                raise ValueError(f"Invalid policy type provided: {prev_action_policy}")
+            if done:
+                env.reset()()
+                raise RuntimeError(
+                    "Environment terminated during action warmup, cannot evaluate"
+                )
+        # Need to get the latent state as not computed at each step if using random policy
+        if prev_action_policy == "random":
+            transition = obs.copy()
+            transition = add_batch_to_obs(transition)
+            transition = {
+                k: (v if k in no_convert else convert(v))
+                for k, v in transition.items()
+                if k not in ignore
+            }
+            transition = agent._wm.preprocess(transition)
+            embed = agent._wm.encoder(transition)
+            current_state, _ = agent._wm.dynamics.obs_step(
+                embed=embed,
+                is_first=transition["is_first"],
+                prev_state=prev_state,
+                prev_action=action,
+            )
+
+    current_state_tensor = agent._wm.dynamics.get_feat(current_state)
+    initial_state_embed = agent._wm.heads["language"]._initial_embed(
+        current_state_tensor
+    )
+    action_names = ["<PAD>", "<BOS>", "<EOS>"]
+    action_values = [0, 1, 2]
+    for i in range(n_actions):
+        action_names.append(f"action_{i}")
+        action_values.append(i + 3)  # +3 for PAD, BOS, EOS
+    action_translation_dict = {k: v for k, v in zip(action_names, action_values)}
+    translated_action_tokens = (
+        agent._wm.heads["language_to_action"].generate(
+            input_seq=tokenised_input_tensor,
+            vocab=action_translation_dict,
+            max_sequence_length=config.enc_max_length,
+            return_tokens=True,
+            tokens_to_prepend=initial_state_embed,
+        )
+        - 3
+    )  # -3 to recover action one-hot class
+
+    translated_action_tokens = translated_action_tokens[
+        translated_action_tokens >= 0
+    ]  # remove <BOS>, <EOS>, and <PAD> tokens
+
+    translated_one_hot_actions = torch.zeros(
+        (translated_action_tokens.shape[0], n_actions)
+    ).to(config.device)
+    for t in range(len(translated_action_tokens)):
+        translated_one_hot_actions[t, translated_action_tokens[t]] = 1
+    print(f"TRANSLATED ACTIONS: {translated_action_tokens}")
+    posterior_states, observations, _ = rollout_trajectory(
+        agent=agent,
+        initial_state=current_state,
+        trajectory_length=len(translated_one_hot_actions),
+        actions=translated_one_hot_actions.unsqueeze(1),
+        env=env,
+    )
+
+    end_index = len(observations)
+    for index, obs in enumerate(observations):
+        if obs["obs"] is None:
+            end_index = index
+            break
+
+    observations = observations[:end_index]
+    posterior_states = posterior_states[:end_index]
+    images = [obs["obs"]["image"] for obs in observations]
+    reconstructed_images = [
+        agent._wm.heads["decoder"](state)["image"].mode() for state in posterior_states
+    ]
+    reconstructed_images = convert_images_to_numpy(reconstructed_images)
+
+    reconstruction_plot = generate_image_reconstruction_plot(
+        [reconstructed_images, images],
+        2,
+        len(images),
+        row_titles=["Reconstructed", "Actual"],
+    )
+
+    reconstruction_plot.savefig("lang-to-action-eval-plot.png")
+
+    wandb.log(
+        {
+            "reconstruction_plot": reconstruction_plot,
+            "action_source_string": input_string,
+        }
+    )

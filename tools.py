@@ -1167,7 +1167,7 @@ def load_json_vocab(file_path: str) -> dict:
 def word_tokenise_text(
     text: list[str],
     vocab: dict,
-    max_length: int,
+    required_length: Optional[int] = None,
     padding_token: str = "<PAD>",
 ) -> np.ndarray:
     """Tokenise a text into words using a vocabulary.
@@ -1175,9 +1175,15 @@ def word_tokenise_text(
     Args:
         text (list[str]): text to tokenise.
         vocab (dict): vocabulary to use for tokenisation.
+        required_length: Optional[int]: optional required
+        length for each tokenised string. Adds padding to reach this
+        length if needed.
+        padding_token (str, optional): Padding token to insert if
+        required_length is not None. Defaults to "<PAD>".
 
     Returns:
-        list[int]: tokenised text.
+        np.ndarray: array of shape (n_sentences, required_length) containing
+        token integers.
     """
     tokenised_text = []
     for sentence in text:
@@ -1188,15 +1194,15 @@ def word_tokenise_text(
             tokenised_sentence.insert(0, vocab["<BOS>"])
         if tokenised_sentence[-1] != vocab["<EOS>"]:
             tokenised_sentence.append(vocab["<EOS>"])
-        if len(tokenised_sentence) < max_length:
+        if required_length is not None and len(tokenised_sentence) < required_length:
             tokenised_sentence.extend(
-                [vocab[padding_token]] * (max_length - len(tokenised_sentence))
+                [vocab[padding_token]] * (required_length - len(tokenised_sentence))
             )
         tokenised_text.append(tokenised_sentence)
     for sequence in tokenised_text:
-        if len(sequence) != max_length:
+        if required_length is not None and len(sequence) != required_length:
             raise ValueError(
-                f"Sequence length {len(sequence)} does not match max length {max_length}, sequence: {sequence}"
+                f"Sequence length {len(sequence)} does not match required length {required_length}, sequence: {sequence}"
             )
     return np.array(tokenised_text, dtype=np.int32)
 

@@ -32,7 +32,7 @@ from narration.minigrd_narrator import (
     MiniGridTeleportNarrator,
     MiniGridComplexTeleportNarrator,
 )
-from evaluation import sample_rollouts, evaluate_rollouts
+from evaluation import sample_rollouts, evaluate_rollouts, evaluate_language_to_action
 
 
 to_np = lambda x: x.detach().cpu().numpy()
@@ -501,6 +501,10 @@ def main(config):
                 rollout_samples["observation_samples"],
                 trajectory_length=config.eval_trajectory_length,
             )
+            if config.enable_language_to_action:
+                evaluate_language_to_action(
+                    agent, eval_envs[0], source_strings=config.eval_strings
+                )
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(
                     next(eval_dataset),
