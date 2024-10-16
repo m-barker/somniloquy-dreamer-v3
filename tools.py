@@ -1315,6 +1315,7 @@ def narration_loss(
     predicted_tokens: torch.Tensor,
     true_tokens: torch.Tensor,
     pad_idx: int = 0,
+    debug: bool = False,
 ) -> torch.Tensor:
     """Returns the cross entropy loss between the predicted and true tokens.
 
@@ -1329,16 +1330,57 @@ def narration_loss(
         torch.Tensor: The cross entropy loss between the predicted and true tokens.
     """
     T, N, V = predicted_tokens.shape
+    assert N, T == true_tokens.shape
 
     # (seq, batch, vocab) -> (batch, seq, vocab)
     predicted_tokens = predicted_tokens.permute(1, 0, 2)
+    if debug:
+        for batch in range(N):
+            batch_loss = nn.CrossEntropyLoss(ignore_index=pad_idx)(
+                predicted_tokens[batch], true_tokens[batch]
+            )
+            print(f"BATCH_{batch} LOSS: {batch_loss:.2f}")
+            batch_predicted_tokens = predicted_tokens[batch].argmax(dim=-1)
+            print(batch_predicted_tokens)
+            print(true_tokens[batch])
 
-    # reshape to (batch_size * seq_len, target_vocab_size)
     predicted_tokens = predicted_tokens.reshape(-1, V)
-
     # reshape to (batch_size * seq_len)
     true_tokens = true_tokens.reshape(-1)
-    print(f"Predicted tokens: {predicted_tokens.argmax(dim=-1)[:20]}")
-    print(f"True tokens: {true_tokens[:20]}")
+    predicted_tokens_argmax = predicted_tokens.argmax(dim=-1)
 
     return nn.CrossEntropyLoss(ignore_index=pad_idx)(predicted_tokens, true_tokens)
+
+
+def ctc_loss(
+    input_seq_logits: torch.Tensor,
+    target_seq: torch.Tensor,
+    padding_value: int = 0,
+) -> torch.Tensor:
+    """Computes the CTCLoss between the input and target sequences.
+
+    Args:
+        input_seq_logits (torch.Tensor): Shape (T, N, V)
+        target_seq (torch.Tensor): Shape (B, T)
+        padding_value (int, optional): _description_. Defaults to 0.
+
+    Returns:
+        torch.Tensor: _description_
+    """
+    loss = nn.CTCLoss(blank=200 )
+
+    # Need to tell this loss the lengths of each individual sequence
+    # (i.e., the index before the first padding token)
+    input_seq = input_seq_logits.argmax(dim=-1)
+    input_padding_mask = (input_seq == padding_value).long()
+    target_padding_mask = (target_seq == padding_value).long()
+    # Argmax returns the value of the first maximum if ties
+    input_seq_lengths = input_padding_mask.argmax(dim=0)
+    target_seq_lengths = target_padding_mask.argmax(dim=-1)
+
+    print(f"Input Seq logits shape: {input_seq_logits.shape}")
+    print(f"Input lengths shape: {input_seq_lengths.shape}")
+    print(f"Target sequence shape: {target_seq.shape}")
+    print(f"Target lengths shape: {target_seq_lengths.shape}")
+
+    return loss(input_seq_logits, target_seq, input_seq_lengths, target_seq_lengths)

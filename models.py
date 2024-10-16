@@ -481,7 +481,11 @@ class WorldModel(nn.Module):
                     predicted_action_tokens[batch, seq] - action_starting_token,
                 ] = 1
 
-        return predicted_one_hot_actions
+        return (
+            predicted_one_hot_actions,
+            predicted_action_token_logits,
+            true_actions_tokens,
+        )
 
     def _train(self, data):
         # action (batch_size, batch_length, act_dim)
@@ -534,34 +538,38 @@ class WorldModel(nn.Module):
                                 preds["language-to-latent"] = pred_tokens
 
                         if self._config.enable_language_to_action:
-                            predicted_actions = self._language_to_action_tokens(
+                            (
+                                predicted_actions,
+                                predicted_action_logits,
+                                true_action_tokens,
+                            ) = self._language_to_action_tokens(
                                 data["action"],
                                 narrations,
                                 data["is_first"],
                                 starting_states,
                             )
-                            # Shape (batch, seq_len, act_dim)
-                            starting_state_dict = self.dynamics.get_state_dict(
-                                starting_states
-                            )
-                            assert torch.equal(
-                                self.dynamics.get_feat(starting_state_dict),
-                                starting_states,
-                            )
-                            imagined_states = self.dynamics.imagine_with_action(
-                                predicted_actions, starting_state_dict
-                            )
-                            imagined_states = self.dynamics.get_feat(imagined_states)
-                            generated_narrations, generated_logits = self.heads[
-                                "language"
-                            ].generate(
-                                imagined_states,
-                                self.vocab,
-                                self._narration_max_dec_seq - 1,
-                                return_logits=True,
-                            )
-                            print(generated_narrations[0])
-                            preds["language_to_action"] = generated_logits
+                            preds["language_to_action"] = predicted_action_logits
+                            # # Shape (batch, seq_len, act_dim)
+                            # starting_state_dict = self.dynamics.get_state_dict(
+                            #     starting_states
+                            # )
+                            # assert torch.equal(
+                            #     self.dynamics.get_feat(starting_state_dict),
+                            #     starting_states,
+                            # )
+                            # imagined_states = self.dynamics.imagine_with_action(
+                            #     predicted_actions, starting_state_dict
+                            # )
+                            # imagined_states = self.dynamics.get_feat(imagined_states)
+                            # generated_narrations, generated_logits = self.heads[
+                            #     "language"
+                            # ].generate(
+                            #     imagined_states,
+                            #     self.vocab,
+                            #     self._narration_max_dec_seq - 1,
+                            #     return_logits=True,
+                            # )
+                            # preds["language_to_action"] = generated_logits
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))
@@ -593,11 +601,13 @@ class WorldModel(nn.Module):
                         losses[name] = loss
                         # print(f"Language loss: {loss}")
                     elif name == "language_to_action":
-                        loss = tools.narration_loss(pred, narrations[:, 1:])
+                        loss = tools.narration_loss(pred, true_action_tokens[:, 1:])
                         losses[name] = loss
                         print(f"Language to action loss: {loss}")
                     elif name == "language-to-latent":
-                        loss = tools.narration_loss(pred, true_tokens[:, 1:])
+                        loss = tools.narration_loss(
+                            pred, true_tokens[:, 1:], debug=True
+                        )
                         losses[name] = loss
                         print(f"Language to latent loss: {loss}")
                         print("----------------------------------------------")
