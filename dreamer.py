@@ -32,7 +32,12 @@ from narration.minigrd_narrator import (
     MiniGridTeleportNarrator,
     MiniGridComplexTeleportNarrator,
 )
-from evaluation import sample_rollouts, evaluate_rollouts, evaluate_language_to_action
+from evaluation import (
+    sample_rollouts,
+    evaluate_rollouts,
+    evaluate_language_to_action,
+    interactive_language_to_action,
+)
 
 
 to_np = lambda x: x.detach().cpu().numpy()
@@ -460,6 +465,9 @@ def main(config):
         agent.load_state_dict(checkpoint["agent_state_dict"])
         tools.recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
         agent._should_pretrain._once = False
+
+    interactive_language_to_action(agent, eval_envs[0])
+    raise ValueError("DONE")
 
     # make sure eval will be executed once after config.steps
     while agent._step < config.steps + config.eval_every:

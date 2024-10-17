@@ -1,10 +1,11 @@
-from typing import List, Tuple, Union, Dict, Any
+from typing import List, Tuple, Union, Dict, Any, Optional
 import random
 
 import wandb
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import cv2
 
 
 from tools import add_batch_to_obs, convert, word_tokenise_text
@@ -106,20 +107,8 @@ def rollout_trajectory(
         obs, reward, done, info = env.step(
             {"action": action.squeeze(0).detach().cpu().numpy()}
         )()
-        transition = obs.copy()
-        transition = add_batch_to_obs(transition)
-        transition = {
-            k: (v if k in no_convert else convert(v))
-            for k, v in transition.items()
-            if k not in ignore
-        }
-        transition = agent._wm.preprocess(transition)
-        embed = agent._wm.encoder(transition)
-        posterior, _ = agent._wm.dynamics.obs_step(
-            embed=embed,
-            is_first=transition["is_first"],
-            prev_state=prev_state,
-            prev_action=action,
+        posterior = get_posterior_state(
+            agent, obs, no_convert, ignore, prev_state, action
         )
         observations.append(
             {
@@ -170,22 +159,7 @@ def sample_rollouts(
     observation_samples: List[List[Dict[str, Any]]] = []
     for sample in range(n_samples):
         obs = env.reset()()
-        transition = obs.copy()
-        transition = add_batch_to_obs(transition)
-        transition = {
-            k: (v if k in no_convert else convert(v))
-            for k, v in transition.items()
-            if k not in ignore
-        }
-        transition = agent._wm.preprocess(transition)
-        embed = agent._wm.encoder(transition)
-        init_state, _ = agent._wm.dynamics.obs_step(
-            embed=embed,
-            is_first=transition["is_first"],
-            prev_state=None,
-            prev_action=None,
-        )
-        initial_state = init_state
+        initial_state = get_posterior_state(agent, obs, no_convert, ignore)
         imagined_states, imagined_actions = imagine_trajectory(
             agent=agent,
             initial_state=initial_state,
@@ -363,6 +337,72 @@ def evaluate_rollouts(
                 )
 
 
+def get_action_translation_dict(n_actions: int):
+    action_names = ["<PAD>", "<BOS>", "<EOS>"]
+    action_values = [0, 1, 2]
+    for i in range(n_actions):
+        action_names.append(f"action_{i}")
+        action_values.append(i + 3)  # +3 for PAD, BOS, EOS
+    return {k: v for k, v in zip(action_names, action_values)}
+
+
+def get_posterior_state(
+    agent,
+    obs: Dict,
+    no_convert: Optional[List[str]] = None,
+    obs_to_ignore: Optional[List[str]] = None,
+    prev_state: Optional[Dict] = None,
+    prev_action: Optional[torch.Tensor] = None,
+) -> Dict:
+    """Computes a single-step posterior state given the environment observation.
+
+    Args:
+        agent (_type_): Dreamer agent.
+
+        obs (Dict): Current step environment observation in dictionary form.
+
+        no_convert (Optional[List[str]], optional): List of observation keys that should not be converted.
+        Defaults to None.
+
+        obs_to_ignore (Optional[List[str]], optional): List of observation keys that can be discarded.
+        Defaults to None.
+
+        prev_state (Optional[Dict], optional): Previous posterior state. If None, it is assumed that
+        this is the first state in the trajectory. Defaults to None.
+
+        prev_action (Optional[torch.Tensor], optional): Previous action taken. If None, it is assume that
+        this is the first timetep of the trajectory. Defaults to None.
+
+    Returns:
+        Dict: Posterior state dictionary containing the stochastic and deterministic components.
+    """
+
+    no_convert_list = []
+    ignore_list = []
+    if no_convert is not None:
+        no_convert_list = no_convert
+    if obs_to_ignore is not None:
+        ignore_list = obs_to_ignore
+
+    transition = obs.copy()
+    transition = add_batch_to_obs(transition)
+    transition = {
+        k: (v if k in no_convert_list else convert(v))
+        for k, v in transition.items()
+        if k not in ignore_list
+    }
+    transition = agent._wm.preprocess(transition)
+    embed = agent._wm.encoder(transition)
+    posterior_state, _ = agent._wm.dynamics.obs_step(
+        embed=embed,
+        is_first=transition["is_first"],
+        prev_state=prev_state,
+        prev_action=prev_action,
+    )
+
+    return posterior_state
+
+
 @torch.no_grad()
 def evaluate_language_to_action(
     agent,
@@ -404,21 +444,7 @@ def evaluate_language_to_action(
     ignore = config.ignore_list
 
     obs = env.reset()()
-    transition = obs.copy()
-    transition = add_batch_to_obs(transition)
-    transition = {
-        k: (v if k in no_convert else convert(v))
-        for k, v in transition.items()
-        if k not in ignore
-    }
-    transition = agent._wm.preprocess(transition)
-    embed = agent._wm.encoder(transition)
-    current_state, _ = agent._wm.dynamics.obs_step(
-        embed=embed,
-        is_first=transition["is_first"],
-        prev_state=None,
-        prev_action=None,
-    )
+    current_state = get_posterior_state(agent, obs, no_convert, ignore)
 
     n_actions = config.num_actions
     if n_prev_actions > 0:
@@ -436,20 +462,8 @@ def evaluate_language_to_action(
                 obs, reward, done, info = env.step(
                     {"action": action_tensor.squeeze().detach().numpy().cpu()}
                 )()
-                transition = obs.copy()
-                transition = add_batch_to_obs(transition)
-                transition = {
-                    k: (v if k in no_convert else convert(v))
-                    for k, v in transition.items()
-                    if k not in ignore
-                }
-                transition = agent._wm.preprocess(transition)
-                embed = agent._wm.encoder(transition)
-                current_state, _ = agent._wm.dynamics.obs_step(
-                    embed=embed,
-                    is_first=transition["is_first"],
-                    prev_state=prev_state,
-                    prev_action=action,
+                current_state = get_posterior_state(
+                    agent, obs, no_convert, ignore, prev_state, action
                 )
                 prev_state = current_state
 
@@ -462,32 +476,15 @@ def evaluate_language_to_action(
                 )
         # Need to get the latent state as not computed at each step if using random policy
         if prev_action_policy == "random":
-            transition = obs.copy()
-            transition = add_batch_to_obs(transition)
-            transition = {
-                k: (v if k in no_convert else convert(v))
-                for k, v in transition.items()
-                if k not in ignore
-            }
-            transition = agent._wm.preprocess(transition)
-            embed = agent._wm.encoder(transition)
-            current_state, _ = agent._wm.dynamics.obs_step(
-                embed=embed,
-                is_first=transition["is_first"],
-                prev_state=prev_state,
-                prev_action=action,
+            current_state = get_posterior_state(
+                agent, obs, no_convert, ignore, prev_state, action
             )
 
     current_state_tensor = agent._wm.dynamics.get_feat(current_state)
     initial_state_embed = agent._wm.heads["language"]._initial_embed(
         current_state_tensor
     )
-    action_names = ["<PAD>", "<BOS>", "<EOS>"]
-    action_values = [0, 1, 2]
-    for i in range(n_actions):
-        action_names.append(f"action_{i}")
-        action_values.append(i + 3)  # +3 for PAD, BOS, EOS
-    action_translation_dict = {k: v for k, v in zip(action_names, action_values)}
+    action_translation_dict = get_action_translation_dict(n_actions)
     translated_action_tokens = (
         agent._wm.heads["language_to_action"].generate(
             input_seq=tokenised_input_tensor,
@@ -546,3 +543,95 @@ def evaluate_language_to_action(
             "action_source_string": input_string,
         }
     )
+
+
+def display_images_as_video(
+    images, delay=100, window_name="Video Loop", target_size=(600, 600)
+):
+    while True:
+        for img in images:
+            resized_img = cv2.resize(img, target_size, interpolation=cv2.INTER_LINEAR)
+            cv2.imshow(window_name, cv2.cvtColor(resized_img, cv2.COLOR_RGB2BGR))
+
+            # Wait for the specified delay (in ms) between frames
+            key = cv2.waitKey(delay)
+
+            # Break if 'q' key is pressed
+            if key == ord("q"):
+                cv2.destroyAllWindows()
+                return
+
+
+def interactive_language_to_action(agent, env) -> None:
+    """Interactively runs the language-to-action translation component, taking language input
+    from the command line and rolling out the translated actions in the given environment.
+
+    Args:
+        agent: Dreamer Agent.
+        env: Environment to rollout the translated actions in.
+    """
+    obs = env.reset()()
+    done = False
+    config = agent._config
+    n_actions = config.num_actions
+    action_translation_dict = get_action_translation_dict(n_actions)
+    prev_state = None
+    prev_action = None
+    no_convert = config.no_convert_list
+    ignore = config.ignore_list
+    while not done:
+        source_text = input("Please enter a string to be translated into actions:\n")
+        tokenised_source = word_tokenise_text([source_text], agent._wm.vocab)
+        tokenised_source_tensor = torch.tensor(tokenised_source, dtype=torch.long).to(
+            config.device
+        )
+        starting_state_posterior = get_posterior_state(
+            agent,
+            obs,
+            no_convert,
+            ignore,
+            prev_state,
+            prev_action,
+        )
+        starting_state_tensor = agent._wm.dynamics.get_feat(starting_state_posterior)
+        starting_state_embed = agent._wm.heads["language"]._initial_embed(
+            starting_state_tensor
+        )
+        action_tokens = (
+            agent._wm.heads["language_to_action"].generate(
+                input_seq=tokenised_source_tensor,
+                vocab=action_translation_dict,
+                max_sequence_length=config.enc_max_length,
+                return_tokens=True,
+                tokens_to_prepend=starting_state_embed,
+            )
+            - 3
+        )  # -3 to recover action one-hot class
+        translated_action_tokens = action_tokens[
+            action_tokens >= 0
+        ]  # remove <BOS>, <EOS>, and <PAD> tokens
+        print(f"TRANSLATED ACTIONS: {translated_action_tokens}")
+        translated_one_hot_actions = torch.zeros(
+            (translated_action_tokens.shape[0], n_actions)
+        ).to(config.device)
+        for t in range(len(translated_action_tokens)):
+            translated_one_hot_actions[t, translated_action_tokens[t]] = 1
+
+        posterior_states, observations, _ = rollout_trajectory(
+            agent=agent,
+            initial_state=starting_state_posterior,
+            trajectory_length=len(translated_one_hot_actions),
+            actions=translated_one_hot_actions.unsqueeze(1),
+            env=env,
+        )
+        images = []
+        for index, obs in enumerate(observations):
+            if obs["obs"] is None:
+                done = True
+            else:
+                images.append(obs["obs"]["image"])
+        display_images_as_video(images=images)
+
+        obs = observations[-1]
+        prev_state = posterior_states[-1]
+        prev_action = translated_one_hot_actions[-1]

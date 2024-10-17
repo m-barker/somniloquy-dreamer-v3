@@ -216,6 +216,7 @@ crafter:
   # reward_head: { layers: 5 }
   # cont_head: { layers: 5 }
   imag_gradient: "reinforce"
+  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/crafter-with-lang-quick-test/latest.pt"
 
 atari100k:
   steps: 4e5
