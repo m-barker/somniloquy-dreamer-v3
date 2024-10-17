@@ -617,7 +617,7 @@ def interactive_language_to_action(agent, env) -> None:
         for t in range(len(translated_action_tokens)):
             translated_one_hot_actions[t, translated_action_tokens[t]] = 1
 
-        posterior_states, observations, _ = rollout_trajectory(
+        _, observations, posterior_states = rollout_trajectory(
             agent=agent,
             initial_state=starting_state_posterior,
             trajectory_length=len(translated_one_hot_actions),
@@ -632,6 +632,6 @@ def interactive_language_to_action(agent, env) -> None:
                 images.append(obs["obs"]["image"])
         display_images_as_video(images=images)
 
-        obs = observations[-1]
-        prev_state = posterior_states[-1]
-        prev_action = translated_one_hot_actions[-1]
+        obs = observations[-1]["obs"]
+        prev_state = posterior_states[-2]
+        prev_action = translated_one_hot_actions[-1].unsqueeze(0)
