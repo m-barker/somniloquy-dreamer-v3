@@ -181,9 +181,9 @@ crafter:
   eval_every: 500
   train_ratio: 512
   video_pred_log: true
-  # dyn_hidden: 1024
-  # dyn_deter: 4096
-  # units: 1024
+  dyn_hidden: 1024
+  dyn_deter: 4096
+  units: 1024
   log_every: 500
   enable_language: true
   enc_max_length: 16
@@ -196,28 +196,28 @@ crafter:
   vocab_path: vocab/crafter.json
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
-  # encoder:
-  #   {
-  #     mlp_keys: "$^",
-  #     cnn_keys: "image",
-  #     cnn_depth: 96,
-  #     mlp_layers: 5,
-  #     mlp_units: 1024,
-  #   }
-  # decoder:
-  #   {
-  #     mlp_keys: "$^",
-  #     cnn_keys: "image",
-  #     cnn_depth: 96,
-  #     mlp_layers: 5,
-  #     mlp_units: 1024,
-  #   }
+  encoder:
+    {
+      mlp_keys: "$^",
+      cnn_keys: "image",
+      cnn_depth: 96,
+      mlp_layers: 5,
+      mlp_units: 1024,
+    }
+  decoder:
+    {
+      mlp_keys: "$^",
+      cnn_keys: "image",
+      cnn_depth: 96,
+      mlp_layers: 5,
+      mlp_units: 1024,
+    }
   actor: { layers: 5, dist: "onehot", std: "none" }
-  # value: { layers: 5 }
-  # reward_head: { layers: 5 }
-  # cont_head: { layers: 5 }
+  value: { layers: 5 }
+  reward_head: { layers: 5 }
+  cont_head: { layers: 5 }
   imag_gradient: "reinforce"
-  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/crafter-with-lang-quick-test/latest.pt"
+  checkpoint: "logdir/crafter-action-translation/latest.pt"
 
 atari100k:
   steps: 4e5
