@@ -126,7 +126,7 @@ def main(args):
     with torch.no_grad():
         trajectory_length = 16
         n_rollouts = 5
-        obs = env.reset()()  # Nasty
+        obs, info = env.reset()()  # Nasty
 
         all_trajectories = []
         # Sample rollouts
@@ -166,7 +166,7 @@ def main(args):
             print(
                 "-----------------------------------------------------------------------------------------------------"
             )
-            obs = env.reset()()
+            obs, info = env.reset()()
             all_trajectories.append(imagained_states)
 
             for index, state in enumerate(imagained_states):

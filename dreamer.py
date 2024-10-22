@@ -366,9 +366,9 @@ def prefill_dataset(
         logger,
         limit=config.dataset_size,
         steps=prefill,
-        no_convert_obs=["semantic", "inventory", "achievements", "privileged_obs"],
+        no_convert_obs=config.narrator["narration_key"],
         no_save_obs=["rays"],  #
-        info_keys_to_store=["semantic", "inventory", "achievements"],
+        info_keys_to_store=config.narrator["narration_key"],
     )
     logger.step += prefill * config.action_repeat
     print(f"Logger: ({logger.step} steps).")
@@ -466,8 +466,8 @@ def main(config):
         tools.recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
         agent._should_pretrain._once = False
 
-    interactive_language_to_action(agent, eval_envs[0])
-    raise ValueError("DONE")
+    # interactive_language_to_action(agent, eval_envs[0])
+    # raise ValueError("DONE")
 
     # make sure eval will be executed once after config.steps
     while agent._step < config.steps + config.eval_every:
@@ -485,14 +485,9 @@ def main(config):
                 logger,
                 is_eval=True,
                 episodes=config.eval_episode_num,
-                no_convert_obs=[
-                    "semantic",
-                    "inventory",
-                    "achievements",
-                    "privileged_obs",
-                ],
+                no_convert_obs=config.narrator["narration_key"],
                 no_save_obs=["rays"],
-                info_keys_to_store=["semantic", "inventory", "achievements"],
+                info_keys_to_store=config.narrator["narration_key"],
             )
             rollout_samples = sample_rollouts(
                 agent,
@@ -516,22 +511,12 @@ def main(config):
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(
                     next(eval_dataset),
-                    ignore_keys=[
-                        "semantic",
-                        "inventory",
-                        "achievements",
-                        "privileged_obs",
-                    ],
+                    ignore_keys=config.narrator["narration_key"],
                 )
                 if config.enable_language:
                     agent._wm.intent_prediction(
                         next(eval_dataset),
-                        ignore_keys=[
-                            "semantic",
-                            "inventory",
-                            "achievements",
-                            "privileged_obs",
-                        ],
+                        ignore_keys=config.narrator["narration_key"],
                     )
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
@@ -544,9 +529,9 @@ def main(config):
             limit=config.dataset_size,
             steps=config.eval_every,
             state=state,
-            no_convert_obs=["semantic", "inventory", "achievements", "privileged_obs"],
+            no_convert_obs=config.narrator["narration_key"],
             no_save_obs=["rays"],
-            info_keys_to_store=["semantic", "inventory", "achievements"],
+            info_keys_to_store=config.narrator["narration_key"],
         )
         items_to_save = {
             "agent_state_dict": agent.state_dict(),

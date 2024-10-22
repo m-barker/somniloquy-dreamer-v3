@@ -24,6 +24,7 @@ defaults:
   token_sampling_method: "nucleus"
   ignore_list: []
   no_convert_list: []
+  narrator: { narration_key: [] }
 
   # Environment
   task: "dmc_walker_walk"
@@ -280,33 +281,43 @@ memorymaze:
   task: "memorymaze_9x9"
 
 minigrid:
-  steps: 4e5
+  seed: 42
+  steps: 1e6
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
-  # encoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
-  # decoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
-  narrator: { narration_key: "occupancy_grid" }
+  encoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
+  decoder: { mlp_keys: "flattened_occupancy_grid", cnn_keys: "image" }
+  # narrator: { narration_key: ["occupancy_grid"] }
   imag_gradient: "reinforce"
   actions: needed
-  enable_language: true
+  enable_language: false
   enable_language_to_action: false
   action_prediction: false
   vocab_path: vocab/minigrid_four_squares.json
   dec_max_length: 30
   enc_max_length: 16
   video_pred_log: true
-  # task: "minigrid_teleport_complex"
-  task: "minigrid_four_squares"
+  eval_strings:
+    [
+      "the agent did not move",
+      "the agent moved towards the green square which is the goal",
+      "the agent reached the goal",
+      "the agent moved in a circle",
+      "the agent moved towards the purple square which is not the goal.",
+    ]
+  task: "minigrid_teleport_complex"
+  # task: "minigrid_four_squares"
   time_limit: 1024
   # dyn_stoch: 16
   # dyn_discrete: 16
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-grid-longer-train/dreamer-agent-step-19500.pt"
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-57000.pt"
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-four-squares/dreamer-agent-step-42256.pt"
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-action-to-lang/latest.pt"
 
 minedojo:
   steps: 1e8

@@ -158,7 +158,7 @@ def sample_rollouts(
     posterior_state_samples: List[List[torch.Tensor]] = []
     observation_samples: List[List[Dict[str, Any]]] = []
     for sample in range(n_samples):
-        obs = env.reset()()
+        obs, info = env.reset()()
         initial_state = get_posterior_state(agent, obs, no_convert, ignore)
         imagined_states, imagined_actions = imagine_trajectory(
             agent=agent,
@@ -299,7 +299,9 @@ def evaluate_rollouts(
                     config.dec_max_length,
                     sampling_method=config.token_sampling_method,
                 )[0]
-
+                if type(narration_data) is dict:
+                    if len(narration_data.keys()) == 1:  # type: ignore
+                        narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
                 actual_narration = agent._wm.narrator.narrate(narration_data)
 
                 print(
@@ -443,7 +445,7 @@ def evaluate_language_to_action(
     no_convert = config.no_convert_list
     ignore = config.ignore_list
 
-    obs = env.reset()()
+    obs, info = env.reset()()
     current_state = get_posterior_state(agent, obs, no_convert, ignore)
 
     n_actions = config.num_actions
@@ -570,7 +572,7 @@ def interactive_language_to_action(agent, env) -> None:
         agent: Dreamer Agent.
         env: Environment to rollout the translated actions in.
     """
-    obs = env.reset()()
+    obs, info = env.reset()()
     done = False
     config = agent._config
     n_actions = config.num_actions
@@ -607,6 +609,7 @@ def interactive_language_to_action(agent, env) -> None:
             )
             - 3
         )  # -3 to recover action one-hot class
+        print(action_tokens)
         translated_action_tokens = action_tokens[
             action_tokens >= 0
         ]  # remove <BOS>, <EOS>, and <PAD> tokens
@@ -617,7 +620,7 @@ def interactive_language_to_action(agent, env) -> None:
         for t in range(len(translated_action_tokens)):
             translated_one_hot_actions[t, translated_action_tokens[t]] = 1
 
-        posterior_states, observations, _ = rollout_trajectory(
+        _, observations, posterior_states = rollout_trajectory(
             agent=agent,
             initial_state=starting_state_posterior,
             trajectory_length=len(translated_one_hot_actions),
@@ -632,6 +635,6 @@ def interactive_language_to_action(agent, env) -> None:
                 images.append(obs["obs"]["image"])
         display_images_as_video(images=images)
 
-        obs = observations[-1]
-        prev_state = posterior_states[-1]
-        prev_action = translated_one_hot_actions[-1]
+        obs = observations[-1]["obs"]
+        prev_state = posterior_states[-2]
+        prev_action = translated_one_hot_actions[-1].unsqueeze(0)

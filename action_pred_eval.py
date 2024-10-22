@@ -115,7 +115,7 @@ def main(args):
     n_rollouts = 20
 
     # Get initial state
-    obs = env.reset()()  # Nasty
+    obs, info = env.reset()()  # Nasty
     transition = obs.copy()
     transition = add_batch_to_obs(transition)
     transition = {k: convert(v) for k, v in transition.items()}

@@ -152,7 +152,7 @@ def occupancy_grid_to_image(occupancy_grid: np.ndarray) -> np.ndarray:
 
 
 def get_initial_state(agent, env):
-    obs = env.reset()()
+    obs, info = env.reset()()
     transition = obs.copy()
     transition = add_batch_to_obs(transition)
     transition = {k: convert(v) for k, v in transition.items()}

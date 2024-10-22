@@ -137,13 +137,13 @@ class MiniGrid:
         obs, info = self._env.reset()
         self._done = False
         self._step = 0
-        result = self._obs(
+        obs, _, _, info = self._obs(
             obs["rgb_image"],
             0.0,
             obs["encoded_image"],
             is_first=True,
-        )[0]
-        return result
+        )
+        return obs, info
 
     def _obs(
         self,
@@ -157,18 +157,19 @@ class MiniGrid:
         image = img
         if image.shape[:2] != self._img_size:
             image = cv2.resize(image, self._img_size, interpolation=cv2.INTER_AREA)
-        flattened_occupancy_grid = occupancy_grid.flatten()
+        flattened_occupancy_grid = (occupancy_grid.flatten() / 11).astype(np.float32)
         return (
             {
                 "image": image,
-                "occupancy_grid": occupancy_grid,
                 "is_terminal": is_terminal,
                 "is_first": is_first,
                 "flattened_occupancy_grid": flattened_occupancy_grid,
             },
             reward,
             is_last,
-            {},
+            {
+                "occupancy_grid": occupancy_grid,
+            },
         )
 
     def close(self):

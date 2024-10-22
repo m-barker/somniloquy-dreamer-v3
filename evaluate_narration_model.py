@@ -89,9 +89,9 @@ def add_batch_to_obs(obs):
 
 def evaluate_narration_model(env, agent, actions=None):
     img_folder = "/home/mattbarker/dev/somniloquy-dreamer-v3/evaluation_imgs"
-    obs = env.reset()
+    obs, info = env.reset()
     while env.mission != "navigate to the blue square":
-        obs = env.reset()
+        obs, info = env.reset()
     t = obs.copy()
     t = add_batch_to_obs(t)
     # t = {k: tools.convert(v) for k, v in t.items()}

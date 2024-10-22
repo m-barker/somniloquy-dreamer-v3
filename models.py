@@ -492,12 +492,17 @@ class WorldModel(nn.Module):
         # image (batch_size, batch_length, h, w, ch)
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
+        narration_keys = []
         if self._config.enable_language:
             narration_keys = self._config.narrator["narration_key"]
             if type(narration_keys) is list:
                 narration_data = {k: deepcopy(data[k]) for k in narration_keys}
             else:
                 narration_data = deepcopy(data[narration_keys])
+            if type(narration_data) is dict:
+                if len(narration_data.keys()) == 1:  # type: ignore
+                    narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
+
         data = self.preprocess(
             data,
             keys_to_ignore=(
@@ -718,6 +723,9 @@ class WorldModel(nn.Module):
         embed = embed[0, :16].unsqueeze(0)
         if type(self._config.narrator["narration_key"]) is list:
             narration_data_list = {k: v[0, :16] for k, v in narration_data.items()}
+            if type(narration_data) is dict:
+                if len(narration_data.keys()) == 1:  # type: ignore
+                    narration_data_list = narration_data_list[list(narration_data.keys())[0]]  # type: ignore
         else:
             narration_data_list = [narration_data[0][i] for i in range(16)]
         ground_truth_intent = self.narrator.narrate(narration_data_list)

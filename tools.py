@@ -230,23 +230,28 @@ def simulate(
                 results = [envs[i].reset() for i in indices]
                 results = [r() for r in results]
                 for index, result in zip(indices, results):
-                    t = result.copy()
-                    t = {
+                    o, info = result
+                    o = {
                         k: (v if k in no_convert else convert(v))
-                        for k, v in t.items()
+                        for k, v in o.items()
                         if k not in ignore
                     }
+                    t = o.copy()
                     # action will be added to transition in add_to_cache
                     t["reward"] = 0.0
                     t["discount"] = 1.0
                     # initial state should be added to cache
 
+                    for key in info_keys:
+                        if key in info:
+                            t[key] = info[key]
+
                     add_to_cache(cache, envs[index].id, t, no_convert=no_convert)
 
                     # replace obs with done by initial state
-                    obs[index] = result
+                    obs[index] = result[0]
             # step agents
-            obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}
+            obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
             action, agent_state = agent(obs, done, agent_state)
             if isinstance(action, dict):
                 action = [
@@ -260,10 +265,10 @@ def simulate(
             results = [e.step(a) for e, a in zip(envs, action)]
             results = [r() for r in results]
             # print(f"RESULTS: {results}")
-            obs, reward, done = zip(*[p[:3] for p in results])
+            obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
             obs = list(obs)
             reward = list(reward)
-            done = np.stack(done)
+            done = np.stack(done)  # type: ignore
             episode += int(done.sum())
             length += 1
             step += len(envs)
@@ -296,7 +301,7 @@ def simulate(
                 for i in indices:
                     # with Timer("Saving episode"):
                     save_episodes(directory, {envs[i].id: cache[envs[i].id]})
-                    length = len(cache[envs[i].id]["reward"]) - 1
+                    length = len(cache[envs[i].id]["reward"]) - 1  # type: ignore
                     score = float(np.array(cache[envs[i].id]["reward"]).sum())
                     video = cache[envs[i].id]["image"]
                     # record logs given from environments
@@ -309,7 +314,7 @@ def simulate(
                             cache[envs[i].id].pop(key)
 
                     if not is_eval:
-                        step_in_dataset = erase_over_episodes(cache, limit)
+                        step_in_dataset = erase_over_episodes(cache, limit)  # type: ignore
                         logger.scalar(f"dataset_size", step_in_dataset)
                         logger.scalar(f"train_return", score)
                         logger.scalar(f"train_length", length)
@@ -325,7 +330,7 @@ def simulate(
                         eval_lengths.append(length)
 
                         score = sum(eval_scores) / len(eval_scores)
-                        length = sum(eval_lengths) / len(eval_lengths)
+                        length = sum(eval_lengths) / len(eval_lengths)  # type: ignore
                         logger.video(f"eval_policy", np.array(video)[None])
 
                         if len(eval_scores) >= episodes and not eval_done:
@@ -338,7 +343,7 @@ def simulate(
             # keep only last item for saving memory. this cache is used for video_pred later
             while len(cache) > 1:
                 # FIFO
-                cache.popitem(last=False)
+                cache.popitem(last=False)  # type: ignore
     return (step - steps, episode - episodes, done, length, obs, agent_state, reward)
 
 
@@ -1279,7 +1284,7 @@ def generate_batch_narrations(
 
     else:
         for idx, batch in enumerate(observations):
-            narrations: List[str] = []
+            narrations: List[str] = []  # type: ignore
             is_first_batch = is_first[idx]
             assert is_first_batch[0] == 1
             is_first_indices = np.where(is_first_batch == 1)[0]
@@ -1367,7 +1372,7 @@ def ctc_loss(
     Returns:
         torch.Tensor: _description_
     """
-    loss = nn.CTCLoss(blank=200 )
+    loss = nn.CTCLoss(blank=200)
 
     # Need to tell this loss the lengths of each individual sequence
     # (i.e., the index before the first padding token)

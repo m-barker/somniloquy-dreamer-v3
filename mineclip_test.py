@@ -63,7 +63,7 @@ if __name__ == "__main__":
     )
     env = wrappers.SelectAction(env, key="action")
     env = wrappers.UUID(env)
-    obs = env.reset()
+    obs, info = env.reset()
     done = False
     while not done:
         rgb_history = []

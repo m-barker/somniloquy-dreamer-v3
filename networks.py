@@ -194,7 +194,7 @@ class RSSM(nn.Module):
             )
         # overwrite the prev_state only where is_first=True
         elif torch.sum(is_first) > 0:
-            is_first = is_first[:, None]
+            is_first = is_first[:, None]  # Creates a new axis.
             prev_action *= 1.0 - is_first
             init_state = self.initial(len(is_first))
             for key, val in prev_state.items():
