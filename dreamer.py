@@ -37,6 +37,7 @@ from evaluation import (
     evaluate_rollouts,
     evaluate_language_to_action,
     interactive_language_to_action,
+    minigrid_occupancy_grid_reconstruction_eval,
 )
 
 
@@ -504,6 +505,14 @@ def main(config):
                 rollout_samples["observation_samples"],
                 trajectory_length=config.eval_trajectory_length,
             )
+            # minigrid_occupancy_grid_reconstruction_eval(
+            #     agent,
+            #     rollout_samples["imagined_state_samples"],
+            #     rollout_samples["imagined_action_samples"],
+            #     rollout_samples["posterior_state_samples"],
+            #     rollout_samples["observation_samples"],
+            #     trajectory_length=config.eval_trajectory_length,
+            # )
             if config.enable_language_to_action:
                 evaluate_language_to_action(
                     agent, eval_envs[0], source_strings=config.eval_strings

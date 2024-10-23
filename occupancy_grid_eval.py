@@ -24,6 +24,7 @@ from minigrid.core.constants import (
 )
 
 IDX_TO_OBJECT[11] = "teleporter"
+COLORS["white"] = np.array([255, 255, 255])
 
 
 def add_batch_to_obs(obs):
@@ -146,7 +147,7 @@ def occupancy_grid_to_image(occupancy_grid: np.ndarray) -> np.ndarray:
             elif object == "lava":
                 image[i, j] = COLORS["purple"]
             else:
-                image[i, j] = COLORS["purple"]
+                image[i, j] = COLORS["white"]
 
     return image.transpose(1, 0, 2)
 

@@ -529,22 +529,24 @@ def evaluate_language_to_action(
         agent._wm.heads["decoder"](state)["image"].mode() for state in posterior_states
     ]
     reconstructed_images = convert_images_to_numpy(reconstructed_images)
+    try:
+        reconstruction_plot = generate_image_reconstruction_plot(
+            [reconstructed_images, images],
+            2,
+            len(images),
+            row_titles=["Reconstructed", "Actual"],
+        )
 
-    reconstruction_plot = generate_image_reconstruction_plot(
-        [reconstructed_images, images],
-        2,
-        len(images),
-        row_titles=["Reconstructed", "Actual"],
-    )
+        reconstruction_plot.savefig("lang-to-action-eval-plot.png")
 
-    reconstruction_plot.savefig("lang-to-action-eval-plot.png")
-
-    wandb.log(
-        {
-            "reconstruction_plot": reconstruction_plot,
-            "action_source_string": input_string,
-        }
-    )
+        wandb.log(
+            {
+                "reconstruction_plot": reconstruction_plot,
+                "action_source_string": input_string,
+            }
+        )
+    except ValueError:
+        return
 
 
 def display_images_as_video(
@@ -638,3 +640,123 @@ def interactive_language_to_action(agent, env) -> None:
         obs = observations[-1]["obs"]
         prev_state = posterior_states[-2]
         prev_action = translated_one_hot_actions[-1].unsqueeze(0)
+
+
+def minigrid_occupancy_grid_to_image(occupancy_grid: np.ndarray) -> np.ndarray:
+    from minigrid.core.constants import (
+        IDX_TO_OBJECT,
+        COLORS,
+    )
+
+    IDX_TO_OBJECT[11] = "teleporter"
+    COLORS["white"] = np.array([255, 255, 255])
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    for i in range(10):
+        for j in range(10):
+            object_idx = occupancy_grid[i, j][0]
+            try:
+                object = IDX_TO_OBJECT[object_idx]
+            except KeyError:
+                object = "unknown"
+            if object == "wall":
+                image[i, j] = COLORS["grey"]
+            elif object == "empty":
+                image[i, j] = np.array([0, 0, 0])
+            elif object == "teleporter":
+                image[i, j] = COLORS["purple"]
+            elif object == "goal":
+                image[i, j] = COLORS["green"]
+            elif object == "agent":
+                image[i, j] = COLORS["red"]
+            elif object == "unseen":
+                image[i, j] = COLORS["blue"]
+            elif object == "floor":
+                image[i, j] = np.array([0, 0, 0])
+            elif object == "door":
+                image[i, j] = COLORS["yellow"]
+            elif object == "lava":
+                image[i, j] = COLORS["purple"]
+            else:
+                image[i, j] = COLORS["white"]
+
+    return image.transpose(1, 0, 2)
+
+
+def minigrid_occupancy_grid_reconstruction_eval(
+    agent,
+    imagined_state_samples: List[List[torch.Tensor]],
+    imagined_action_samples: List[List[torch.Tensor]],
+    posterior_state_samples: List[List[torch.Tensor]],
+    observation_samples: List[List[Dict[str, Any]]],
+    trajectory_length: int = 16,
+):
+    config = agent._config
+    for sample in range(len(imagined_state_samples)):
+        for index, trajectory in enumerate(
+            range(0, len(imagined_state_samples[sample]), trajectory_length)
+        ):
+            # Adjust the end index if the environment terminated early
+            end_index = trajectory + trajectory_length
+            observations = observation_samples[sample][trajectory:end_index]
+            for index, obs in enumerate(observations):
+                if obs["obs"] is None:
+                    end_index = index
+                    break
+            observations = observation_samples[sample][trajectory:end_index]
+            imagined_states = imagined_state_samples[sample][trajectory:end_index]
+            posterior_states = posterior_state_samples[sample][trajectory:end_index]
+            # Happens when environment (or imagined trajectory) terminates early.
+            if len(imagined_states) == 0:
+                continue
+
+            true_occupancy_grid = [
+                np.round(obs["obs"]["flattened_occupancy_grid"].reshape(10, 10, 3) * 11)
+                for obs in observations
+            ]
+
+            imagined_occupancy_grid = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_occupancy_grid"]
+                    .mode()
+                    .reshape(10, 10, 3)
+                    .cpu()
+                    .numpy()
+                    * 11
+                )
+                for state in imagined_states
+            ]
+            reconstructed_occupancy_grid = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_occupancy_grid"]
+                    .mode()
+                    .reshape(10, 10, 3)
+                    .cpu()
+                    .numpy()
+                    * 11
+                )
+                for state in posterior_states
+            ]
+            true_images = [
+                minigrid_occupancy_grid_to_image(img) for img in true_occupancy_grid
+            ]
+            imagined_images = [
+                minigrid_occupancy_grid_to_image(img) for img in imagined_occupancy_grid
+            ]
+            reconstructed_images = [
+                minigrid_occupancy_grid_to_image(img)
+                for img in reconstructed_occupancy_grid
+            ]
+
+            reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
+                [imagined_images, reconstructed_images, true_images],
+                3,
+                len(true_images),
+                start_time=trajectory,
+            )
+            reconstruction_plot.suptitle(f"Occupancy Grid Reconstruction Plot")
+
+            wandb.log(
+                {
+                    "occupancy grid reconstruction_plot": reconstruction_plot,
+                }
+            )

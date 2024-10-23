@@ -6,6 +6,7 @@ import torch
 from torch import nn
 import networks
 import tools
+from torcheval.metrics.text import Perplexity
 
 to_np = lambda x: x.detach().cpu().numpy()
 
@@ -472,6 +473,8 @@ class WorldModel(nn.Module):
         ).to(self._config.device)
 
         for batch in range(B):
+            # print(f"Predicted action sequence: {predicted_action_tokens[batch]}")
+            # print(f"True action sequence: {true_actions_tokens[batch]}")
             for seq in range(N):
                 if predicted_action_tokens[batch, seq] in [0, 1, 2]:
                     continue
@@ -480,7 +483,6 @@ class WorldModel(nn.Module):
                     seq,
                     predicted_action_tokens[batch, seq] - action_starting_token,
                 ] = 1
-
         return (
             predicted_one_hot_actions,
             predicted_action_token_logits,
@@ -553,28 +555,34 @@ class WorldModel(nn.Module):
                                 data["is_first"],
                                 starting_states,
                             )
-                            preds["language_to_action"] = predicted_action_logits
-                            # # Shape (batch, seq_len, act_dim)
-                            # starting_state_dict = self.dynamics.get_state_dict(
-                            #     starting_states
-                            # )
-                            # assert torch.equal(
-                            #     self.dynamics.get_feat(starting_state_dict),
-                            #     starting_states,
-                            # )
-                            # imagined_states = self.dynamics.imagine_with_action(
-                            #     predicted_actions, starting_state_dict
-                            # )
-                            # imagined_states = self.dynamics.get_feat(imagined_states)
-                            # generated_narrations, generated_logits = self.heads[
-                            #     "language"
-                            # ].generate(
-                            #     imagined_states,
-                            #     self.vocab,
-                            #     self._narration_max_dec_seq - 1,
-                            #     return_logits=True,
-                            # )
+                            # print(f"Predicted Actions: {predicted_actions[0]}")
+                            # print(f"Corresponding True narration: {narrations[0]}")
+                            # preds["language_to_action"] = predicted_action_logits
+                            # Shape (batch, seq_len, act_dim)
+                            starting_state_dict = self.dynamics.get_state_dict(
+                                starting_states
+                            )
+                            assert torch.equal(
+                                self.dynamics.get_feat(starting_state_dict),
+                                starting_states,
+                            )
+                            imagined_states = self.dynamics.imagine_with_action(
+                                predicted_actions, starting_state_dict
+                            )
+                            imagined_states = self.dynamics.get_feat(imagined_states)
+                            generated_narrations, generated_logits = self.heads[
+                                "language"
+                            ].generate(
+                                imagined_states,
+                                self.vocab,
+                                self._narration_max_dec_seq - 1,
+                                return_logits=True,
+                            )
                             # preds["language_to_action"] = generated_logits
+                            preds["language_to_action"] = {
+                                "action_pred": predicted_action_logits,
+                                "language_pred": generated_logits,
+                            }
 
                     elif name == "action_prediction":
                         feat = post["stoch"].reshape(embed.shape[:2] + (-1,))
@@ -606,8 +614,27 @@ class WorldModel(nn.Module):
                         losses[name] = loss
                         # print(f"Language loss: {loss}")
                     elif name == "language_to_action":
-                        loss = tools.narration_loss(pred, true_action_tokens[:, 1:])
+                        # loss = tools.narration_loss(pred, true_action_tokens[:, 1:])
+                        loss_metric = Perplexity(
+                            ignore_index=0, device=self._config.device
+                        )
+                        perplexity_loss = (
+                            loss_metric.update(
+                                pred["language_pred"]
+                                .permute(1, 0, 2)
+                                .to(self._config.device),
+                                narrations[:, 1:].to(self._config.device),
+                            )
+                            .compute()
+                            .to(self._config.device)
+                        )
+                        reconstruction_loss = tools.narration_loss(
+                            pred["action_pred"], true_action_tokens[:, 1:]
+                        )
+                        loss = (0.5 * perplexity_loss) + (0.5 * reconstruction_loss)
                         losses[name] = loss
+                        print(f"Preplexity loss: {perplexity_loss}")
+                        print(f"Action reconstruction loss: {reconstruction_loss}")
                         print(f"Language to action loss: {loss}")
                     elif name == "language-to-latent":
                         loss = tools.narration_loss(
