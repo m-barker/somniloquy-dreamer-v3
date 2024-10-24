@@ -68,7 +68,7 @@ class Crafter:
                 local_grid, pad_width=pad_width, mode="constant", constant_values=0
             )
 
-            info["semantic"] = local_grid
+        info["semantic"] = local_grid
 
         obs = {
             "image": image,
