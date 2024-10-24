@@ -1061,6 +1061,7 @@ class TransformerEncoderDecoder(nn.Module):
             str: the generated sequence of words.
         """
         self.eval()
+        logits = []
         if prompt is None:
             batch_size = input_seq.size(0)
             translated_input = torch.tensor(
@@ -1068,7 +1069,6 @@ class TransformerEncoderDecoder(nn.Module):
             ).unsqueeze(1)
         else:
             translated_input = prompt
-        logits = []
         for _ in range(max_sequence_length):
             output_logits = self.forward(
                 input_seq,
@@ -1101,8 +1101,9 @@ class TransformerEncoderDecoder(nn.Module):
             eos_idx = np.where(batch == self._eos_token)[0]
             if eos_idx.size > 0:
                 batch[eos_idx[0] + 1 :] = self._padding_token
-                logits[eos_idx[0] + 1 :, batch_num, :] = 0.0
-                logits[eos_idx[0] + 1 :, batch_num, self._padding_token] = 1.0
+                # Logits don't have the <BOS> token hence index is one less
+                logits[eos_idx[0] :, batch_num, :] = 0.0
+                logits[eos_idx[0] :, batch_num, self._padding_token] = 1.0
         if return_tokens:
             translation = translated_input
         else:

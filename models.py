@@ -578,6 +578,7 @@ class WorldModel(nn.Module):
                                 self._narration_max_dec_seq - 1,
                                 return_logits=True,
                             )
+                            
                             # preds["language_to_action"] = generated_logits
                             preds["language_to_action"] = {
                                 "action_pred": predicted_action_logits,

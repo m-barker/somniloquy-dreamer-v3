@@ -317,7 +317,7 @@ minigrid:
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-occupancy-grid-longer-train/dreamer-agent-step-19500.pt"
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-stochastic-language-to-latent-test/dreamer-agent-step-57000.pt"
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-four-squares/dreamer-agent-step-42256.pt"
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-action-to-lang/latest.pt"
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-four-square-perplexity-test/latest.pt"
 
 minedojo:
   steps: 1e8
