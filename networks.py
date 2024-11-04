@@ -1104,17 +1104,14 @@ class TransformerEncoderDecoder(nn.Module):
                 # Logits don't have the <BOS> token hence index is one less
                 logits[eos_idx[0] :, batch_num, :] = 0.0
                 logits[eos_idx[0] :, batch_num, self._padding_token] = 1.0
-        if return_tokens:
-            translation = translated_input
-        else:
-            narrations = []
-            for batch in translated_input:
-                narration = [
-                    list(vocab.keys())[list(vocab.values()).index(token_id)]
-                    for token_id in batch
-                ]
-                narration = " ".join(narration)
-                narrations.append(narration)
+        narrations = []
+        for batch in translated_input:
+            narration = [
+                list(vocab.keys())[list(vocab.values()).index(token_id)]
+                for token_id in batch
+            ]
+            narration = " ".join(narration)
+            narrations.append(narration)
             translation = narrations  # type: ignore
         self.train()
         if return_logits:

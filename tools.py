@@ -15,6 +15,9 @@ from torch import nn
 from torch.nn import functional as F
 from torch import distributions as torchd
 from torch.utils.tensorboard import SummaryWriter
+from torcheval.metrics.text import Perplexity, BLEUScore
+
+import wandb
 
 from parallel import Parallel, Damy
 
@@ -166,6 +169,7 @@ def simulate(
     no_convert_obs: Optional[List[str]] = None,
     no_save_obs: Optional[List[str]] = None,
     info_keys_to_store: Optional[List[str]] = None,
+    wandb_run=None,
 ) -> Tuple:
     """Runs agent interaction with the environment.
 
@@ -320,6 +324,18 @@ def simulate(
                         logger.scalar(f"train_length", length)
                         logger.scalar(f"train_episodes", len(cache))
                         logger.write(step=logger.step)
+
+                        if wandb_run is not None:
+                            wandb_run.log(
+                                {
+                                    "dataset_size": step_in_dataset,
+                                    "train_return": score,
+                                    "train_length": length,
+                                    "train_episodes": len(cache),
+                                },
+                                step=logger.step,
+                            )
+
                     else:
                         if not "eval_lengths" in locals():
                             eval_lengths = []
@@ -338,6 +354,15 @@ def simulate(
                             logger.scalar(f"eval_length", length)
                             logger.scalar(f"eval_episodes", len(eval_scores))
                             logger.write(step=logger.step)
+                            if wandb_run is not None:
+                                wandb_run.log(
+                                    {
+                                        "eval_return": score,
+                                        "eval_length": length,
+                                        "eval_episodes": len(eval_scores),
+                                    },
+                                    step=logger.step,
+                                )
                             eval_done = True
         if is_eval:
             # keep only last item for saving memory. this cache is used for video_pred later
@@ -1389,3 +1414,83 @@ def ctc_loss(
     print(f"Target lengths shape: {target_seq_lengths.shape}")
 
     return loss(input_seq_logits, target_seq, input_seq_lengths, target_seq_lengths)
+
+
+def perplexity_metric(
+    predicted_logits: torch.Tensor, true_tokens: torch.Tensor, padding_index: int = 0
+) -> torch.Tensor:
+    """Calculates the perplexity of a sequence of logits.
+
+    Args:
+        predicted_logits (torch.Tensor): Logits of shape ()
+        true_tokens (torch.Tensor): True tokens of shape ()
+        padding_index (int, optional): The token ID used for padding. Defaults to 0.
+
+    Returns:
+        torch.Tensor: Perplexity metric
+    """
+
+    perplexity = Perplexity(ignore_index=padding_index, device=predicted_logits.device)
+    perplexity_score = perplexity.update(predicted_logits, true_tokens).compute()
+    return perplexity_score
+
+
+def bleu_metric_from_tokens(
+    predicted_tokens: torch.Tensor,
+    true_tokens: torch.Tensor,
+    translation_dict: Dict[str, int],
+    n_gram: int = 4,
+) -> torch.Tensor:
+    """Computes the BLEU score between a batch of predicted tokens and a batch of true tokens
+
+    Args:
+        predicted_tokens (torch.Tensor): shape (batch_length, max_seq_length)
+        true_tokens (torch.Tensor): shape (batch_length, max_seq_length)
+        translation_dict (Dict[str, int]): dictionary that translates from words to token IDs.
+        n_gram (int, optional): the number of n-grams to consider. Defaults to 4.
+
+    Returns:
+        torch.Tensor: BLEU score that ranges from [0,1]
+    """
+    candidates: List[str] = []
+    references: List[List[str]] = []
+    token_to_str = {v: k for k, v in translation_dict.items()}
+    tokens_to_remove = [0, 1, 2]  # BOS, EOS, PAD
+    for cand_tokens, ref_tokens in zip(predicted_tokens, true_tokens):
+        cand_str = "".join(
+            [token_to_str[s] for s in cand_tokens if s not in tokens_to_remove]
+        )
+        ref_str = "".join(
+            [token_to_str[s] for s in ref_tokens if s not in tokens_to_remove]
+        )
+        candidates.append(cand_str)
+        references.append(
+            [ref_str]
+        )  # need to make nested list as in theory there can be multiple reference translations per string
+
+    metric = BLEUScore(n_gram=n_gram)
+    metric.update(candidates, references)
+    return metric.compute()
+
+
+def bleu_metric_from_strings(
+    predicted_sequence: str,
+    true_sequence: str,
+    n_gram: int = 4,
+) -> torch.Tensor:
+    """Computes the bleu score between a translated and true string.
+
+    Args:
+        predicted_sequence (str): Machine translated string
+        true_sequence (str): Ground truth string
+        n_gram (int, optional): Number of n-grams to consider. Defaults to 4.
+
+    Returns:
+        torch.Tensor: BLEU score in range [0,1]
+    """
+
+    metric = BLEUScore(n_gram=n_gram)
+    metric.update(
+        predicted_sequence, [true_sequence]
+    )  # there can be multiple referenence strings
+    return metric.compute()

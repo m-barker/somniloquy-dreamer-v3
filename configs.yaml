@@ -295,7 +295,7 @@ minigrid:
   imag_gradient: "reinforce"
   actions: needed
   enable_language: true
-  enable_language_to_action: true
+  enable_language_to_action: false
   action_prediction: false
   vocab_path: vocab/minigrid_four_squares.json
   dec_max_length: 30

@@ -8,7 +8,13 @@ import matplotlib.pyplot as plt
 import cv2
 
 
-from tools import add_batch_to_obs, convert, word_tokenise_text
+from tools import (
+    add_batch_to_obs,
+    convert,
+    word_tokenise_text,
+    bleu_metric_from_strings,
+    perplexity_metric,
+)
 from generate_plots import generate_image_reconstruction_plot
 
 
@@ -224,7 +230,9 @@ def evaluate_rollouts(
     imagined_action_samples: List[List[torch.Tensor]],
     posterior_state_samples: List[List[torch.Tensor]],
     observation_samples: List[List[Dict[str, Any]]],
+    logger,
     trajectory_length: int = 16,
+    wandb_run=None,
 ):
     """Evalues a set of sampled rollouts.
 
@@ -238,6 +246,7 @@ def evaluate_rollouts(
 
     """
     config = agent._config
+    bleu_scores = []
     for sample in range(len(imagined_state_samples)):
         print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
         for index, trajectory in enumerate(
@@ -293,16 +302,35 @@ def evaluate_rollouts(
                 imagined_state_tensor = torch.cat(imagined_states, dim=0).permute(
                     1, 0, 2
                 )
-                planned_intent: str = agent._wm.heads["language"].generate(
+                # our batch size is 1 so take first item in list
+                planned_intent = agent._wm.heads["language"].generate(
                     imagined_state_tensor,
                     agent._wm.vocab,
                     config.dec_max_length,
                     sampling_method=config.token_sampling_method,
                 )[0]
+                planned_intent = " ".join(
+                    [
+                        word
+                        for word in planned_intent.split()
+                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                    ]
+                )
+
                 if type(narration_data) is dict:
                     if len(narration_data.keys()) == 1:  # type: ignore
                         narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
                 actual_narration = agent._wm.narrator.narrate(narration_data)
+
+                try:
+                    bleu_score = bleu_metric_from_strings(
+                        planned_intent, actual_narration
+                    )
+                # When too few tokens generated
+                except ValueError:
+                    bleu_score = torch.tensor(0.0)
+
+                bleu_scores.append(float(bleu_score))  # convert tensor
 
                 print(
                     f"Sample {sample} Trajectory {index} Planned Intent: {planned_intent}"
@@ -310,33 +338,37 @@ def evaluate_rollouts(
                 print(
                     f"Sample {sample} Trajectory {index} Actual Narration: {actual_narration}"
                 )
+                print(f"Sample {sample} Trajectory {index} BLEU Score: {bleu_score}")
 
-                imagined_images = [
-                    agent._wm.heads["decoder"](state)["image"].mode()
-                    for state in imagined_states
-                ]
-                reconstructed_images = [
-                    agent._wm.heads["decoder"](state)["image"].mode()
-                    for state in posterior_states
-                ]
-                imagined_images = convert_images_to_numpy(imagined_images)
-                reconstructed_images = convert_images_to_numpy(reconstructed_images)
+                # imagined_images = [
+                #     agent._wm.heads["decoder"](state)["image"].mode()
+                #     for state in imagined_states
+                # ]
+                # reconstructed_images = [
+                #     agent._wm.heads["decoder"](state)["image"].mode()
+                #     for state in posterior_states
+                # ]
+                # imagined_images = convert_images_to_numpy(imagined_images)
+                # reconstructed_images = convert_images_to_numpy(reconstructed_images)
 
-                reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
-                    [imagined_images, reconstructed_images, images],
-                    3,
-                    len(images),
-                    start_time=trajectory,
-                )
-                reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
+                # reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
+                #     [imagined_images, reconstructed_images, images],
+                #     3,
+                #     len(images),
+                #     start_time=trajectory,
+                # )
+                # reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
 
-                wandb.log(
-                    {
-                        "reconstruction_plot": reconstruction_plot,
-                        "planned_intent": planned_intent,
-                        "actual_narration": actual_narration,
-                    }
-                )
+                # wandb.log(
+                #     {
+                #         "reconstruction_plot": reconstruction_plot,
+                #         "planned_intent": planned_intent,
+                #         "actual_narration": actual_narration,
+                #     }
+                # )
+    bleu_scores = np.array(bleu_scores)
+    mean_score = bleu_scores.mean()
+    wandb_run.log({"mean_bleu_score": mean_score}, step=logger.step)
 
 
 def get_action_translation_dict(n_actions: int):
@@ -539,12 +571,12 @@ def evaluate_language_to_action(
 
         reconstruction_plot.savefig("lang-to-action-eval-plot.png")
 
-        wandb.log(
-            {
-                "reconstruction_plot": reconstruction_plot,
-                "action_source_string": input_string,
-            }
-        )
+        # wandb.log(
+        #     {
+        #         "reconstruction_plot": reconstruction_plot,
+        #         "action_source_string": input_string,
+        #     }
+        # )
     except ValueError:
         return
 
@@ -755,8 +787,8 @@ def minigrid_occupancy_grid_reconstruction_eval(
             )
             reconstruction_plot.suptitle(f"Occupancy Grid Reconstruction Plot")
 
-            wandb.log(
-                {
-                    "occupancy grid reconstruction_plot": reconstruction_plot,
-                }
-            )
+            # wandb.log(
+            #     {
+            #         "occupancy grid reconstruction_plot": reconstruction_plot,
+            #     }
+            # )

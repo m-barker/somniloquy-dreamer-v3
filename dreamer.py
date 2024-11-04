@@ -182,7 +182,7 @@ def count_steps(folder):
 
 
 def make_dataset(episodes, config):
-    generator = tools.sample_episodes(episodes, config.batch_length)
+    generator = tools.sample_episodes(episodes, config.batch_length, config.seed)
     dataset = tools.from_generator(generator, config.batch_size)
     return dataset
 
@@ -430,11 +430,15 @@ def main(config):
     import wandb
 
     # Start a wandb run with `sync_tensorboard=True`
-    wandb.init(project="crafer-with-lang", sync_tensorboard=True)
     config, logdir = setup(config)
     step = count_steps(config.traindir)
     # step in logger is environmental step
     logger = tools.Logger(logdir, config.action_repeat * step)
+    run = wandb.init(
+        project="somniloquy-minigrid-four-squares",
+        notes="language-metrics-test",
+        config=config,
+    )
 
     print("Create envs.")
     train_envs, eval_envs = create_environments(config)
@@ -489,6 +493,7 @@ def main(config):
                 no_convert_obs=config.narrator["narration_key"],
                 no_save_obs=["rays"],
                 info_keys_to_store=config.narrator["narration_key"],
+                wandb_run=run,
             )
             rollout_samples = sample_rollouts(
                 agent,
@@ -503,7 +508,9 @@ def main(config):
                 rollout_samples["imagined_action_samples"],
                 rollout_samples["posterior_state_samples"],
                 rollout_samples["observation_samples"],
+                logger=logger,
                 trajectory_length=config.eval_trajectory_length,
+                wandb_run=run,
             )
             # minigrid_occupancy_grid_reconstruction_eval(
             #     agent,
@@ -541,6 +548,7 @@ def main(config):
             no_convert_obs=config.narrator["narration_key"],
             no_save_obs=["rays"],
             info_keys_to_store=config.narrator["narration_key"],
+            wandb_run=run,
         )
         items_to_save = {
             "agent_state_dict": agent.state_dict(),

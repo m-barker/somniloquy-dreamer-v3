@@ -578,7 +578,7 @@ class WorldModel(nn.Module):
                                 self._narration_max_dec_seq - 1,
                                 return_logits=True,
                             )
-                            
+
                             # preds["language_to_action"] = generated_logits
                             preds["language_to_action"] = {
                                 "action_pred": predicted_action_logits,
@@ -616,26 +616,29 @@ class WorldModel(nn.Module):
                         # print(f"Language loss: {loss}")
                     elif name == "language_to_action":
                         # loss = tools.narration_loss(pred, true_action_tokens[:, 1:])
-                        loss_metric = Perplexity(
-                            ignore_index=0, device=self._config.device
+                        # loss_metric = Perplexity(
+                        #     ignore_index=0, device=self._config.device
+                        # )
+                        # perplexity_loss = (
+                        #     loss_metric.update(
+                        #         pred["language_pred"]
+                        #         .permute(1, 0, 2)
+                        #         .to(self._config.device),
+                        #         narrations[:, 1:].to(self._config.device),
+                        #     )
+                        #     .compute()
+                        #     .to(self._config.device)
+                        # )
+                        # reconstruction_loss = tools.narration_loss(
+                        #     pred["action_pred"], true_action_tokens[:, 1:]
+                        # )
+                        # loss = (0.5 * perplexity_loss) + (0.5 * reconstruction_loss)
+                        loss = tools.narration_loss(
+                            pred["language_pred"], narrations[:, 1:]
                         )
-                        perplexity_loss = (
-                            loss_metric.update(
-                                pred["language_pred"]
-                                .permute(1, 0, 2)
-                                .to(self._config.device),
-                                narrations[:, 1:].to(self._config.device),
-                            )
-                            .compute()
-                            .to(self._config.device)
-                        )
-                        reconstruction_loss = tools.narration_loss(
-                            pred["action_pred"], true_action_tokens[:, 1:]
-                        )
-                        loss = (0.5 * perplexity_loss) + (0.5 * reconstruction_loss)
                         losses[name] = loss
-                        print(f"Preplexity loss: {perplexity_loss}")
-                        print(f"Action reconstruction loss: {reconstruction_loss}")
+                        # print(f"Preplexity loss: {perplexity_loss}")
+                        # print(f"Action reconstruction loss: {reconstruction_loss}")
                         print(f"Language to action loss: {loss}")
                     elif name == "language-to-latent":
                         loss = tools.narration_loss(
