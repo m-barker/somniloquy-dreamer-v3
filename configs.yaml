@@ -188,7 +188,7 @@ crafter:
   enable_language: true
   enc_max_length: 16
   dec_max_length: 150
-  enable_language_to_action: true
+  enable_language_to_action: false
   eval_strings:
     [
       "I will see tree, cow, and grass. I will harvest 1 wood. I will not craft anything. I will not eat anything and get more hungry. I will not drink anything and get more thirsty. I will not sleep and get more tired.",
