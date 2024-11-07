@@ -3,6 +3,7 @@ import collections
 import io
 import os
 import json
+import string
 import pathlib
 import time
 import random
@@ -1477,6 +1478,8 @@ def bleu_metric_from_strings(
     predicted_sequence: str,
     true_sequence: str,
     n_gram: int = 4,
+    convert_case: bool = True,
+    remove_punctuation: bool = True,
 ) -> torch.Tensor:
     """Computes the bleu score between a translated and true string.
 
@@ -1484,10 +1487,26 @@ def bleu_metric_from_strings(
         predicted_sequence (str): Machine translated string
         true_sequence (str): Ground truth string
         n_gram (int, optional): Number of n-grams to consider. Defaults to 4.
+        convert_case (bool, optional): Whether to convert the strings to lower
+        case (BLEU is not case insensitive). Defaults to True.
+        remove_punctuation (bool, optional): Whether to remove punctuation from
+        the strings. Defaults to True.
 
     Returns:
         torch.Tensor: BLEU score in range [0,1]
     """
+
+    if convert_case:
+        predicted_sequence = predicted_sequence.lower()
+        true_sequence = true_sequence.lower()
+    if remove_punctuation:
+        # From https://stackoverflow.com/questions/265960/best-way-to-strip-punctuation-from-a-string
+        predicted_sequence = predicted_sequence.translate(
+            str.maketrans("", "", string.punctuation)
+        )
+        true_sequence = true_sequence.translate(
+            str.maketrans("", "", string.punctuation)
+        )
 
     metric = BLEUScore(n_gram=n_gram)
     metric.update(
