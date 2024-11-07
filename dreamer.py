@@ -435,7 +435,7 @@ def main(config):
     # step in logger is environmental step
     logger = tools.Logger(logdir, config.action_repeat * step)
     run = wandb.init(
-        project="somniloquy-minigrid-four-squares",
+        project="somniloquy",
         notes="language-metrics-test",
         config=config,
     )
