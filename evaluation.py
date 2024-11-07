@@ -247,6 +247,7 @@ def evaluate_rollouts(
     """
     config = agent._config
     bleu_scores = []
+    posterior_bleu_scores = []
     for sample in range(len(imagined_state_samples)):
         print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
         for index, trajectory in enumerate(
@@ -302,6 +303,9 @@ def evaluate_rollouts(
                 imagined_state_tensor = torch.cat(imagined_states, dim=0).permute(
                     1, 0, 2
                 )
+                posterior_state_tensor = torch.cat(posterior_states, dim=0).permute(
+                    1, 0, 2
+                )
                 # our batch size is 1 so take first item in list
                 planned_intent = agent._wm.heads["language"].generate(
                     imagined_state_tensor,
@@ -313,6 +317,19 @@ def evaluate_rollouts(
                     [
                         word
                         for word in planned_intent.split()
+                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                    ]
+                )
+                reconstructed_intent = agent._wm.heads["language"].generate(
+                    posterior_state_tensor,
+                    agent._wm.vocab,
+                    config.dec_max_length,
+                    sampling_method=config.token_sampling_method,
+                )[0]
+                reconstructed_intent = " ".join(
+                    [
+                        word
+                        for word in reconstructed_intent.split()
                         if word not in ["<BOS>", "<EOS>", "<PAD>"]
                     ]
                 )
@@ -332,13 +349,27 @@ def evaluate_rollouts(
 
                 bleu_scores.append(float(bleu_score))  # convert tensor
 
+                try:
+                    posterior_bleu_score = bleu_metric_from_strings(
+                        reconstructed_intent, actual_narration
+                    )
+                except ValueError:
+                    posterior_bleu_score = torch.tensor(0.0)
+
+                posterior_bleu_scores.append(float(posterior_bleu_score))
+
                 print(
                     f"Sample {sample} Trajectory {index} Planned Intent: {planned_intent}"
                 )
                 print(
                     f"Sample {sample} Trajectory {index} Actual Narration: {actual_narration}"
                 )
-                print(f"Sample {sample} Trajectory {index} BLEU Score: {bleu_score}")
+                print(
+                    f"Sample {sample} Trajectory {index} Imagined BLEU Score: {bleu_score}"
+                )
+                print(
+                    f"Sample {sample} Trajectory {index} Reconstructed BLEU Score: {posterior_bleu_score}"
+                )
 
                 # imagined_images = [
                 #     agent._wm.heads["decoder"](state)["image"].mode()
@@ -367,8 +398,16 @@ def evaluate_rollouts(
                 #     }
                 # )
     bleu_scores = np.array(bleu_scores)
+    posterior_bleu_scores = np.array(posterior_bleu_scores)
     mean_score = bleu_scores.mean()
-    wandb_run.log({"mean_bleu_score": mean_score}, step=logger.step)
+    mean_posterior_score = posterior_bleu_scores.mean()
+    wandb_run.log(
+        {
+            "mean_imagined_bleu_score": mean_score,
+            "mean_posterior_bleu_score": mean_posterior_score,
+        },
+        step=logger.step,
+    )
 
 
 def get_action_translation_dict(n_actions: int):
