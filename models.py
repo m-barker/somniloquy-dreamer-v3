@@ -495,15 +495,15 @@ class WorldModel(nn.Module):
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
         narration_keys = []
-        if self._config.enable_language:
-            narration_keys = self._config.narrator["narration_key"]
-            if type(narration_keys) is list:
-                narration_data = {k: deepcopy(data[k]) for k in narration_keys}
-            else:
-                narration_data = deepcopy(data[narration_keys])
-            if type(narration_data) is dict:
-                if len(narration_data.keys()) == 1:  # type: ignore
-                    narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
+        # if self._config.enable_language:
+        narration_keys = self._config.narrator["narration_key"]
+        if type(narration_keys) is list:
+            narration_data = {k: deepcopy(data[k]) for k in narration_keys}
+        else:
+            narration_data = deepcopy(data[narration_keys])
+        if type(narration_data) is dict:
+            if len(narration_data.keys()) == 1:  # type: ignore
+                narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
 
         data = self.preprocess(
             data,

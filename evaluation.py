@@ -15,6 +15,7 @@ from tools import (
     bleu_metric_from_strings,
     perplexity_metric,
 )
+from narration.crafter_narrator import CrafterNarrator
 from generate_plots import generate_image_reconstruction_plot
 
 
@@ -831,3 +832,259 @@ def minigrid_occupancy_grid_reconstruction_eval(
             #         "occupancy grid reconstruction_plot": reconstruction_plot,
             #     }
             # )
+
+
+def crafter_narration_using_obs_reconstruction(
+    agent,
+    imagined_state_samples: List[List[torch.Tensor]],
+    imagined_action_samples: List[List[torch.Tensor]],
+    posterior_state_samples: List[List[torch.Tensor]],
+    observation_samples: List[List[Dict[str, Any]]],
+    logger,
+    wandb_run,
+    trajectory_length: int = 16,
+) -> None:
+    """Decodes the latetnt state to compute reconstructed observations
+    that are then passed to the rule-based narrator directly, to evaluate
+    the extent to which we need the transformer component.
+
+    Args:
+        agent (_type_): Dreamer agent that contains the world model.
+        imagined_state_samples (List[List[torch.Tensor]]): (n_samples, n_trajectories * traj_length)
+        imagined_action_samples (List[List[torch.Tensor]]): (n_samples, n_trajectories * traj_length)
+        posterior_state_samples (List[List[torch.Tensor]]): (n_samples, n_trajectories * traj_length)
+        observation_samples (List[List[Dict[str, Any]]]): (n_samples, n_trajectories * traj_length)
+        trajectory_length (int, optional): Length of each trajectory. Defaults to 16.
+    """
+    inventory_keys = [
+        "health",
+        "food",
+        "drink",
+        "energy",
+        "sapling",
+        "wood",
+        "stone",
+        "coal",
+        "iron",
+        "diamond",
+        "wood_pickaxe",
+        "stone_pickaxe",
+        "iron_pickaxe",
+        "wood_sword",
+        "stone_sword",
+        "iron_sword",
+    ]
+    achievement_keys = [
+        "collect_coal",
+        "collect_diamond",
+        "collect_drink",
+        "collect_iron",
+        "collect_sapling",
+        "collect_stone",
+        "collect_wood",
+        "defeat_skeleton",
+        "defeat_zombie",
+        "eat_cow",
+        "eat_plant",
+        "make_iron_pickaxe",
+        "make_iron_sword",
+        "make_stone_pickaxe",
+        "make_stone_sword" "make_wood_pickaxe",
+        "make_wood_sword",
+        "place_furnace",
+        "place_plant",
+        "place_stone",
+        "place_table",
+        "wake_up",
+    ]
+    reconstructed_bleu_scores = []
+    imagined_bleu_scores = []
+    for sample in range(len(imagined_state_samples)):
+        for index, trajectory in enumerate(
+            range(0, len(imagined_state_samples[sample]), trajectory_length)
+        ):
+            # Adjust the end index if the environment terminated early
+            end_index = trajectory + trajectory_length
+            observations = observation_samples[sample][trajectory:end_index]
+            for index, obs in enumerate(observations):
+                if obs["obs"] is None:
+                    end_index = index
+                    break
+            observations = observation_samples[sample][trajectory:end_index]
+            imagined_states = imagined_state_samples[sample][trajectory:end_index]
+            posterior_states = posterior_state_samples[sample][trajectory:end_index]
+            # Happens when environment (or imagined trajectory) terminates early.
+            if len(imagined_states) == 0:
+                continue
+
+            imagined_narration_obs: Dict[str, Any] = {
+                "semantic": [],
+                "inventory": [],
+                "achievements": [],
+            }
+
+            reconstructed_narration_obs: Dict[str, Any] = {
+                "semantic": [],
+                "inventory": [],
+                "achievements": [],
+            }
+
+            imagined_grid = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_grid"]
+                    .mode()
+                    .reshape(7, 9)
+                    .cpu()
+                    .numpy()
+                    * 18
+                )
+                for state in imagined_states
+            ]
+            imagined_inventory = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_inventory"]
+                    .mode()
+                    .cpu()
+                    .numpy()
+                    .flatten()
+                    * 200
+                )
+                for state in imagined_states
+            ]
+            imagined_achievements = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_achievements"]
+                    .mode()
+                    .cpu()
+                    .numpy()
+                    .flatten()
+                    * 200
+                )
+                for state in imagined_states
+            ]
+
+            reconstructed_grid = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_grid"]
+                    .mode()
+                    .reshape(7, 9)
+                    .cpu()
+                    .numpy()
+                    * 18
+                )
+                for state in posterior_states
+            ]
+            reconstructed_inventory = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_inventory"]
+                    .mode()
+                    .cpu()
+                    .numpy()
+                    .flatten()
+                    * 200
+                )
+                for state in posterior_states
+            ]
+            reconstructed_achievements = [
+                np.round(
+                    agent._wm.heads["decoder"](state)["flattened_achievements"]
+                    .mode()
+                    .cpu()
+                    .numpy()
+                    .flatten()
+                    * 200
+                )
+                for state in posterior_states
+            ]
+
+            for i in range(len(posterior_states)):
+                imagined_narration_obs["semantic"].append(imagined_grid[i])
+                reconstructed_narration_obs["semantic"].append(reconstructed_grid[i])
+                imagined_achievements_dict = {}
+                reconstructed_achievements_dict = {}
+                for index, achievment_str in enumerate(achievement_keys):
+                    imagined_achievements_dict[achievment_str] = imagined_achievements[
+                        i
+                    ][index]
+                    reconstructed_achievements_dict[achievment_str] = (
+                        reconstructed_achievements[i][index]
+                    )
+                imagined_inventory_dict = {}
+                reconstructed_inventory_dict = {}
+                for index, inventory_str in enumerate(inventory_keys):
+                    imagined_inventory_dict[inventory_str] = imagined_inventory[i][
+                        index
+                    ]
+                    reconstructed_inventory_dict[inventory_str] = (
+                        reconstructed_inventory[i][index]
+                    )
+                imagined_narration_obs["achievements"].append(
+                    imagined_achievements_dict
+                )
+                reconstructed_narration_obs["achievements"].append(
+                    reconstructed_achievements_dict
+                )
+                imagined_narration_obs["inventory"].append(imagined_inventory_dict)
+                reconstructed_narration_obs["inventory"].append(
+                    reconstructed_inventory_dict
+                )
+                narration_keys = ["semantic", "inventory", "achievements"]
+                narrator = CrafterNarrator()
+                try:
+                    narration_data = [
+                        {key: obs[key] for key in narration_keys}
+                        for obs in observations
+                    ]
+                except KeyError:
+                    narration_data = [
+                        {key: obs["info"][key] for key in narration_keys}
+                        for obs in observations
+                    ]
+                # Comine into a single dictionary
+                narration_data = {
+                    key: [data[key] for data in narration_data]
+                    for key in narration_keys
+                }  # type: ignore
+
+                true_narration = narrator.narrate(narration_data)  # type: ignore
+                try:
+                    reconstructed_narration = narrator.narrate(
+                        reconstructed_narration_obs
+                    )
+                    reconstructed_bleu_score = float(
+                        bleu_metric_from_strings(
+                            reconstructed_narration, true_narration
+                        )
+                    )
+                    print(f"Reconstruction Narration: {reconstructed_narration}")
+
+                except Exception as e:
+                    print(f"Failed to generated reconstructed narration: {e}")
+                    reconstructed_bleu_score = 0.0
+                try:
+                    imagined_narration = narrator.narrate(imagined_narration_obs)
+                    imagined_bleu_score = float(
+                        bleu_metric_from_strings(imagined_narration, true_narration)
+                    )
+                    print(f"Imagined Narration: {imagined_narration}")
+
+                except Exception as e:
+                    print(f"Failed to generated imagined narration: {e}")
+                    imagined_bleu_score = 0.0
+
+                print(f"Reconstructed_BLEU_score: {reconstructed_bleu_score}")
+                print(f"Imagined BLEU score: {imagined_bleu_score}")
+
+                reconstructed_bleu_scores.append(reconstructed_bleu_score)
+                imagined_bleu_scores.append(imagined_bleu_score)
+    imagined_bleu_scores = np.array(imagined_bleu_scores)
+    reconstructed_bleu_scores = np.array(reconstructed_bleu_scores)
+    mean_imagined_score = imagined_bleu_scores.mean()
+    mean_posterior_score = reconstructed_bleu_scores.mean()
+    wandb_run.log(
+        {
+            "obs_decoding_mean_imagined_bleu_score": mean_imagined_score,
+            "obs_decoding_mean_posterior_bleu_score": mean_posterior_score,
+        },
+        step=logger.step,
+    )

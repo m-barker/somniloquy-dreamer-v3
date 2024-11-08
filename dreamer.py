@@ -36,8 +36,7 @@ from evaluation import (
     sample_rollouts,
     evaluate_rollouts,
     evaluate_language_to_action,
-    interactive_language_to_action,
-    minigrid_occupancy_grid_reconstruction_eval,
+    crafter_narration_using_obs_reconstruction,
 )
 
 
@@ -502,16 +501,28 @@ def main(config):
                 trajectory_length=config.eval_trajectory_length,
                 n_consecutive_trajectories=config.eval_n_consecutive_trajectories,
             )
-            evaluate_rollouts(
-                agent,
-                rollout_samples["imagined_state_samples"],
-                rollout_samples["imagined_action_samples"],
-                rollout_samples["posterior_state_samples"],
-                rollout_samples["observation_samples"],
-                logger=logger,
-                trajectory_length=config.eval_trajectory_length,
-                wandb_run=run,
-            )
+            if config.enable_language:
+                evaluate_rollouts(
+                    agent,
+                    rollout_samples["imagined_state_samples"],
+                    rollout_samples["imagined_action_samples"],
+                    rollout_samples["posterior_state_samples"],
+                    rollout_samples["observation_samples"],
+                    logger=logger,
+                    trajectory_length=config.eval_trajectory_length,
+                    wandb_run=run,
+                )
+            if config.evaluate_reconstruction_narration:
+                crafter_narration_using_obs_reconstruction(
+                    agent,
+                    rollout_samples["imagined_state_samples"],
+                    rollout_samples["imagined_action_samples"],
+                    rollout_samples["posterior_state_samples"],
+                    rollout_samples["observation_samples"],
+                    logger=logger,
+                    trajectory_length=config.eval_trajectory_length,
+                    wandb_run=run,
+                )
             # minigrid_occupancy_grid_reconstruction_eval(
             #     agent,
             #     rollout_samples["imagined_state_samples"],

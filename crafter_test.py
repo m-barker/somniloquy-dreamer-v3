@@ -367,7 +367,7 @@ class CrafterNarrator:
 
 
 env = gym.make("CrafterReward-v1")  # Or CrafterNoReward-v1
-env = HumanRendering(env)
+# env = HumanRendering(env)
 obs, _ = env.reset()
 done = False
 step_count = 0
@@ -397,7 +397,8 @@ while not done:
         local_grid = np.pad(
             local_grid, pad_width=pad_width, mode="constant", constant_values=0
         )
-
+    print(info["inventory"].keys())
+    print(info["achievements"].keys())
     obs_hist.append(
         {
             "semantic": local_grid,
@@ -405,6 +406,23 @@ while not done:
             "achievements": info["achievements"],
         }
     )
+    flattened_grid = local_grid.flatten()
+    flattened_inventory = np.array(list(info["inventory"].values()))
+    flattened_achievements = np.array(list(info["achievements"].values()))
+
+    print(flattened_grid.shape)
+    print(flattened_inventory.shape)
+    print(flattened_achievements.shape)
+
+    # Normalisation test
+    flattened_grid = flattened_grid / 18
+    flattened_inventory = flattened_inventory / 100
+    flattened_achievements = flattened_achievements / 100
+
+    print(flattened_grid.max())
+    print(flattened_inventory.max())
+    print(flattened_achievements.max())
+
     step_count += 1
     if step_count % narrate_every == 0 or done:
         print(narrator.narrate(obs_hist))

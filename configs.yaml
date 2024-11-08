@@ -175,17 +175,18 @@ dmc_vision:
 crafter:
   task: crafter_reward
   step: 1e6
+  evaluate_reconstruction_narration: true
   action_repeat: 1
   envs: 1
   eval_episode_num: 1
   eval_every: 500
   train_ratio: 512
   video_pred_log: true
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
+  # dyn_hidden: 1024
+  # dyn_deter: 4096
+  # units: 1024
   log_every: 500
-  enable_language: true
+  enable_language: false
   enc_max_length: 16
   dec_max_length: 150
   enable_language_to_action: false
@@ -196,26 +197,24 @@ crafter:
   vocab_path: vocab/crafter.json
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
-  encoder:
-    {
-      mlp_keys: "$^",
+  encoder: {
+      mlp_keys: "flattened_grid|flattened_inventory|flattened_achievements",
       cnn_keys: "image",
-      cnn_depth: 96,
-      mlp_layers: 5,
-      mlp_units: 1024,
+      # cnn_depth: 96,
+      # mlp_layers: 5,
+      # mlp_units: 1024,
     }
-  decoder:
-    {
-      mlp_keys: "$^",
+  decoder: {
+      mlp_keys: "flattened_grid|flattened_inventory|flattened_achievements",
       cnn_keys: "image",
-      cnn_depth: 96,
-      mlp_layers: 5,
-      mlp_units: 1024,
+      # cnn_depth: 96,
+      # mlp_layers: 5,
+      # mlp_units: 1024,
     }
   actor: { layers: 5, dist: "onehot", std: "none" }
-  value: { layers: 5 }
-  reward_head: { layers: 5 }
-  cont_head: { layers: 5 }
+  # value: { layers: 5 }
+  # reward_head: { layers: 5 }
+  # cont_head: { layers: 5 }
   imag_gradient: "reinforce"
   # checkpoint: "logdir/crafter-action-translation/latest.pt"
 
