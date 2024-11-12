@@ -249,7 +249,12 @@ def evaluate_rollouts(
     config = agent._config
     bleu_scores = []
     posterior_bleu_scores = []
+    sample_max_imagined_bleu_score = 0.0
+    sample_max_reconstructed_bleu_score = 0.0
     for sample in range(len(imagined_state_samples)):
+        sample_imagined_bleu_scores = []
+        sample_reconstructed_bleu_scores = []
+
         print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
         for index, trajectory in enumerate(
             range(0, len(imagined_state_samples[sample]), trajectory_length)
@@ -359,6 +364,9 @@ def evaluate_rollouts(
 
                 posterior_bleu_scores.append(float(posterior_bleu_score))
 
+                sample_imagined_bleu_scores.append(bleu_score)
+                sample_reconstructed_bleu_scores.append(posterior_bleu_score)
+
                 print(
                     f"Sample {sample} Trajectory {index} Planned Intent: {planned_intent}"
                 )
@@ -398,6 +406,17 @@ def evaluate_rollouts(
                 #         "actual_narration": actual_narration,
                 #     }
                 # )
+
+        sample_mean_reconstructed_bleu_score = np.array(
+            sample_reconstructed_bleu_scores
+        ).mean()
+        sample_mean_imagined_bleu_score = np.array(sample_imagined_bleu_scores).mean()
+
+        if sample_mean_reconstructed_bleu_score > sample_max_reconstructed_bleu_score:
+            sample_max_reconstructed_bleu_score = sample_mean_reconstructed_bleu_score
+        if sample_mean_imagined_bleu_score > sample_max_imagined_bleu_score:
+            sample_max_imagined_bleu_score = sample_mean_imagined_bleu_score
+
     bleu_scores = np.array(bleu_scores)
     posterior_bleu_scores = np.array(posterior_bleu_scores)
     mean_score = bleu_scores.mean()
@@ -406,6 +425,8 @@ def evaluate_rollouts(
         {
             "mean_imagined_bleu_score": mean_score,
             "mean_posterior_bleu_score": mean_posterior_score,
+            "max_imagined_bleu_score": sample_max_imagined_bleu_score,
+            "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
         },
         step=logger.step,
     )
