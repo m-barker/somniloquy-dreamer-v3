@@ -768,7 +768,12 @@ def minigrid_narration_using_obs_reconstruction(
 ):
     reconstructed_bleu_scores = []
     imagined_bleu_scores = []
+    sample_max_reconstructed_bleu_score = 0.0
+    sample_max_imagined_bleu_score = 0.0
+
     for sample in range(len(imagined_state_samples)):
+        sample_reconstructed_bleu_scores = []
+        sample_imagined_bleu_scores = []
         for index, trajectory in enumerate(
             range(0, len(imagined_state_samples[sample]), trajectory_length)
         ):
@@ -842,6 +847,20 @@ def minigrid_narration_using_obs_reconstruction(
 
             reconstructed_bleu_scores.append(reconstructed_bleu_score)
             imagined_bleu_scores.append(imagined_bleu_score)
+
+            sample_reconstructed_bleu_scores.append(reconstructed_bleu_score)
+            sample_imagined_bleu_scores.append(imagined_bleu_score)
+
+        sample_mean_reconstructed_bleu_score = np.array(
+            sample_reconstructed_bleu_scores
+        ).mean()
+        sample_mean_imagined_bleu_score = np.array(sample_imagined_bleu_scores).mean()
+
+        if sample_mean_reconstructed_bleu_score > sample_max_reconstructed_bleu_score:
+            sample_max_reconstructed_bleu_score = sample_mean_reconstructed_bleu_score
+        if sample_mean_imagined_bleu_score > sample_max_imagined_bleu_score:
+            sample_max_imagined_bleu_score = sample_mean_imagined_bleu_score
+
     imagined_bleu_scores = np.array(imagined_bleu_scores)
     reconstructed_bleu_scores = np.array(reconstructed_bleu_scores)
     mean_imagined_score = imagined_bleu_scores.mean()
@@ -850,6 +869,8 @@ def minigrid_narration_using_obs_reconstruction(
         {
             "obs_decoding_mean_imagined_bleu_score": mean_imagined_score,
             "obs_decoding_mean_posterior_bleu_score": mean_posterior_score,
+            "obs_decoding_max_imagined_bleu_score": sample_max_imagined_bleu_score,
+            "obs_decoding_max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
         },
         step=logger.step,
     )
