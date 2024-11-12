@@ -754,15 +754,18 @@ def minigrid_occupancy_grid_to_image(occupancy_grid: np.ndarray) -> np.ndarray:
     return image.transpose(1, 0, 2)
 
 
-def minigrid_occupancy_grid_reconstruction_eval(
+def minigrid_narration_using_obs_reconstruction(
     agent,
     imagined_state_samples: List[List[torch.Tensor]],
     imagined_action_samples: List[List[torch.Tensor]],
     posterior_state_samples: List[List[torch.Tensor]],
     observation_samples: List[List[Dict[str, Any]]],
+    logger,
+    wandb_run,
     trajectory_length: int = 16,
 ):
-    config = agent._config
+    reconstructed_bleu_scores = []
+    imagined_bleu_scores = []
     for sample in range(len(imagined_state_samples)):
         for index, trajectory in enumerate(
             range(0, len(imagined_state_samples[sample]), trajectory_length)
@@ -808,30 +811,98 @@ def minigrid_occupancy_grid_reconstruction_eval(
                 )
                 for state in posterior_states
             ]
-            true_images = [
-                minigrid_occupancy_grid_to_image(img) for img in true_occupancy_grid
-            ]
-            imagined_images = [
-                minigrid_occupancy_grid_to_image(img) for img in imagined_occupancy_grid
-            ]
-            reconstructed_images = [
-                minigrid_occupancy_grid_to_image(img)
-                for img in reconstructed_occupancy_grid
-            ]
 
-            reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
-                [imagined_images, reconstructed_images, true_images],
-                3,
-                len(true_images),
-                start_time=trajectory,
-            )
-            reconstruction_plot.suptitle(f"Occupancy Grid Reconstruction Plot")
+            for i in range(len(posterior_states)):
+                imagined_narration_obs["semantic"].append(imagined_grid[i])
+                reconstructed_narration_obs["semantic"].append(reconstructed_grid[i])
+                imagined_achievements_dict = {}
+                reconstructed_achievements_dict = {}
+                for index, achievment_str in enumerate(achievement_keys):
+                    imagined_achievements_dict[achievment_str] = imagined_achievements[
+                        i
+                    ][index]
+                    reconstructed_achievements_dict[achievment_str] = (
+                        reconstructed_achievements[i][index]
+                    )
+                imagined_inventory_dict = {}
+                reconstructed_inventory_dict = {}
+                for index, inventory_str in enumerate(inventory_keys):
+                    imagined_inventory_dict[inventory_str] = imagined_inventory[i][
+                        index
+                    ]
+                    reconstructed_inventory_dict[inventory_str] = (
+                        reconstructed_inventory[i][index]
+                    )
+                imagined_narration_obs["achievements"].append(
+                    imagined_achievements_dict
+                )
+                reconstructed_narration_obs["achievements"].append(
+                    reconstructed_achievements_dict
+                )
+                imagined_narration_obs["inventory"].append(imagined_inventory_dict)
+                reconstructed_narration_obs["inventory"].append(
+                    reconstructed_inventory_dict
+                )
+                narration_keys = ["semantic", "inventory", "achievements"]
+                narrator = CrafterNarrator()
+                try:
+                    narration_data = [
+                        {key: obs[key] for key in narration_keys}
+                        for obs in observations
+                    ]
+                except KeyError:
+                    narration_data = [
+                        {key: obs["info"][key] for key in narration_keys}
+                        for obs in observations
+                    ]
+                # Comine into a single dictionary
+                narration_data = {
+                    key: [data[key] for data in narration_data]
+                    for key in narration_keys
+                }  # type: ignore
 
-            # wandb.log(
-            #     {
-            #         "occupancy grid reconstruction_plot": reconstruction_plot,
-            #     }
-            # )
+                true_narration = narrator.narrate(narration_data)  # type: ignore
+                try:
+                    reconstructed_narration = narrator.narrate(
+                        reconstructed_narration_obs
+                    )
+                    reconstructed_bleu_score = float(
+                        bleu_metric_from_strings(
+                            reconstructed_narration, true_narration
+                        )
+                    )
+                    print(f"Reconstruction Narration: {reconstructed_narration}")
+
+                except Exception as e:
+                    print(f"Failed to generated reconstructed narration: {e}")
+                    reconstructed_bleu_score = 0.0
+                try:
+                    imagined_narration = narrator.narrate(imagined_narration_obs)
+                    imagined_bleu_score = float(
+                        bleu_metric_from_strings(imagined_narration, true_narration)
+                    )
+                    print(f"Imagined Narration: {imagined_narration}")
+
+                except Exception as e:
+                    print(f"Failed to generated imagined narration: {e}")
+                    imagined_bleu_score = 0.0
+
+                print(f"Reconstructed_BLEU_score: {reconstructed_bleu_score}")
+                print(f"Imagined BLEU score: {imagined_bleu_score}")
+
+                reconstructed_bleu_scores.append(reconstructed_bleu_score)
+                imagined_bleu_scores.append(imagined_bleu_score)
+    imagined_bleu_scores = np.array(imagined_bleu_scores)
+    reconstructed_bleu_scores = np.array(reconstructed_bleu_scores)
+    mean_imagined_score = imagined_bleu_scores.mean()
+    mean_posterior_score = reconstructed_bleu_scores.mean()
+    wandb_run.log(
+        {
+            "obs_decoding_mean_imagined_bleu_score": mean_imagined_score,
+            "obs_decoding_mean_posterior_bleu_score": mean_posterior_score,
+        },
+        step=logger.step,
+    )
 
 
 def crafter_narration_using_obs_reconstruction(
@@ -937,7 +1008,7 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     * 18
-                )
+                ).astype(np.uint8)
                 for state in imagined_states
             ]
             imagined_inventory = [
@@ -947,8 +1018,8 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 200
-                )
+                    * 500
+                ).astype(np.uint8)
                 for state in imagined_states
             ]
             imagined_achievements = [
@@ -958,8 +1029,8 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 200
-                )
+                    * 500
+                ).astype(np.uint8)
                 for state in imagined_states
             ]
 
@@ -971,7 +1042,7 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     * 18
-                )
+                ).astype(np.uint8)
                 for state in posterior_states
             ]
             reconstructed_inventory = [
@@ -981,8 +1052,8 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 200
-                )
+                    * 500
+                ).astype(np.uint8)
                 for state in posterior_states
             ]
             reconstructed_achievements = [
@@ -992,11 +1063,12 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 200
-                )
+                    * 500
+                ).astype(np.uint8)
                 for state in posterior_states
             ]
 
+            # Populate the reconstructed narration data
             for i in range(len(posterior_states)):
                 imagined_narration_obs["semantic"].append(imagined_grid[i])
                 reconstructed_narration_obs["semantic"].append(reconstructed_grid[i])
@@ -1046,37 +1118,34 @@ def crafter_narration_using_obs_reconstruction(
                     for key in narration_keys
                 }  # type: ignore
 
-                true_narration = narrator.narrate(narration_data)  # type: ignore
-                try:
-                    reconstructed_narration = narrator.narrate(
-                        reconstructed_narration_obs
-                    )
-                    reconstructed_bleu_score = float(
-                        bleu_metric_from_strings(
-                            reconstructed_narration, true_narration
-                        )
-                    )
-                    print(f"Reconstruction Narration: {reconstructed_narration}")
+            true_narration = narrator.narrate(narration_data)  # type: ignore
+            print(f"True Narration: {true_narration}")
+            try:
+                reconstructed_narration = narrator.narrate(reconstructed_narration_obs)
+                reconstructed_bleu_score = float(
+                    bleu_metric_from_strings(reconstructed_narration, true_narration)
+                )
+                print(f"Reconstruction Narration: {reconstructed_narration}")
 
-                except Exception as e:
-                    print(f"Failed to generated reconstructed narration: {e}")
-                    reconstructed_bleu_score = 0.0
-                try:
-                    imagined_narration = narrator.narrate(imagined_narration_obs)
-                    imagined_bleu_score = float(
-                        bleu_metric_from_strings(imagined_narration, true_narration)
-                    )
-                    print(f"Imagined Narration: {imagined_narration}")
+            except Exception as e:
+                print(f"Failed to generated reconstructed narration: {e}")
+                reconstructed_bleu_score = 0.0
+            try:
+                imagined_narration = narrator.narrate(imagined_narration_obs)
+                imagined_bleu_score = float(
+                    bleu_metric_from_strings(imagined_narration, true_narration)
+                )
+                print(f"Imagined Narration: {imagined_narration}")
 
-                except Exception as e:
-                    print(f"Failed to generated imagined narration: {e}")
-                    imagined_bleu_score = 0.0
+            except Exception as e:
+                print(f"Failed to generated imagined narration: {e}")
+                imagined_bleu_score = 0.0
 
-                print(f"Reconstructed_BLEU_score: {reconstructed_bleu_score}")
-                print(f"Imagined BLEU score: {imagined_bleu_score}")
+            print(f"Reconstructed_BLEU_score: {reconstructed_bleu_score}")
+            print(f"Imagined BLEU score: {imagined_bleu_score}")
 
-                reconstructed_bleu_scores.append(reconstructed_bleu_score)
-                imagined_bleu_scores.append(imagined_bleu_score)
+            reconstructed_bleu_scores.append(reconstructed_bleu_score)
+            imagined_bleu_scores.append(imagined_bleu_score)
     imagined_bleu_scores = np.array(imagined_bleu_scores)
     reconstructed_bleu_scores = np.array(reconstructed_bleu_scores)
     mean_imagined_score = imagined_bleu_scores.mean()
