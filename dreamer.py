@@ -37,6 +37,7 @@ from evaluation import (
     evaluate_rollouts,
     evaluate_language_to_action,
     crafter_narration_using_obs_reconstruction,
+    minigrid_narration_using_obs_reconstruction,
 )
 
 
@@ -513,16 +514,33 @@ def main(config):
                     wandb_run=run,
                 )
             if config.evaluate_reconstruction_narration:
-                crafter_narration_using_obs_reconstruction(
-                    agent,
-                    rollout_samples["imagined_state_samples"],
-                    rollout_samples["imagined_action_samples"],
-                    rollout_samples["posterior_state_samples"],
-                    rollout_samples["observation_samples"],
-                    logger=logger,
-                    trajectory_length=config.eval_trajectory_length,
-                    wandb_run=run,
-                )
+                if "crafter" in config.task:
+                    crafter_narration_using_obs_reconstruction(
+                        agent,
+                        rollout_samples["imagined_state_samples"],
+                        rollout_samples["imagined_action_samples"],
+                        rollout_samples["posterior_state_samples"],
+                        rollout_samples["observation_samples"],
+                        logger=logger,
+                        trajectory_length=config.eval_trajectory_length,
+                        wandb_run=run,
+                    )
+                elif "minigrid" in config.task:
+                    minigrid_narration_using_obs_reconstruction(
+                        agent,
+                        rollout_samples["imagined_state_samples"],
+                        rollout_samples["imagined_action_samples"],
+                        rollout_samples["posterior_state_samples"],
+                        rollout_samples["observation_samples"],
+                        logger=logger,
+                        trajectory_length=config.eval_trajectory_length,
+                        wandb_run=run,
+                        narrator=configure_narrator(config),
+                        obs_size=train_envs[0]
+                        .observation_space["occupancy_grid"]
+                        .shape,
+                    )
+
             # minigrid_occupancy_grid_reconstruction_eval(
             #     agent,
             #     rollout_samples["imagined_state_samples"],
