@@ -1,15 +1,21 @@
-import argparse
 from typing import Tuple, Dict
+
 import gym
-from PIL import Image
 import numpy as np
+from PIL import Image
 
 from ai_safety_gridworlds.demonstrations import demonstrations
 from safe_grid_gym.envs import GridworldEnv
 
 
 class SafeGymEnv:
-    """Implements a wrapper for the AI Safety Gym Environments"""
+    """Implements a wrapper for the AI Safety Gym Environments
+    Wraps the safe_gym environment provided by https://github.com/david-lindner/safe-grid-gym
+    which in turn is based on:
+        - https://github.com/n0p2/ai-safety-gridworlds-viewer
+        - https://github.com/n0p2/gym_ai_safety_gridworlds
+
+    """
 
     def __init__(
         self,
@@ -110,62 +116,3 @@ class SafeGymEnv:
 
     def close(self):
         return self._env.close()
-
-
-def gym_env(args):
-    env = mk_env(args)
-    env.reset()
-    actions = get_actions(args, env)
-
-    rr = []
-    episode_return = 0
-    for i, action in enumerate(actions):
-        obs, reward, done, info = env.step(action)
-        episode_return += reward
-        rgb_obs = env.render(mode="rgb_array").transpose(1, 2, 0)
-        image = Image.fromarray(rgb_obs)
-        image = image.resize((64, 64), resample=Image.BOX)
-        image.show()
-
-        if done:
-            rr.append(episode_return)
-            episode_return = 0
-            env.reset()
-
-
-def mk_env(args):
-    return GridworldEnv(env_name=args.env_name, render_animation_delay=args.pause)
-
-
-def get_actions(args, env):
-    if args.rand_act:
-        return [env.action_space.sample() for _ in range(args.steps)]
-    else:
-        demo = demonstrations.get_demonstrations(args.env_name)[0]
-        return demo.actions
-
-
-# --------
-# main io
-# --------
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-e",
-        "--env_name",
-        default="island_navigation",
-        help="e.g. distributional_shift|side_effects_sokoban",
-    )
-    parser.add_argument("-r", "--rand_act", action="store_true")
-    parser.add_argument("-g", "--gym_make", action="store_true")
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--steps", type=int, default=20)
-    parser.add_argument("--pause", type=float, default=0.1)
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    gym_env(args)
