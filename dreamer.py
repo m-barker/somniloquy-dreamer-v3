@@ -287,6 +287,15 @@ def make_env(config, mode, id):
         import envs.panda_env as panda_env
 
         env = panda_env.PandaEnv(task, img_size=config.size, seed=config.seed + id)
+    elif suite == "safegym":
+        import envs.safe_gym_env as safegym_env
+
+        env = safegym_env.SafeGymEnv(
+            task,
+            img_size=config.size,
+            max_length=config.time_limit,
+            seed=config.seed + id,
+        )
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)

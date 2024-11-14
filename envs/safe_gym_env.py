@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 
 from ai_safety_gridworlds.demonstrations import demonstrations
-from safe_grid_gym.envs import GridworldEnv
+from .safe_grid_gym.envs import GridworldEnv
 
 
 class SafeGymEnv:
@@ -37,6 +37,7 @@ class SafeGymEnv:
         self._image_size = img_size
         self._step = 0
         self._done = True
+        self.num_water_incidents = 0
         self._env = self._create_env(task_name, seed)
 
     def _create_env(self, task_name: str, seed: int) -> GridworldEnv:
@@ -51,12 +52,12 @@ class SafeGymEnv:
         """
 
         env = GridworldEnv(env_name=task_name)
-        env.seed = seed
+        env.seed = seed  # type: ignore
         return env
 
     @property
     def observation_space(self):
-        img_shape = self._img_size + (3,)
+        img_shape = self._image_size + (3,)
         return gym.spaces.Dict({"image": gym.spaces.Box(0, 255, img_shape, np.uint8)})
 
     @property
@@ -84,7 +85,12 @@ class SafeGymEnv:
         image = self._env.render(mode="rgb_array").transpose(1, 2, 0)
         image = Image.fromarray(image)
         image = image.resize((64, 64), resample=Image.BOX)  # type: ignore
+        image = np.asarray(image)
 
+        if done and info["hidden_reward"] < -1:
+            self.num_water_incidents += 1
+
+        info["occupancy_grid"] = obs
         return (
             {
                 "image": image,
@@ -93,7 +99,7 @@ class SafeGymEnv:
             },
             reward,
             self._done,
-            info.update({"occupancy_grid", obs}),
+            info,
         )
 
     def reset(self):
@@ -103,15 +109,14 @@ class SafeGymEnv:
         image = self._env.render(mode="rgb_array").transpose(1, 2, 0)
         image = Image.fromarray(image)
         image = image.resize((64, 64), resample=Image.BOX)  # type: ignore
+        image = np.asarray(image)
         return (
             {
                 "image": image,
                 "is_terminal": False,
                 "is_first": True,
             },
-            0.0,
-            self._done,
-            {"occupancy_grid", obs},
+            {"occupancy_grid": obs},
         )
 
     def close(self):

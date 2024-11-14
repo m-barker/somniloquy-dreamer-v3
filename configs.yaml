@@ -408,6 +408,28 @@ panda_push:
   cont_head: { layers: 5 }
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/panda-push-colour-with-lang/dreamer-agent-step-102500.pt"
 
+safegym:
+  steps: 1e5
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 1000
+  log_every: 500
+  actor: { dist: "onehot", std: "none" }
+  encoder: { cnn_keys: "image" }
+  decoder: { cnn_keys: "image" }
+  narrator: { narration_key: ["occupancy_grid"] }
+  imag_gradient: "reinforce"
+  enable_language: false
+  evaluate_reconstruction_narration: false
+  vocab_path: vocab/safegym_island_navigation.json
+  dec_max_length: 30
+  enc_max_length: 16
+  prefill: 10000
+  video_pred_log: true
+  task: "safegym_island_navigation"
+  time_limit: 1024
+
 debug:
   debug: True
   pretrain: 1

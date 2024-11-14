@@ -336,6 +336,10 @@ def simulate(
                                 },
                                 step=logger.step,
                             )
+                            if agent._config.task == "safegym_island_navigation":
+                                wandb_run.log(
+                                    {"water_incidents": env._env.num_water_incidents}
+                                )
 
                     else:
                         if not "eval_lengths" in locals():

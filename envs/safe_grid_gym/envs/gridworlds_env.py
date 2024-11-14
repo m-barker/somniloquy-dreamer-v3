@@ -23,7 +23,7 @@ from safe_grid_gym.envs.common.interface import (
 
 
 class GridworldEnv(gym.Env):
-    """ An OpenAI Gym environment wrapping the AI safety gridworlds created by DeepMind.
+    """An OpenAI Gym environment wrapping the AI safety gridworlds created by DeepMind.
 
     Parameters:
     env_name (str): defines the safety gridworld to load. can take all values
@@ -49,7 +49,14 @@ class GridworldEnv(gym.Env):
 
     metadata = {"render.modes": ["human", "ansi", "rgb_array"]}
 
-    def __init__(self, env_name, use_transitions=False, render_animation_delay=0.1, *args, **kwargs):
+    def __init__(
+        self,
+        env_name,
+        use_transitions=False,
+        render_animation_delay=0.1,
+        *args,
+        **kwargs
+    ):
         self._env_name = env_name
         self._render_animation_delay = render_animation_delay
         self._viewer = None
@@ -67,7 +74,7 @@ class GridworldEnv(gym.Env):
             self._viewer = None
 
     def step(self, action):
-        """ Perform an action in the gridworld environment.
+        """Perform an action in the gridworld environment.
 
         Returns:
             - the board as a numpy array
@@ -136,7 +143,7 @@ class GridworldEnv(gym.Env):
         return [seed]
 
     def render(self, mode="human"):
-        """ Implements the gym render modes "rgb_array", "ansi" and "human".
+        """Implements the gym render modes "rgb_array", "ansi" and "human".
 
         - "rgb_array" just passes through the RGB array provided by pycolab in each state
         - "ansi" gets an ASCII art from pycolab and returns is as a string

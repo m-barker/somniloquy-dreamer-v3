@@ -24,7 +24,7 @@ def to_gym_id(env_name):
 for env_name in env_list:
     gym_id_prefix = to_gym_id(str(env_name))
     if gym_id_prefix == "ConveyorBelt":
-        for variant in ['vase', 'sushi', 'sushi_goal', 'sushi_goal2']:
+        for variant in ["vase", "sushi", "sushi_goal", "sushi_goal2"]:
             register(
                 id=to_gym_id(str(variant)) + "-v0",
                 entry_point="safe_grid_gym.envs.gridworlds_env:GridworldEnv",
