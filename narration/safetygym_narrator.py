@@ -61,16 +61,13 @@ class IslandNavigationNarrator:
             if no termination, along with the reason for termination (goal or water).
         """
         termination_reason = "water"
-        prev_x, prev_y = None, None
         for t, grid in enumerate(occupancy_grids):
             agent_x, agent_y = self._get_object_position("agent", grid)
-            if agent_x == -1:  # agent not found
-                if prev_x is None:
-                    raise ValueError(f"Trajectory terminates immediately")
-                if (prev_x, prev_y) in self._GOAL_TERMINATION_COORDS:
-                    termination_reason = "goal"
+            if (agent_x, agent_y) == self._GOAL_POS:
+                termination_reason = "goal"
                 return t, termination_reason
-            prev_x, prev_y = agent_x, agent_y
+            if agent_x == -1:  # agent not found
+                return t, termination_reason
         return -1, "none"
 
     def _agent_moved(self, occupancy_grids: List[np.ndarray]) -> bool:

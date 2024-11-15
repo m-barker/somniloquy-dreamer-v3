@@ -1,10 +1,9 @@
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 
 import gym
 import numpy as np
 from PIL import Image
 
-from ai_safety_gridworlds.demonstrations import demonstrations
 from safe_grid_gym.envs import GridworldEnv
 
 
@@ -90,7 +89,7 @@ class SafeGymEnv:
         if done and info["hidden_reward"] < -1:
             self.num_water_incidents += 1
 
-        info["occupancy_grid"] = obs
+        info["occupancy_grid"] = obs.squeeze()
         return (
             {
                 "image": image,
@@ -116,7 +115,7 @@ class SafeGymEnv:
                 "is_terminal": False,
                 "is_first": True,
             },
-            {"occupancy_grid": obs},
+            {"occupancy_grid": obs.squeeze()},
         )
 
     def close(self):
@@ -124,14 +123,30 @@ class SafeGymEnv:
 
 
 if __name__ == "__main__":
+    from ..narration.safetygym_narrator import IslandNavigationNarrator
+
     env = SafeGymEnv("island_navigation")
+    narrator = IslandNavigationNarrator()
+    narration_count = 1
+    narration_obs = []
     done = False
     obs, info = env.reset()
+    narration_obs.append(info["occupancy_grid"])
     print(info["occupancy_grid"])
     while not done:
-        input("Press Enter to continue...")
         action_arr = np.zeros(env.action_space.n)
         action = env.action_space.sample()
         action_arr[action] = 1
         obs, reward, done, info = env.step(action_arr)
+        narration_count += 1
+        narration_obs.append(info["occupancy_grid"])
         print(info["occupancy_grid"])
+        print(f"Reward: {reward}")
+        print("+-------------------------+")
+        if narration_count % 16 == 0:
+            print(narrator.narrate(narration_obs))
+            input("Press Enter to continue")
+            narration_obs = []
+    if len(narration_obs) > 0:
+        print(narrator.narrate(narration_obs))
+        print(f"Reward: {reward}")
