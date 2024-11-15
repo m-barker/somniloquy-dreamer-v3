@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 
 from ai_safety_gridworlds.demonstrations import demonstrations
-from .safe_grid_gym.envs import GridworldEnv
+from safe_grid_gym.envs import GridworldEnv
 
 
 class SafeGymEnv:
@@ -121,3 +121,17 @@ class SafeGymEnv:
 
     def close(self):
         return self._env.close()
+
+
+if __name__ == "__main__":
+    env = SafeGymEnv("island_navigation")
+    done = False
+    obs, info = env.reset()
+    print(info["occupancy_grid"])
+    while not done:
+        input("Press Enter to continue...")
+        action_arr = np.zeros(env.action_space.n)
+        action = env.action_space.sample()
+        action_arr[action] = 1
+        obs, reward, done, info = env.step(action_arr)
+        print(info["occupancy_grid"])
