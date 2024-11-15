@@ -32,6 +32,7 @@ from narration.minigrd_narrator import (
     MiniGridTeleportNarrator,
     MiniGridComplexTeleportNarrator,
 )
+from narration.safetygym_narrator import IslandNavigationNarrator
 from evaluation import (
     sample_rollouts,
     evaluate_rollouts,
@@ -205,11 +206,12 @@ def configure_narrator(config):
                 narrator = MiniGridComplexTeleportNarrator()
             else:
                 narrator = MiniGridTeleportNarrator()
-
     elif "panda" in config.task:
         narrator = PandaPushColourNarrator()
     elif "crafter" in config.task:
         narrator = CrafterNarrator()
+    elif "safegym" in config.task:
+        narrator = IslandNavigationNarrator()
 
     return narrator
 
@@ -550,14 +552,6 @@ def main(config):
                         .shape,
                     )
 
-            # minigrid_occupancy_grid_reconstruction_eval(
-            #     agent,
-            #     rollout_samples["imagined_state_samples"],
-            #     rollout_samples["imagined_action_samples"],
-            #     rollout_samples["posterior_state_samples"],
-            #     rollout_samples["observation_samples"],
-            #     trajectory_length=config.eval_trajectory_length,
-            # )
             if config.enable_language_to_action:
                 evaluate_language_to_action(
                     agent, eval_envs[0], source_strings=config.eval_strings
