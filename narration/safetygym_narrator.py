@@ -20,6 +20,7 @@ class IslandNavigationNarrator:
         # if the episode terminates with the T-1 state being one of these
         # the agent must have reached the goal.
         self._GOAL_TERMINATION_COORDS = [(3, 3), (4, 2), (4, 4)]
+        self._GOAL_POS = (4, 3)
 
     def _get_object_position(
         self,
@@ -91,6 +92,46 @@ class IslandNavigationNarrator:
                 return True
         return False
 
+    def _manhattan_distance(
+        self, object_1_pos: Tuple[int, int], object_2_pos: Tuple[int, int]
+    ) -> int:
+        """Computes the manhattan distance between two positions on the grid.
+
+        Args:
+            object_1_pos (Tuple[int, int]): X,Y coord of first object
+            object_2_pos (Tuple[int, int]): X,Y coord of second object
+
+        Returns:
+            int: manhattan distance between two positions
+        """
+
+        return abs(object_1_pos[0] - object_2_pos[0]) + abs(
+            object_1_pos[1] - object_2_pos[1]
+        )
+
+    def _get_closest_water_tile(self, grid: np.ndarray) -> Tuple[Tuple[int, int], int]:
+        """Returns the coordinates of the closest water tile to the agent.
+
+        Args:
+            Tuple[Tuple[int, int], int]: x,y coords of nearest water tile along with manhattan
+            dist to the tile.
+        """
+
+        agent_pos = self._get_object_position("agent", grid)
+        water_tile_x, water_tile_y = np.where(grid == 3)
+        water_tile_coords = zip(water_tile_x, water_tile_y)
+
+        min_dist = 100
+        nearest_pos = (-1, -1)
+
+        for tile in water_tile_coords:
+            tile_dist = self._manhattan_distance(agent_pos, tile)
+            if tile_dist < min_dist:
+                min_dist = tile_dist
+                nearest_pos = tile
+
+        return nearest_pos, min_dist
+
     def narrate(self, occupancy_grids: List[np.ndarray]) -> str:
         """Narrates a sequence of occupancy-grid states in the
         island-navigation environment.
@@ -125,8 +166,28 @@ class IslandNavigationNarrator:
         if agent_start_pos == agent_end_pos:
             return "I will move back to where I started"
 
+        movement_str = ""
         # Check if moved towards or away from goal
+        goal_delta = self._manhattan_distance(
+            agent_start_pos, self._GOAL_POS
+        ) - self._manhattan_distance(agent_end_pos, self._GOAL_POS)
+        if goal_delta > 0:
+            movement_str = "I will move towards the goal "
+        elif goal_delta < 0:
+            movement_str = "I will move away from the goal "
+        else:
+            movement_str = "I will stay the same distance from the goal "
 
         # Check if moved towards or away from the water
+        _, init_dist = self._get_closest_water_tile(occupancy_grids[0])
+        _, final_dist = self._get_closest_water_tile(occupancy_grids[-1])
 
-        return ""
+        water_delta = init_dist - final_dist
+        if water_delta > 0:
+            movement_str += "and I will move closer to the water"
+        elif water_delta < 0:
+            movement_str += "and I will move further away from the water"
+        else:
+            movement_str += "and I will stay the same distance from the water"
+
+        return movement_str
