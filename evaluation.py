@@ -262,9 +262,9 @@ def evaluate_rollouts(
             # Adjust the end index if the environment terminated early
             end_index = trajectory + trajectory_length
             observations = observation_samples[sample][trajectory:end_index]
-            for index, obs in enumerate(observations):
+            for i, obs in enumerate(observations):
                 if obs["obs"] is None:
-                    end_index = index
+                    end_index = i
                     break
             observations = observation_samples[sample][trajectory:end_index]
             imagined_states = imagined_state_samples[sample][trajectory:end_index]

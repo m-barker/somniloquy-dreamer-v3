@@ -413,19 +413,18 @@ safegym:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 1000
+  eval_every: 500
   log_every: 500
   actor: { dist: "onehot", std: "none" }
   encoder: { cnn_keys: "image" }
   decoder: { cnn_keys: "image" }
   narrator: { narration_key: ["occupancy_grid"] }
   imag_gradient: "reinforce"
-  enable_language: false
+  enable_language: true
   evaluate_reconstruction_narration: false
   vocab_path: vocab/safegym_island_navigation.json
   dec_max_length: 30
   enc_max_length: 16
-  prefill: 10000
   video_pred_log: true
   task: "safegym_island_navigation"
   time_limit: 1024

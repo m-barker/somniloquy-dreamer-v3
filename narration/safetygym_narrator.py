@@ -143,10 +143,9 @@ class IslandNavigationNarrator:
         agent_start_x, agent_start_y = self._get_object_position(
             "agent", occupancy_grids[0]
         )
+        # Only case where no agent is present is when the agent is in the water.
         if agent_start_x == -1:
-            raise ValueError(
-                "No agent is present in the initial state, cannot narrate."
-            )
+            return "Uh oh I will go into the water and drown"
 
         termination_pos, reason = self._trajectory_terminates(occupancy_grids)
 
