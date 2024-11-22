@@ -1081,6 +1081,9 @@ class TransformerEncoderDecoder(nn.Module):
 
             if sampling_method == "greedy":
                 predicted_token_ids = torch.argmax(output_probs, dim=-1)
+                # Add batch dimension if missing (i.e., if batch size is 1).
+                if len(predicted_token_ids.shape) == 1:
+                    predicted_token_ids = predicted_token_ids.unsqueeze(0)
             elif sampling_method == "nucleus":
                 predicted_token_ids = self._nuclueus_sampling(output_logits)
             else:

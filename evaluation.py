@@ -1,5 +1,6 @@
 from typing import List, Tuple, Union, Dict, Any, Optional
 import random
+import os   
 
 import wandb
 import torch
@@ -234,6 +235,7 @@ def evaluate_rollouts(
     logger,
     trajectory_length: int = 16,
     wandb_run=None,
+    save_plots: bool = True,
 ):
     """Evalues a set of sampled rollouts.
 
@@ -270,6 +272,7 @@ def evaluate_rollouts(
             imagined_states = imagined_state_samples[sample][trajectory:end_index]
             imagined_actions = imagined_action_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
+            print(f"SAMPLED TRAJECTORY IMAGINED LENGTH: {len(imagined_states)}")
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0:
                 continue
@@ -339,6 +342,34 @@ def evaluate_rollouts(
                         if word not in ["<BOS>", "<EOS>", "<PAD>"]
                     ]
                 )
+                
+                # our batch size is 1 so take first item in list
+                planned_intent_greedy = agent._wm.heads["language"].generate(
+                    imagined_state_tensor,
+                    agent._wm.vocab,
+                    config.dec_max_length,
+                    sampling_method="greedy",
+                )[0]
+                planned_intent_greedy = " ".join(
+                    [
+                        word
+                        for word in planned_intent.split()
+                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                    ]
+                )
+                reconstructed_intent_greedy = agent._wm.heads["language"].generate(
+                    posterior_state_tensor,
+                    agent._wm.vocab,
+                    config.dec_max_length,
+                    sampling_method="greedy",
+                )[0]
+                reconstructed_intent_greedy = " ".join(
+                    [
+                        word
+                        for word in reconstructed_intent.split()
+                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                    ]
+                )
 
                 if type(narration_data) is dict:
                     if len(narration_data.keys()) == 1:  # type: ignore
@@ -362,6 +393,20 @@ def evaluate_rollouts(
                 except ValueError:
                     posterior_bleu_score = torch.tensor(0.0)
 
+                try:
+                    posterior_bleu_score_greedy = bleu_metric_from_strings(
+                        reconstructed_intent_greedy, actual_narration
+                    )
+                except ValueError:
+                    posterior_bleu_score_greedy = torch.tensor(0.0)
+                
+                try:
+                    bleu_score_greedy = bleu_metric_from_strings(
+                        planned_intent_greedy, actual_narration
+                    )
+                except ValueError:
+                    bleu_score_greedy = torch.tensor(0.0)
+                
                 posterior_bleu_scores.append(float(posterior_bleu_score))
 
                 sample_imagined_bleu_scores.append(bleu_score)
@@ -369,6 +414,15 @@ def evaluate_rollouts(
 
                 print(
                     f"Sample {sample} Trajectory {index} Planned Intent: {planned_intent}"
+                )
+                print(
+                    f"Sample {sample} Trajectory {index} Planned Intent Greedy: {planned_intent_greedy}"
+                )
+                print(
+                    f"Sample {sample} Trajectory {index} Reconstructed Intent: {reconstructed_intent}"
+                )
+                print(
+                    f"Sample {sample} Trajectory {index} Reconstructed Intent Greedy: {reconstructed_intent_greedy}"
                 )
                 print(
                     f"Sample {sample} Trajectory {index} Actual Narration: {actual_narration}"
@@ -379,25 +433,35 @@ def evaluate_rollouts(
                 print(
                     f"Sample {sample} Trajectory {index} Reconstructed BLEU Score: {posterior_bleu_score}"
                 )
+                print(
+                    f"Sample {sample} Trajectory {index} Imagined BLEU Score Greedy: {bleu_score_greedy}"
+                )
+                print(
+                    f"Sample {sample} Trajectory {index} Reconstructed BLEU Score Greedy: {posterior_bleu_score_greedy}"
+                )
+                
 
-                # imagined_images = [
-                #     agent._wm.heads["decoder"](state)["image"].mode()
-                #     for state in imagined_states
-                # ]
-                # reconstructed_images = [
-                #     agent._wm.heads["decoder"](state)["image"].mode()
-                #     for state in posterior_states
-                # ]
-                # imagined_images = convert_images_to_numpy(imagined_images)
-                # reconstructed_images = convert_images_to_numpy(reconstructed_images)
+                imagined_images = [
+                    agent._wm.heads["decoder"](state)["image"].mode()
+                    for state in imagined_states
+                ]
+                reconstructed_images = [
+                    agent._wm.heads["decoder"](state)["image"].mode()
+                    for state in posterior_states
+                ]
+                imagined_images = convert_images_to_numpy(imagined_images)
+                reconstructed_images = convert_images_to_numpy(reconstructed_images)
 
-                # reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
-                #     [imagined_images, reconstructed_images, images],
-                #     3,
-                #     len(images),
-                #     start_time=trajectory,
-                # )
-                # reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
+                reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
+                    [imagined_images, reconstructed_images, images],
+                    3,
+                    len(images),
+                    start_time=trajectory,
+                )
+                reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
+                
+                if save_plots:
+                    reconstruction_plot.savefig(os.path.join(config.logdir, f"{logger.step}-sample-{sample}-reconstruction-plot"))
 
                 # wandb.log(
                 #     {
