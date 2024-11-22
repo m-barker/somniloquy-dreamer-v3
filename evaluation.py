@@ -1,6 +1,6 @@
 from typing import List, Tuple, Union, Dict, Any, Optional
 import random
-import os   
+import os
 
 import wandb
 import torch
@@ -14,7 +14,6 @@ from tools import (
     convert,
     word_tokenise_text,
     bleu_metric_from_strings,
-    perplexity_metric,
 )
 from narration.crafter_narrator import CrafterNarrator
 from generate_plots import generate_image_reconstruction_plot
@@ -25,6 +24,7 @@ def imagine_trajectory(
     agent,
     initial_state: Dict[str, torch.Tensor],
     trajectory_length: int,
+    actions: Optional[List[torch.Tensor]] = None,
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     """Samples a trajectory of imagined rollouts from the world model and
     actor. Returns the imagined states and actions.
@@ -33,22 +33,34 @@ def imagine_trajectory(
         agent (Dreamer): Dreamer agent containing the world model and actor.
         initial_state (torch.Tensor): Starting state of the model.
         trajectory_length (int): Length of the imagined trajectory.
+        actions (optional, List[torch.Tensor]): Optionally provide the actions for the
+        agent to imagine taking. If not provided, the actor component of the world-model
+        is used.
 
     Returns:
         Tuple[List[torch.Tensor], List[torch.Tensor]]: Imagined states and actions.
     """
     imagained_states: List[torch.Tensor] = []
-    imagined_actions: List[torch.Tensor] = []
+    if actions is None:
+        imagined_actions: List[torch.Tensor] = []
     prev_state = initial_state
     done = False
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
     for t in range(trajectory_length):
+        # If world model thinks the episode terminates, pad the states/actions
+        # with zeros.
         if done:
             imagained_states.append(torch.zeros_like(latent_state))
-            imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
+            if actions is None:
+                imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
+            else:
+                actions[t] = torch.zeros_like(actions[t - 1])
             continue
-        action = agent._task_behavior.actor(latent_state).sample().squeeze(0)
-        imagined_actions.append(action)
+        if actions is None:
+            action = agent._task_behavior.actor(latent_state).sample().squeeze(0)
+            imagined_actions.append(action)
+        else:
+            action = actions[t]
         prior = agent._wm.dynamics.img_step(
             prev_state=prev_state,
             prev_action=action,
@@ -57,9 +69,12 @@ def imagine_trajectory(
         latent_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
         imagained_states.append(latent_state)
         predicted_continue = agent._wm.heads["cont"](latent_state).mode()
+        # Less than 50% predicted chance that the episode continues according to world model.
         if predicted_continue[0, 0].detach().cpu().numpy() < 0.5:
             done = True
-    return imagained_states, imagined_actions
+    if actions is None:
+        return imagained_states, imagined_actions
+    return imagained_states, actions
 
 
 @torch.no_grad()
@@ -342,7 +357,7 @@ def evaluate_rollouts(
                         if word not in ["<BOS>", "<EOS>", "<PAD>"]
                     ]
                 )
-                
+
                 # our batch size is 1 so take first item in list
                 planned_intent_greedy = agent._wm.heads["language"].generate(
                     imagined_state_tensor,
@@ -399,14 +414,14 @@ def evaluate_rollouts(
                     )
                 except ValueError:
                     posterior_bleu_score_greedy = torch.tensor(0.0)
-                
+
                 try:
                     bleu_score_greedy = bleu_metric_from_strings(
                         planned_intent_greedy, actual_narration
                     )
                 except ValueError:
                     bleu_score_greedy = torch.tensor(0.0)
-                
+
                 posterior_bleu_scores.append(float(posterior_bleu_score))
 
                 sample_imagined_bleu_scores.append(bleu_score)
@@ -439,7 +454,6 @@ def evaluate_rollouts(
                 print(
                     f"Sample {sample} Trajectory {index} Reconstructed BLEU Score Greedy: {posterior_bleu_score_greedy}"
                 )
-                
 
                 imagined_images = [
                     agent._wm.heads["decoder"](state)["image"].mode()
@@ -459,9 +473,14 @@ def evaluate_rollouts(
                     start_time=trajectory,
                 )
                 reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
-                
+
                 if save_plots:
-                    reconstruction_plot.savefig(os.path.join(config.logdir, f"{logger.step}-sample-{sample}-reconstruction-plot"))
+                    reconstruction_plot.savefig(
+                        os.path.join(
+                            config.logdir,
+                            f"{logger.step}-sample-{sample}-reconstruction-plot",
+                        )
+                    )
 
                 # wandb.log(
                 #     {
