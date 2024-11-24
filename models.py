@@ -204,7 +204,7 @@ class WorldModel(nn.Module):
                     padding_mask = torch.ones(self._narration_max_enc_seq).to(
                         self.device
                     )
-                    padding_mask[data_sequence.shape[0] :] = 0
+                    padding_mask[:data_sequence.shape[0] ] = 0
                     data_sequence = torch.cat([data_sequence, padding], dim=0)
                 else:
                     padding_mask = torch.zeros(self._narration_max_enc_seq).to(
@@ -297,7 +297,7 @@ class WorldModel(nn.Module):
                     padding_mask = torch.ones(self._narration_max_enc_seq).to(
                         self.device
                     )
-                    padding_mask[latent_sequence.shape[0] :] = 0
+                    padding_mask[: latent_sequence.shape[0]] = 0
                     latent_sequence = torch.cat([latent_sequence, padding], dim=0)
                 else:
                     padding_mask = torch.zeros(self._narration_max_enc_seq).to(

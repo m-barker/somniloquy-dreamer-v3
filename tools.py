@@ -23,6 +23,7 @@ import wandb
 from parallel import Parallel, Damy
 
 to_np = lambda x: x.detach().cpu().numpy()
+NARRATION_COUNTS: Dict[str, int] = {}
 
 
 def symlog(x):
@@ -1269,6 +1270,7 @@ def generate_batch_narrations(
     """
 
     narration_batches: List[np.ndarray] = []
+    global NARRATION_COUNTS
     if type(is_first) == torch.Tensor:
         is_first = is_first.detach().cpu().numpy()
     if isinstance(observations, dict):
@@ -1295,6 +1297,10 @@ def generate_batch_narrations(
                             for key, value in batch.items()
                         }
                     )
+                    if narration in NARRATION_COUNTS:
+                        NARRATION_COUNTS[narration] += 1
+                    else:
+                        NARRATION_COUNTS[narration] = 1
                     narrations.append(narration)
                     current_index = end_index
                     if current_index == is_first_indices[current_is_first_index]:
@@ -1307,6 +1313,10 @@ def generate_batch_narrations(
                             for key, value in batch.items()
                         }
                     )
+                    if narration in NARRATION_COUNTS:
+                        NARRATION_COUNTS[narration] += 1
+                    else:
+                        NARRATION_COUNTS[narration] = 1
                     narrations.append(narration)
                     current_index = end_index
             batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
@@ -1329,6 +1339,10 @@ def generate_batch_narrations(
                         is_first_indices[current_is_first_index],
                     )
                     narration = narrator.narrate(batch[current_index:end_index])
+                    if narration in NARRATION_COUNTS:
+                        NARRATION_COUNTS[narration] += 1
+                    else:
+                        NARRATION_COUNTS[narration] = 1
                     narrations.append(narration)
                     current_index = end_index
                     if current_index == is_first_indices[current_is_first_index]:
@@ -1336,6 +1350,10 @@ def generate_batch_narrations(
                 else:
                     end_index = min(current_index + obs_per_narration, len(batch))
                     narration = narrator.narrate(batch[current_index:end_index])
+                    if narration in NARRATION_COUNTS:
+                        NARRATION_COUNTS[narration] += 1
+                    else:
+                        NARRATION_COUNTS[narration] = 1
                     narrations.append(narration)
                     current_index = end_index
             batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
@@ -1343,6 +1361,7 @@ def generate_batch_narrations(
 
     narration_arr = np.concatenate(narration_batches, axis=0)
     narrations_tens = torch.tensor(narration_arr, dtype=torch.long).to(device)
+    # print(f"NARRATION COUNTS: {NARRATION_COUNTS}")
     return narrations_tens
 
 

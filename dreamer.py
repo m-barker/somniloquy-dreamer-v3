@@ -58,7 +58,10 @@ class Dreamer(nn.Module):
         self._should_expl = tools.Until(int(config.expl_until / config.action_repeat))
         self._metrics = {}
         # this is update step
-        self._step = logger.step // config.action_repeat
+        if logger is not None:
+            self._step = logger.step // config.action_repeat
+        else:
+            self._step = 0
         self._update_count = 0
         self._dataset = dataset
         narrator = None

@@ -19,8 +19,8 @@ defaults:
   video_pred_log: True
   checkpoint: null
   n_eval_samples: 10
-  eval_trajectory_length: 16
-  eval_n_consecutive_trajectories: 2
+  eval_trajectory_length: 15
+  eval_n_consecutive_trajectories: 1
   token_sampling_method: "nucleus"
   ignore_list: []
   no_convert_list: []
@@ -414,26 +414,26 @@ safegym:
   action_repeat: 1
   eval_episode_num: 1
   eval_every: 500
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
+  # dyn_hidden: 1024
+  # dyn_deter: 4096
+  # units: 1024
   log_every: 500
   encoder: {
       cnn_keys: "image",
-      cnn_depth: 96,
-      mlp_layers: 5,
-      mlp_units: 1024,
+      # cnn_depth: 96,
+      # mlp_layers: 5,
+      # mlp_units: 1024,
     }
   decoder: {
       cnn_keys: "image",
-      cnn_depth: 96,
-      mlp_layers: 5,
-      mlp_units: 1024,
+      # cnn_depth: 96,
+      # mlp_layers: 5,
+      # mlp_units: 1024,
     }
   actor: { layers: 5, dist: "onehot", std: "none" }
-  value: { layers: 5 }
-  reward_head: { layers: 5 }
-  cont_head: { layers: 5 }
+  # value: { layers: 5 }
+  # reward_head: { layers: 5 }
+  # cont_head: { layers: 5 }
   narrator: { narration_key: ["occupancy_grid"] }
   imag_gradient: "reinforce"
   enable_language: true
@@ -444,6 +444,7 @@ safegym:
   video_pred_log: true
   task: "safegym_island_navigation"
   time_limit: 1024
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-42/latest.pt"
 
 debug:
   debug: True

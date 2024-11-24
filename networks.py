@@ -956,7 +956,18 @@ class TransformerEncoderDecoder(nn.Module):
         Args:
             src (torch.Tensor): shape (batch_size, seq_length, d)
             tgt (torch.Tensor): shape (batch_size, seq_length)
-            generate_mask (bool, optional): _description_. Defaults to False.
+            generate_mask (bool, optional): Whether to generate padding and attention masks. Defaults to False.
+            src_mask: (torch.Tensor, optional): Optional mask for src padding where 1 indicates padding tokens
+            to be ignored.
+            tokens_to_append (torch.Tensor, optional): optional tokens to append to the end of the encoder
+            sequence.
+            tokens_to_prepend (torch.Tensor, optional): optional tokens to pre-prend to the beginning of the
+            encoder sequence.
+            embed_tgt (bool, optional). Whether the provided tgt sequence needs to be embedded, i.e.,
+            if integer tokens are given. Defalts to True.
+            generate_src_mask (bool, optional). Whether to auto-generate padding masks for the src input.
+            Defaults to False.
+
 
         Returns:
             torch.Tensor: logits of shape (out_seq_length, batch_size, vocab_size)
@@ -1053,7 +1064,7 @@ class TransformerEncoderDecoder(nn.Module):
         """Generate a sequence of tokens from the input sequence. And convert the token IDs to words.
 
         Args:
-            input_seq (torch.Tensor): shape (seq_length, d_model)
+            input_seq (torch.Tensor): shape (batch_length, seq_length, d_model)
             vocab (dict): dictionary mapping token IDs to words.
             max_sequence_length (int): maximum length of the generated sequence.
 
@@ -1069,6 +1080,7 @@ class TransformerEncoderDecoder(nn.Module):
             ).unsqueeze(1)
         else:
             translated_input = prompt
+
         for _ in range(max_sequence_length):
             output_logits = self.forward(
                 input_seq,
@@ -1078,7 +1090,6 @@ class TransformerEncoderDecoder(nn.Module):
             )[-1]
             logits.append(output_logits)
             output_probs = F.softmax(output_logits, dim=-1)
-
             if sampling_method == "greedy":
                 predicted_token_ids = torch.argmax(output_probs, dim=-1)
                 # Add batch dimension if missing (i.e., if batch size is 1).

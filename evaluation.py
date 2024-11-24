@@ -1,6 +1,7 @@
-from typing import List, Tuple, Union, Dict, Any, Optional
 import random
 import os
+from typing import List, Tuple, Union, Dict, Any, Optional
+from copy import deepcopy
 
 import wandb
 import torch
@@ -40,12 +41,12 @@ def imagine_trajectory(
     Returns:
         Tuple[List[torch.Tensor], List[torch.Tensor]]: Imagined states and actions.
     """
-    imagained_states: List[torch.Tensor] = []
     if actions is None:
         imagined_actions: List[torch.Tensor] = []
     prev_state = initial_state
     done = False
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
+    imagained_states: List[torch.Tensor] = [latent_state]
     for t in range(trajectory_length):
         # If world model thinks the episode terminates, pad the states/actions
         # with zeros.
@@ -54,7 +55,10 @@ def imagine_trajectory(
             if actions is None:
                 imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
             else:
-                actions[t] = torch.zeros_like(actions[t - 1])
+                if len(actions) <= t:
+                    actions.append(torch.zeros_like(actions[t - 1]))
+                else:
+                    actions[t] = torch.zeros_like(actions[t - 1])
             continue
         if actions is None:
             action = agent._task_behavior.actor(latent_state).sample().squeeze(0)
@@ -100,8 +104,6 @@ def rollout_trajectory(
         posterior info.
     """
 
-    posterior_states: List[torch.Tensor] = []
-    posterior_info: List[Dict[str, Any]] = []
     observations: List[Dict[str, Any]] = []
     config = agent._config
     no_convert = config.no_convert_list
@@ -109,6 +111,8 @@ def rollout_trajectory(
 
     prev_state = initial_state
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
+    posterior_states: List[torch.Tensor] = [latent_state]
+    posterior_info: List[Dict[str, Any]] = [initial_state]
     done = False
     for t in range(trajectory_length):
         if done:
@@ -149,13 +153,65 @@ def rollout_trajectory(
     return posterior_states, observations, posterior_info
 
 
+def get_user_actions(env, trajectory_length: int, starting_obs) -> List[torch.Tensor]:
+    """Interactively gets a sequence of actions from the user. Renders
+    the environment to the screen to make it easier for the user to select
+    the actions.
+
+    Args:
+        env: Gym environment with which to take the actions in. Assumed to be
+        in the correct starting state.
+        trajectory_length (int): number of actions to take.
+        starting_obs: initial obs of the environment.
+
+    Returns:
+        List[torch.Tensor]: List of one-hot encoded actions in Tensor form,
+        ready to be used by the "imagine_trajectory" function.
+    """
+
+    actions: List[torch.Tensor] = []
+    n_actions = env.action_space.n
+    obs = starting_obs
+    device = torch.device("cuda")
+    for t in range(trajectory_length):
+        # Not all environments have a human-render option, so we display the
+        # raw image to the screen instead.
+        display_image(obs["image"])
+        valid_action = False
+        while not valid_action:
+            try:
+                action = int(
+                    input(f"Please enter an action between 0-{n_actions-1}:\t")
+                )
+                valid_action = True
+            except ValueError:
+                print("Invalid action. Please Try again.")
+                continue
+        action_arr = np.zeros(n_actions)
+        action_arr[action] = 1
+        # Adding the batch dimension
+        actions.append(torch.Tensor(action_arr).to(device).unsqueeze(0))
+        # Dreamer implementation uses the below dictionary representation for actions
+        # in the environment.
+        env_action = {"action": action_arr}
+        # Env.step() returns a function due to being parallisable
+        obs, reward, done, info = env.step(env_action)()
+        # Actions are padded later with zeros if need be.
+        if done:
+            break
+
+    return actions
+
+
 @torch.no_grad()
 def sample_rollouts(
     agent,
     env,
     n_samples: int,
-    trajectory_length: int = 16,
+    trajectory_length: int = 15,
     n_consecutive_trajectories: int = 1,
+    user_actions: bool = False,
+    user_env=None,
 ) -> Dict[str, Any]:
     """Samples rollouts from the world model and actor. Returns the imagined
     states and actions.
@@ -166,6 +222,10 @@ def sample_rollouts(
         n_samples (int): Number of rollouts to sample.
         trajectory_length (int, optional): Length of the imagined trajectory. Defaults to 16.
         n_consecutive_trajectories (int, optional): Number of consecutive trajectories to sample. Defaults to 1.
+        user_actions (bool, optional): Whether the actions the agent imagines taking is provided by the user or
+        the learned policy. Defaults to False.
+        user_env (optional): Environment used to allow the user to visualise their choice of actions, wihtout stepping
+        in the agent's environment.
 
     Returns:
         Dict[str, Any]: Dictionary containing the imagined states, imagined actions, posterior states, and observations
@@ -183,10 +243,16 @@ def sample_rollouts(
     for sample in range(n_samples):
         obs, info = env.reset()()
         initial_state = get_posterior_state(agent, obs, no_convert, ignore)
+        actions = None
+        if user_actions:
+            assert user_env is not None
+            user_obs, user_info = user_env.reset()()
+            actions = get_user_actions(user_env, trajectory_length, user_obs)
         imagined_states, imagined_actions = imagine_trajectory(
             agent=agent,
             initial_state=initial_state,
             trajectory_length=trajectory_length,
+            actions=actions,
         )
         posterior_states, observations, posteriors = rollout_trajectory(
             agent=agent,
@@ -195,6 +261,7 @@ def sample_rollouts(
             actions=imagined_actions,
             env=env,
         )
+        observations.insert(0, {"obs": obs, "reward": 0.0, "done": False, "info": info})
         imagined_state_samples.append(imagined_states)
         imagined_action_samples.append(imagined_actions)
         posterior_state_samples.append(posterior_states)
@@ -288,8 +355,10 @@ def evaluate_rollouts(
             imagined_actions = imagined_action_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
             print(f"SAMPLED TRAJECTORY IMAGINED LENGTH: {len(imagined_states)}")
+            print(f"POSTERIOR TRAJECTORY LENGTH: {len(posterior_states)}")
+            print(f"OBSERVATION TRAJECTORY LENGTH: {len(observations)}")
             # Happens when environment (or imagined trajectory) terminates early.
-            if len(imagined_states) == 0:
+            if len(imagined_states) == 0 or len(observations) == 0:
                 continue
             images = [obs["obs"]["image"] for obs in observations]
             rewards = [obs["reward"] for obs in observations]
@@ -323,7 +392,7 @@ def evaluate_rollouts(
                 else:
                     raise ValueError(f"Invalid narration_keys: {narration_keys}")
 
-                # (N, T, C) -> (T, N, C)
+                # (T, N, C) -> (N, T, C)
                 imagined_state_tensor = torch.cat(imagined_states, dim=0).permute(
                     1, 0, 2
                 )
@@ -337,6 +406,7 @@ def evaluate_rollouts(
                     config.dec_max_length,
                     sampling_method=config.token_sampling_method,
                 )[0]
+                print(f"Imagined State Tensor Shape: {imagined_state_tensor.shape}")
                 planned_intent = " ".join(
                     [
                         word
@@ -475,10 +545,15 @@ def evaluate_rollouts(
                 reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
 
                 if save_plots:
+                    title = (
+                        f"{logger.step}-sample-{sample}-reconstruction-plot"
+                        if logger is not None
+                        else f"sample-{sample}-reconstruction-plot"
+                    )
                     reconstruction_plot.savefig(
                         os.path.join(
                             config.logdir,
-                            f"{logger.step}-sample-{sample}-reconstruction-plot",
+                            title,
                         )
                     )
 
@@ -504,15 +579,16 @@ def evaluate_rollouts(
     posterior_bleu_scores = np.array(posterior_bleu_scores)
     mean_score = bleu_scores.mean()
     mean_posterior_score = posterior_bleu_scores.mean()
-    wandb_run.log(
-        {
-            "mean_imagined_bleu_score": mean_score,
-            "mean_posterior_bleu_score": mean_posterior_score,
-            "max_imagined_bleu_score": sample_max_imagined_bleu_score,
-            "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
-        },
-        step=logger.step,
-    )
+    if wandb_run is not None:
+        wandb_run.log(
+            {
+                "mean_imagined_bleu_score": mean_score,
+                "mean_posterior_bleu_score": mean_posterior_score,
+                "max_imagined_bleu_score": sample_max_imagined_bleu_score,
+                "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
+            },
+            step=logger.step,
+        )
 
 
 def get_action_translation_dict(n_actions: int):
@@ -723,6 +799,19 @@ def evaluate_language_to_action(
         # )
     except ValueError:
         return
+
+
+def display_image(image: np.ndarray, target_size: Tuple[int, int] = (600, 600)) -> None:
+    """Displays an image to the screen using opencv
+
+    Args:
+        image (np.ndarray): image of shape (H, W, C)
+        target_size (Tuple[int, int], optional): Image size to display. Defaults to (600,600).
+    """
+
+    resized_img = cv2.resize(image, target_size, interpolation=cv2.INTER_LINEAR)
+    cv2.imshow("img", cv2.cvtColor(resized_img, cv2.COLOR_RGB2BGR))
+    cv2.waitKey(0)
 
 
 def display_images_as_video(
@@ -1231,4 +1320,52 @@ def crafter_narration_using_obs_reconstruction(
             "obs_decoding_mean_posterior_bleu_score": mean_posterior_score,
         },
         step=logger.step,
+    )
+
+
+if __name__ == "__main__":
+    from dreamer import setup_args, create_environments, Dreamer
+    from tools import recursively_load_optim_state_dict
+
+    config = setup_args()
+    user_env, env = create_environments(config)
+    user_env = user_env[0]
+    env = env[0]  # create_environments returns a list due to parallel possibility
+    config.num_actions = (
+        env.action_space.n
+        if hasattr(env.action_space, "n")
+        else env.action_space.shape[0]
+    )
+    agent = Dreamer(
+        env.observation_space,
+        env.action_space,
+        config,
+        logger=None,
+        dataset=None,
+    ).to(config.device)
+    agent.requires_grad_(requires_grad=False)
+    if config.checkpoint:
+        checkpoint = torch.load(config.checkpoint)
+        agent.load_state_dict(checkpoint["agent_state_dict"])
+        recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
+        agent._should_pretrain._once = False
+
+    rollout_samples = sample_rollouts(
+        agent,
+        env,
+        1,
+        trajectory_length=config.eval_trajectory_length,
+        n_consecutive_trajectories=1,
+        user_actions=True,
+        user_env=user_env,
+    )
+    evaluate_rollouts(
+        agent,
+        rollout_samples["imagined_state_samples"],
+        rollout_samples["imagined_action_samples"],
+        rollout_samples["posterior_state_samples"],
+        rollout_samples["observation_samples"],
+        logger=None,
+        trajectory_length=config.eval_trajectory_length,
+        wandb_run=None,
     )
