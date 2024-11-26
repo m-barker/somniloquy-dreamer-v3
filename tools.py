@@ -293,6 +293,19 @@ def simulate(
                     ]  # type: ignore
                     results = [e.step(a) for e, a in zip(envs, action)]
                     results = [r() for r in results]
+
+                    if (
+                        agent._config.task == "safegym_island_navigation"
+                        and logger.step % 100 == 0
+                    ):
+                        wandb_run.log(
+                            {
+                                "water_incidents": envs[0]._env.num_water_incidents
+                                + train_env._env.num_water_incidents
+                            },
+                            step=logger.step,
+                        )
+
                     if prev_action is not None:
                         prev_action = torch.Tensor(prev_action).to(device=config.device)
                     obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
@@ -467,14 +480,6 @@ def simulate(
                                         "eval_return": score,
                                         "eval_length": length,
                                         "eval_episodes": len(eval_scores),
-                                    },
-                                    step=logger.step,
-                                )
-                            if agent._config.task == "safegym_island_navigation":
-                                wandb_run.log(
-                                    {
-                                        "water_incidents": env._env.num_water_incidents
-                                        + train_env._env.num_water_incidents
                                     },
                                     step=logger.step,
                                 )
