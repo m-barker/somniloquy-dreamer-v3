@@ -173,6 +173,7 @@ def simulate(
     info_keys_to_store: Optional[List[str]] = None,
     wandb_run=None,
     config=None,
+    train_env=None,
 ) -> Tuple:
     """Runs agent interaction with the environment.
 
@@ -471,7 +472,10 @@ def simulate(
                                 )
                             if agent._config.task == "safegym_island_navigation":
                                 wandb_run.log(
-                                    {"water_incidents": env._env.num_water_incidents},
+                                    {
+                                        "water_incidents": env._env.num_water_incidents
+                                        + train_env._env.num_water_incidents
+                                    },
                                     step=logger.step,
                                 )
                             eval_done = True
