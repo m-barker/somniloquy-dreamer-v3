@@ -386,6 +386,19 @@ def simulate(
                 # step envs
                 results = [e.step(a) for e, a in zip(envs, action)]
                 results = [r() for r in results]
+
+                if (
+                    agent._config.task == "safegym_island_navigation"
+                    and logger.step % 100 == 0
+                ):
+                    wandb_run.log(
+                        {
+                            "water_incidents": envs[0]._env.num_water_incidents
+                            + train_env._env.num_water_incidents
+                        },
+                        step=logger.step,
+                    )
+
                 # print(f"RESULTS: {results}")
                 obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
                 obs = list(obs)

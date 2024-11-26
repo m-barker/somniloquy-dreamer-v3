@@ -1,3 +1,6 @@
 [submodule "safe-grid-gym"]
 	path = safe-grid-gym
 	url = https://github.com/david-lindner/safe-grid-gym.git
+[submodule "virtualhome"]
+	path = virtualhome
+	url = https://github.com/xavierpuigf/virtualhome.git
