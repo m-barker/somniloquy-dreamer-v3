@@ -388,7 +388,8 @@ def simulate(
                 results = [r() for r in results]
 
                 if (
-                    agent._config.task == "safegym_island_navigation"
+                    config is not None
+                    and config.task == "safegym_island_navigation"
                     and logger.step % 100 == 0
                 ):
                     wandb_run.log(
