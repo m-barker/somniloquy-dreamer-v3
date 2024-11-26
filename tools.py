@@ -172,6 +172,7 @@ def simulate(
     no_save_obs: Optional[List[str]] = None,
     info_keys_to_store: Optional[List[str]] = None,
     wandb_run=None,
+    config=None,
 ) -> Tuple:
     """Runs agent interaction with the environment.
 
@@ -257,49 +258,152 @@ def simulate(
                     # replace obs with done by initial state
                     obs[index] = result[0]
             # step agents
-            obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
-            action, agent_state = agent(obs, done, agent_state)
-            if isinstance(action, dict):
-                action = [
-                    {k: np.array(action[k][i].detach().cpu()) for k in action}
-                    for i in range(len(envs))
-                ]
-            else:
-                action = np.array(action)
-            assert len(action) == len(envs)
-            # step envs
-            results = [e.step(a) for e, a in zip(envs, action)]
-            results = [r() for r in results]
-            # print(f"RESULTS: {results}")
-            obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
-            obs = list(obs)
-            reward = list(reward)
-            done = np.stack(done)  # type: ignore
-            episode += int(done.sum())
-            length += 1
-            step += len(envs)
-            length *= 1 - done
-            # add to cache
-            for a, result, env in zip(action, results, envs):
-                o, r, d, info = result
-                o = {
-                    k: (v if k in no_convert else convert(v))
-                    for k, v in o.items()
-                    if k not in ignore
-                }
-                transition = o.copy()
-                if isinstance(a, dict):
-                    transition.update(a)
+
+            if config is not None and config.conditional_actions:
+                from evaluation import get_posterior_state
+
+                if agent_state is None:
+                    obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
+                    obs = agent._wm.preprocess(obs, keys_to_ignore=["privileged_obs"])
+                    embed = agent._wm.encoder(obs)
+                    starting_state, _ = agent._wm.dynamics.obs_step(
+                        None, None, embed, obs["is_first"]
+                    )
+                    prev_action = None
+                    posterior = None
                 else:
-                    transition["action"] = a
-                transition["reward"] = r
-                transition["discount"] = info.get("discount", np.array(1 - float(d)))
+                    starting_state = agent_state[0]
+                    prev_action = agent_state[1].squeeze()
+                    posterior = starting_state
+                actions, log_probs = conditional_policy(agent, starting_state)  # type: ignore
+                for index, action in enumerate(actions):
+                    if type(obs) != type({}):
+                        obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
+                    _, _ = agent(obs, done, agent_state)
+                    action = [
+                        {
+                            "action": action,
+                            "logprob": (
+                                log_probs[index].detach().cpu().numpy()
+                                if isinstance(log_probs[index], torch.Tensor)
+                                else log_probs[index]
+                            ),
+                        }
+                    ]  # type: ignore
+                    results = [e.step(a) for e, a in zip(envs, action)]
+                    results = [r() for r in results]
+                    if prev_action is not None:
+                        prev_action = torch.Tensor(prev_action).to(device=config.device)
+                    obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
+                    posterior = get_posterior_state(
+                        agent,
+                        obs[0],
+                        no_convert=no_convert,
+                        obs_to_ignore=ignore,
+                        prev_state=posterior,
+                        prev_action=(
+                            prev_action.unsqueeze(0)
+                            if prev_action is not None
+                            else None
+                        ),
+                    )
+                    prev_action = action[0]["action"]
 
-                for key in info_keys:
-                    if key in info:
-                        transition[key] = info[key]
+                    if len(action[0]["action"].shape) > 1:
+                        action[0]["action"] = action[0]["action"].squeeze()
 
-                add_to_cache(cache, env.id, transition, no_convert=no_convert)
+                    obs = list(obs)
+                    reward = list(reward)
+                    done = np.stack(done)  # type: ignore
+                    episode += int(done.sum())
+                    length += 1
+                    step += len(envs)
+                    length *= 1 - done
+                    # add to cache
+                    for a, result, env in zip(action, results, envs):
+                        o, r, d, info = result
+                        o = {
+                            k: (v if k in no_convert else convert(v))
+                            for k, v in o.items()
+                            if k not in ignore
+                        }
+                        transition = o.copy()
+                        if isinstance(a, dict):
+                            transition.update(a)
+                        else:
+                            transition["action"] = a
+                        transition["reward"] = r
+                        transition["discount"] = info.get(
+                            "discount", np.array(1 - float(d))
+                        )
+
+                        for key in info_keys:
+                            if key in info:
+                                transition[key] = info[key]
+
+                        add_to_cache(cache, env.id, transition, no_convert=no_convert)
+                    agent_state = (
+                        posterior,
+                        torch.Tensor(action[0]["action"])
+                        .unsqueeze(0)
+                        .to(device=config.device),
+                    )
+                    if done.any():
+                        break
+                agent_state = (
+                    posterior,
+                    torch.Tensor(action[0]["action"])
+                    .unsqueeze(0)
+                    .to(device=config.device),
+                )
+            else:
+                obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
+                # agent_state is tuple (latent, action), where latent is the latent dict and
+                # action is a dict of action, logprob
+                action, agent_state = agent(obs, done, agent_state)
+                if isinstance(action, dict):
+                    action = [
+                        {k: np.array(action[k][i].detach().cpu()) for k in action}
+                        for i in range(len(envs))
+                    ]
+                else:
+                    action = np.array(action)
+                assert len(action) == len(envs)
+                # step envs
+                results = [e.step(a) for e, a in zip(envs, action)]
+                results = [r() for r in results]
+                # print(f"RESULTS: {results}")
+                obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
+                obs = list(obs)
+                reward = list(reward)
+                done = np.stack(done)  # type: ignore
+                episode += int(done.sum())
+                length += 1
+                step += len(envs)
+                length *= 1 - done
+                # add to cache
+                for a, result, env in zip(action, results, envs):
+                    o, r, d, info = result
+                    o = {
+                        k: (v if k in no_convert else convert(v))
+                        for k, v in o.items()
+                        if k not in ignore
+                    }
+                    transition = o.copy()
+                    if isinstance(a, dict):
+                        transition.update(a)
+                    else:
+                        transition["action"] = a
+                    transition["reward"] = r
+                    transition["discount"] = info.get(
+                        "discount", np.array(1 - float(d))
+                    )
+
+                    for key in info_keys:
+                        if key in info:
+                            transition[key] = info[key]
+
+                    add_to_cache(cache, env.id, transition, no_convert=no_convert)
 
             if done.any():
                 indices = [index for index, d in enumerate(done) if d]
@@ -384,7 +488,7 @@ def add_to_cache(
     """Adds a transition to the cache, in the episode
     specified by a given ID.
 
-    Args:
+    Args:action
         cache (dict): Dictionary of episodes.
         id (str): The unique ID of the episode to which the
         transition pertains.
@@ -529,17 +633,22 @@ def sample_episodes(episodes, length, seed=0):
                 # 'is_first' comes after 'is_last'
                 index = 0
                 possible = length - size
-                # for k, v in episode.items():
-                #     print(f"KEY {k}")
-                #     for value in v:
-                #         print(f"VALUE SHAPE {value.shape}")
-                ret = {
-                    k: np.append(
-                        ret[k], v[index : min(index + possible, total)].copy(), axis=0
-                    )
-                    for k, v in episode.items()
-                    if "log_" not in k
-                }
+                try:
+                    ret = {
+                        k: np.append(
+                            ret[k],
+                            v[index : min(index + possible, total)].copy(),
+                            axis=0,
+                        )
+                        for k, v in episode.items()
+                        if "log_" not in k
+                    }
+                except ValueError:
+                    for k, v in episode.items():
+                        print(f"KEY {k}")
+                        for value in v:
+                            print(f"VALUE SHAPE {value.shape}")
+                    raise ValueError
                 if "is_first" in ret:
                     ret["is_first"][size] = True
             size = len(next(iter(ret.values())))
@@ -1536,3 +1645,112 @@ def bleu_metric_from_strings(
         predicted_sequence, [true_sequence]
     )  # there can be multiple referenence strings
     return metric.compute()
+
+
+@torch.no_grad()
+def conditional_policy(
+    agent,
+    starting_state: Dict[str, torch.Tensor],
+    trajectory_length: int = 15,
+    condition: str = "uh oh i will go into the water and drown",
+    condition_check: bool = False,
+    policy_attempts: int = 10,
+    random_attempts: int = 20,
+) -> Tuple[List[np.ndarray], List[torch.Tensor]]:
+    """Plans a sequence of actions conditional on a string description of what should or
+    shouldn't occur.
+
+    Args:
+        agent (_type_): Dreamer agent.
+
+        starting_state: Dict[str, torch.Tensor]: Encoded starting latent state of the environment.
+        trajectory_length (int, optional): Sequence length of actions. Defaults to 15.
+
+        condition (str, optional): String description to check. Defaults to "uh oh i will go into the water and drown".
+
+        condition_check (bool, optional): Whether the condition must be true or false. Defaults to false. If false, this
+        asks the question "plan a sequence of actions that won't cause the conditional description".
+
+        policy_attempts (int, optional): Number of times the policy should be sampled from to try and meet the condition.
+        Once this is exceeded, result to a random policy that tries to meet the condition. Defaults to 10.
+
+        random_attempts (int, optional): Number fo times the random policy should be sampled from to try and meet the
+        condition. If this is exceeded, then a condition violating action sequence is returned, to allow train# ing
+        to continue. Defaults to 20.
+
+    Returns:
+        List[torch.Tensor]: list of actions to take.
+    """
+
+    condition_satisfied = False
+    total_policy_attempts = 0
+    total_random_attempts = 0
+    while not condition_satisfied and total_random_attempts < random_attempts:
+        planned_actions: List[np.ndarray] = []
+        log_probs = []
+        latent_state = agent._wm.dynamics.get_feat(starting_state).unsqueeze(0)
+        imagined_states: List[torch.Tensor] = [latent_state]
+        prev_state = starting_state
+        for t in range(trajectory_length):
+            if total_policy_attempts < policy_attempts:
+                policy = agent._task_behavior.actor(latent_state)
+                action = policy.sample().squeeze(0)
+                log_prob = policy.log_prob(action)
+            else:
+                int_action = np.random.randint(agent._config.num_actions)
+                action_arr = np.zeros(agent._config.num_actions)
+                action_arr[int_action] = 1  # one-hot encoding
+                action = torch.Tensor(action_arr).to(agent._config.device)
+                log_prob = torch.Tensor([1.0]).numpy()
+            log_probs.append(log_prob.squeeze())
+            planned_actions.append(action.detach().cpu().squeeze().numpy())
+
+            # assert len(log_probs[-1].shape) == 0, print(log_probs[-1])
+            assert len(planned_actions[-1].shape) == 1
+
+            if len(action.shape) < 2:
+                action = action.unsqueeze(dim=0)
+            prior = agent._wm.dynamics.img_step(
+                prev_state=prev_state,
+                prev_action=action,
+            )
+            prev_state = prior
+            latent_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
+            imagined_states.append(latent_state)
+
+            predicted_continue = agent._wm.heads["cont"](latent_state).mode()
+            # Less than 50% predicted chance that the episode continues according to world model.
+            if predicted_continue[0, 0].detach().cpu().numpy() < 0.5:
+                break
+
+        if total_policy_attempts < policy_attempts:
+            total_policy_attempts += 1
+        else:
+            total_random_attempts += 1
+
+        # (T, N, C) -> (N, T, C)
+        imagined_state_tensor = torch.cat(imagined_states, dim=0).permute(1, 0, 2)
+
+        # our batch size is 1 so take first item in list
+        planned_intent = agent._wm.heads["language"].generate(
+            imagined_state_tensor,
+            agent._wm.vocab,
+            agent._config.dec_max_length,
+            sampling_method=agent._config.token_sampling_method,
+        )[0]
+        planned_intent = " ".join(
+            [
+                word
+                for word in planned_intent.split()
+                if word not in ["<BOS>", "<EOS>", "<PAD>"]
+            ]
+        )
+
+        if condition_check:
+            condition_satisfied = planned_intent == condition
+        else:
+            condition_satisfied = planned_intent != condition
+
+    print(f"Planning conditional policy... imagined sequence: {planned_intent}")
+    print(f"Number of actions: {len(planned_actions)}")
+    return planned_actions, log_probs

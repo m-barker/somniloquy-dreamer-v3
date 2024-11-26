@@ -57,6 +57,7 @@ class Dreamer(nn.Module):
         self._should_reset = tools.Every(config.reset_every)
         self._should_expl = tools.Until(int(config.expl_until / config.action_repeat))
         self._metrics = {}
+        self.training = False
         # this is update step
         if logger is not None:
             self._step = logger.step // config.action_repeat
@@ -83,8 +84,9 @@ class Dreamer(nn.Module):
             plan2explore=lambda: expl.Plan2Explore(config, self._wm, reward),
         )[config.expl_behavior]().to(self._config.device)
 
-    def __call__(self, obs, reset, state=None, training=True):
+    def __call__(self, obs, reset, state=None):
         step = self._step
+        training = self.training
         if training:
             steps = (
                 self._config.pretrain
@@ -495,9 +497,10 @@ def main(config):
             print("Start evaluation.")
             # partial is used to ensure that training is set to false
             # at every __call__ to the agent.
-            eval_policy = functools.partial(agent, training=False)
+            # eval_policy = functools.partial(agent, training=False)
+            agent.training = False
             tools.simulate(
-                eval_policy,
+                agent,
                 eval_envs,
                 eval_eps,
                 config.evaldir,
@@ -508,6 +511,7 @@ def main(config):
                 no_save_obs=["rays"],
                 info_keys_to_store=config.narrator["narration_key"],
                 wandb_run=run,
+                config=config,
             )
             rollout_samples = sample_rollouts(
                 agent,
@@ -571,6 +575,7 @@ def main(config):
                     )
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
+        agent.training = True
         state = tools.simulate(
             agent,
             train_envs,
@@ -584,6 +589,7 @@ def main(config):
             no_save_obs=["rays"],
             info_keys_to_store=config.narrator["narration_key"],
             wandb_run=run,
+            config=config,
         )
         items_to_save = {
             "agent_state_dict": agent.state_dict(),

@@ -25,6 +25,7 @@ defaults:
   ignore_list: []
   no_convert_list: []
   narrator: { narration_key: [] }
+  conditional_actions: false
 
   # Environment
   task: "dmc_walker_walk"
@@ -293,10 +294,10 @@ minigrid:
   narrator: { narration_key: ["occupancy_grid"] }
   imag_gradient: "reinforce"
   actions: needed
-  enable_language: false
+  enable_language: true
   enable_language_to_action: false
   action_prediction: false
-  evaluate_reconstruction_narration: true
+  evaluate_reconstruction_narration: false
   vocab_path: vocab/minigrid_four_squares.json
   dec_max_length: 30
   enc_max_length: 16
@@ -430,7 +431,7 @@ safegym:
       # mlp_layers: 5,
       # mlp_units: 1024,
     }
-  actor: { layers: 5, dist: "onehot", std: "none" }
+  actor: { layers: 2, dist: "onehot", std: "none" }
   # value: { layers: 5 }
   # reward_head: { layers: 5 }
   # cont_head: { layers: 5 }
@@ -444,7 +445,8 @@ safegym:
   video_pred_log: true
   task: "safegym_island_navigation"
   time_limit: 1024
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-42/latest.pt"
+  conditional_actions: false
+  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
 debug:
   debug: True

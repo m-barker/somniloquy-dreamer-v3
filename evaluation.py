@@ -46,7 +46,7 @@ def imagine_trajectory(
     prev_state = initial_state
     done = False
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
-    imagained_states: List[torch.Tensor] = [latent_state]
+    imagained_states: List[torch.Tensor] = []
     for t in range(trajectory_length):
         # If world model thinks the episode terminates, pad the states/actions
         # with zeros.
@@ -111,8 +111,8 @@ def rollout_trajectory(
 
     prev_state = initial_state
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
-    posterior_states: List[torch.Tensor] = [latent_state]
-    posterior_info: List[Dict[str, Any]] = [initial_state]
+    posterior_states: List[torch.Tensor] = []
+    posterior_info: List[Dict[str, Any]] = []
     done = False
     for t in range(trajectory_length):
         if done:
@@ -261,7 +261,6 @@ def sample_rollouts(
             actions=imagined_actions,
             env=env,
         )
-        observations.insert(0, {"obs": obs, "reward": 0.0, "done": False, "info": info})
         imagined_state_samples.append(imagined_states)
         imagined_action_samples.append(imagined_actions)
         posterior_state_samples.append(posterior_states)
@@ -406,7 +405,6 @@ def evaluate_rollouts(
                     config.dec_max_length,
                     sampling_method=config.token_sampling_method,
                 )[0]
-                print(f"Imagined State Tensor Shape: {imagined_state_tensor.shape}")
                 planned_intent = " ".join(
                     [
                         word

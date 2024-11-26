@@ -204,7 +204,7 @@ class WorldModel(nn.Module):
                     padding_mask = torch.ones(self._narration_max_enc_seq).to(
                         self.device
                     )
-                    padding_mask[:data_sequence.shape[0] ] = 0
+                    padding_mask[: data_sequence.shape[0]] = 0
                     data_sequence = torch.cat([data_sequence, padding], dim=0)
                 else:
                     padding_mask = torch.zeros(self._narration_max_enc_seq).to(
@@ -350,10 +350,10 @@ class WorldModel(nn.Module):
             posterior_tokens = torch.argmax(logit, dim=-1)
             posterior_tokens = posterior_tokens + stoch_starting_token
             posterior_tokens = posterior_tokens.flatten()
-            bos_token = torch.ones(1).to(self._config.device) * bos_token
-            eos_token = torch.ones(1).to(self._config.device) * eos_token
+            bos_token = torch.ones(1).to(self._config.device) * bos_token  # type: ignore
+            eos_token = torch.ones(1).to(self._config.device) * eos_token  # type: ignore
             posterior_tokens = torch.cat(
-                [bos_token, posterior_tokens, eos_token], dim=0
+                [bos_token, posterior_tokens, eos_token], dim=0  # type: ignore
             )
             excpected_token_length = (
                 self._narration_max_enc_seq * self._config.dyn_discrete
@@ -406,7 +406,7 @@ class WorldModel(nn.Module):
         bos_token: int = 1,
         eos_token: int = 2,
         padding_token: int = 0,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Translates from a sequence of English tokens describing an agent's
         behaviour into the sequence of action tokens that the agent took
         when realising this behaviour.
@@ -615,30 +615,10 @@ class WorldModel(nn.Module):
                         losses[name] = loss
                         # print(f"Language loss: {loss}")
                     elif name == "language_to_action":
-                        # loss = tools.narration_loss(pred, true_action_tokens[:, 1:])
-                        # loss_metric = Perplexity(
-                        #     ignore_index=0, device=self._config.device
-                        # )
-                        # perplexity_loss = (
-                        #     loss_metric.update(
-                        #         pred["language_pred"]
-                        #         .permute(1, 0, 2)
-                        #         .to(self._config.device),
-                        #         narrations[:, 1:].to(self._config.device),
-                        #     )
-                        #     .compute()
-                        #     .to(self._config.device)
-                        # )
-                        # reconstruction_loss = tools.narration_loss(
-                        #     pred["action_pred"], true_action_tokens[:, 1:]
-                        # )
-                        # loss = (0.5 * perplexity_loss) + (0.5 * reconstruction_loss)
                         loss = tools.narration_loss(
                             pred["language_pred"], narrations[:, 1:]
                         )
                         losses[name] = loss
-                        # print(f"Preplexity loss: {perplexity_loss}")
-                        # print(f"Action reconstruction loss: {reconstruction_loss}")
                         print(f"Language to action loss: {loss}")
                     elif name == "language-to-latent":
                         loss = tools.narration_loss(
@@ -713,11 +693,16 @@ class WorldModel(nn.Module):
         # 'is_terminal' is necesarry to train cont_head
         assert "is_terminal" in obs
         obs["cont"] = torch.Tensor(1.0 - obs["is_terminal"]).unsqueeze(-1)
-        obs = {
-            k: torch.Tensor(v).to(self._config.device)
-            for k, v in obs.items()
-            if k not in ignore
-        }
+        try:
+            obs = {
+                k: torch.Tensor(v).to(self._config.device)
+                for k, v in obs.items()
+                if k not in ignore
+            }
+        except TypeError:
+            for k, v in obs.items():
+                print(f"Key: {k}, Value: {v}")
+            raise TypeError
         return obs
 
     def video_pred(self, data, ignore_keys: Optional[List[str]] = None):
@@ -758,7 +743,7 @@ class WorldModel(nn.Module):
                 if len(narration_data.keys()) == 1:  # type: ignore
                     narration_data_list = narration_data_list[list(narration_data.keys())[0]]  # type: ignore
         else:
-            narration_data_list = [narration_data[0][i] for i in range(16)]
+            narration_data_list = [narration_data[0][i] for i in range(16)]  # type: ignore
         ground_truth_intent = self.narrator.narrate(narration_data_list)
         states, _ = self.dynamics.observe(
             embed,
