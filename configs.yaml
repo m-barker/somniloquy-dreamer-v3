@@ -410,7 +410,7 @@ panda_push:
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/panda-push-colour-with-lang/dreamer-agent-step-102500.pt"
 
 safegym:
-  steps: 1e5
+  steps: 2e4
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
