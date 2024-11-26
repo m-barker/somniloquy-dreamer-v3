@@ -5,16 +5,16 @@ script="dreamer.py"
 
 # List of argument strings
 arguments=(
-    "--configs safegym --seed 10 --logdir ./logdir/safegym-seed-10-conditional-actions --conditional_actions true"
-    "--configs safegym --seed 20 --logdir ./logdir/safegym-seed-20-conditional-actions --conditional_actions true"
-    "--configs safegym --seed 30 --logdir ./logdir/safegym-seed-30-conditional-actions --conditional_actions true"
-    "--configs safegym --seed 40 --logdir ./logdir/safegym-seed-40-conditional-actions --conditional_actions true"
-    "--configs safegym --seed 50 --logdir ./logdir/safegym-seed-50-conditional-actions --conditional_actions true"
-    "--configs safegym --seed 10 --logdir ./logdir/safegym-seed-10 --conditional_actions false"
-    "--configs safegym --seed 20 --logdir ./logdir/safegym-seed-20 --conditional_actions false"
-    "--configs safegym --seed 30 --logdir ./logdir/safegym-seed-30 --conditional_actions false"
-    "--configs safegym --seed 40 --logdir ./logdir/safegym-seed-40 --conditional_actions false"
-    "--configs safegym --seed 50 --logdir ./logdir/safegym-seed-50 --conditional_actions false"
+    "--configs safegym --seed 10 --logdir ./logdir/safegym-seed-10-conditional-actions --conditional_actions True"
+    "--configs safegym --seed 20 --logdir ./logdir/safegym-seed-20-conditional-actions --conditional_actions True"
+    "--configs safegym --seed 30 --logdir ./logdir/safegym-seed-30-conditional-actions --conditional_actions True"
+    "--configs safegym --seed 40 --logdir ./logdir/safegym-seed-40-conditional-actions --conditional_actions True"
+    "--configs safegym --seed 50 --logdir ./logdir/safegym-seed-50-conditional-actions --conditional_actions True"
+    "--configs safegym --seed 10 --logdir ./logdir/safegym-seed-10 --conditional_actions False"
+    "--configs safegym --seed 20 --logdir ./logdir/safegym-seed-20 --conditional_actions False"
+    "--configs safegym --seed 30 --logdir ./logdir/safegym-seed-30 --conditional_actions False"
+    "--configs safegym --seed 40 --logdir ./logdir/safegym-seed-40 --conditional_actions False"
+    "--configs safegym --seed 50 --logdir ./logdir/safegym-seed-50 --conditional_actions False"
 )
 
 log_names=(
@@ -37,7 +37,7 @@ max_parallel=2
 run_script() {
     local args="$1"
     echo "Starting $script with arguments: $args"
-    python $script $args
+    python3.9 $script $args
     if [ $? -ne 0 ]; then
         echo "Error: $script failed with arguments: $args"
         exit 1
