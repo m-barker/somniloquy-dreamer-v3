@@ -303,6 +303,15 @@ def make_env(config, mode, id):
             max_length=config.time_limit,
             seed=config.seed + id,
         )
+    elif suite == "ai2thor":
+        import envs.ai2thor_env as ai2thor_env
+
+        if task == "cook_egg":
+            env = ai2thor_env.CookEggEnv(
+                img_size=config.size, seed=config.seed, max_length=config.time_limit
+            )
+        else:
+            raise ValueError(f"Invalid ai2thor task: {task}")
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)
