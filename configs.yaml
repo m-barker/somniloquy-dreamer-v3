@@ -97,7 +97,7 @@ defaults:
       lr: 3e-5,
       eps: 1e-5,
       grad_clip: 100.0,
-      outscale: 1.0,
+      outscale: 0.01,
     }
   critic:
     {
@@ -116,7 +116,7 @@ defaults:
   action_prediction_head:
     { layers: 2, dist: "onehot", loss_scale: 1.0, outscale: 0.0 }
   cont_head: { layers: 2, loss_scale: 1.0, outscale: 1.0 }
-  dyn_scale: 0.5
+  dyn_scale: 1.0
   rep_scale: 0.1
   kl_free: 1.0
   weight_decay: 0.0
@@ -129,7 +129,7 @@ defaults:
   # The ratio of model update steps: environment steps
   train_ratio: 512
   pretrain: 100
-  model_lr: 1e-4
+  model_lr: 4e-5
   opt_eps: 1e-8
   grad_clip: 1000
   dataset_size: 1000000
@@ -453,14 +453,17 @@ ai2thor:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 10000
+  eval_every: 25000
+  train_ratio: 64
   dyn_hidden: 1024
-  dyn_deter: 4096
+  dyn_deter: 8192
   units: 1024
   log_every: 500
-  encoder: { cnn_keys: "image", cnn_depth: 96, mlp_layers: 5, mlp_units: 1024 }
-  decoder: { cnn_keys: "image", cnn_depth: 96, mlp_layers: 5, mlp_units: 1024 }
-  actor: { layers: 5, dist: "onehot", std: "none" }
+  dyn_stoch: 32
+  dyn_discrete: 64
+  encoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
+  decoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
+  actor: { layers: 3, dist: "onehot", std: "none" }
   value: { layers: 5 }
   reward_head: { layers: 5 }
   cont_head: { layers: 5 }

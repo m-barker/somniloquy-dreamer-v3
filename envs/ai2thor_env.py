@@ -153,6 +153,7 @@ class AI2ThorBaseEnv(gym.Env):
         """
         assert len(action) == len(self.action_names)
         assert np.count_nonzero(action) == 1
+        # print(f"TAKING STEP {self._step}")
 
         action_index = np.argmax(action)
 
