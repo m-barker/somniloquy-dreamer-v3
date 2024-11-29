@@ -359,7 +359,7 @@ class CookEggEnv(AI2ThorBaseEnv):
         my_spaces = {"image": spaces.Box(0, 255, img_shape, np.uint8)}
         my_spaces.update(
             {
-                k: gym.spaces.Box(0, 1, (1,), dtype=np.float32)
+                k: gym.spaces.Box(-np.inf, np.inf, (1,), dtype=np.uint8)
                 for k in self.log_rewards.keys()
             }
         )
@@ -384,6 +384,8 @@ class CookEggEnv(AI2ThorBaseEnv):
         for k in self.log_rewards.keys():
             self.log_rewards[k] = 0
 
+        print(self.log_rewards)
+
         return super().reset()
 
     def compute_reward(self, event) -> float:
@@ -397,10 +399,12 @@ class CookEggEnv(AI2ThorBaseEnv):
                     reward += 1.0
                     self.fridge_opened = True
                     self.log_rewards["log_fridge_opened"] += 1
+                    print(self.log_rewards)
             if object_meta["objectType"] == "Microwave":
                 if object_meta["isOpen"] and not self.microwave_opened:
                     reward += 1.0
                     self.microwave_opened = True
+                    print(self.log_rewards)
                     self.log_rewards["log_microwave_opened"] += 1
                 elif (
                     not object_meta["isOpen"]
@@ -410,6 +414,7 @@ class CookEggEnv(AI2ThorBaseEnv):
                     reward += 1.0
                     self.microwave_opened_finished = True
                     self.log_rewards["log_microwave_opened_finished"] += 1
+                    print(self.log_rewards)
                 elif object_meta["isToggled"] and not self.microwave_on:
                     # Check if there is a cracked egg in the microwave
                     for obj in object_meta["receptacleObjectIds"]:
@@ -419,6 +424,7 @@ class CookEggEnv(AI2ThorBaseEnv):
                                     reward += 5.0
                                     self.microwave_on = True
                                     self.log_rewards["log_microwave_on"] += 1
+                                    print(self.log_rewards)
                                     break
             if object_meta["objectType"] == "Pan" or object_meta["objectType"] == "Pot":
                 if not self.stove_on:
@@ -432,10 +438,12 @@ class CookEggEnv(AI2ThorBaseEnv):
                                         reward += 1.0
                                     if object_meta["objectType"] == "Pan":
                                         self.log_rewards["log_egg_in_pan"] += 1
+                                        print(self.log_rewards)
                                         self.egg_in_pan = True
                                     else:
                                         self.egg_in_pot = True
                                         self.log_rewards["log_egg_in_pot"] += 1
+                                        print(self.log_rewards)
                                     egg_curently_in_pot_pan = True
                                     break
                     if egg_curently_in_pot_pan:
@@ -446,9 +454,11 @@ class CookEggEnv(AI2ThorBaseEnv):
                                     if object_meta["objectType"] == "Pan":
                                         self.pan_on_stove = True
                                         self.log_rewards["log_pan_on_stove"] += 1
+                                        print(self.log_rewards)
                                     else:
                                         self.pot_on_stove = True
                                         self.log_rewards["log_pot_on_stove"] += 1
+                                        print(self.log_rewards)
                                 if not self.stove_on:
                                     for obj_to_check_meta in event.metadata["objects"]:
                                         if obj_to_check_meta["objectId"] == parent:
@@ -456,20 +466,24 @@ class CookEggEnv(AI2ThorBaseEnv):
                                                 self.stove_on = True
                                                 reward += 1.0
                                                 self.log_rewards["log_stove_on"] += 1
+                                                print(self.log_rewards)
                 # Finally, give rewards for picking up egg, cracked egg, and cooked cracked egg.
                 if object_meta["objectType"] == "Egg":
                     if object_meta["isPickedUp"] and not self.egg_picked_up:
                         self.egg_picked_up = True
                         reward += 1.0
                         self.log_rewards["log_egg_picked_up"] += 1
+                        print(self.log_rewards)
                 if object_meta["objectType"] == "EggCracked":
                     if not object_meta["isCooked"] and not self.egg_cracked_picked_up:
                         self.egg_cracked_picked_up = True
                         reward += 1.0
                         self.log_rewards["log_egg_cracked_picked_up"] += 1
+                        print(self.log_rewards)
                     elif object_meta["isCooked"] and not self.egg_cooked_picked_up:
                         self.egg_cooked_picked_up
                         self.log_rewards["log_egg_cooked_picked_up"]
+                        print(self.log_rewards)
                         reward += 10.0
 
         return reward
