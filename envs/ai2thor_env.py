@@ -137,6 +137,8 @@ class AI2ThorBaseEnv(gym.Env):
         Returns:
             Tuple[Dict, Dict]: obs, info.
         """
+        self._step = 0
+        self._done = False
         event = self.controller.reset()
         self.update_agent_position(event.metadata)
         self.set_closest_objects(event.metadata)
@@ -153,7 +155,7 @@ class AI2ThorBaseEnv(gym.Env):
         """
         assert len(action) == len(self.action_names)
         assert np.count_nonzero(action) == 1
-
+        print(f"taking step {self._step}")
         action_index = np.argmax(action)
 
         action_name = self.action_names[action_index]
@@ -275,7 +277,7 @@ class CookEggEnv(AI2ThorBaseEnv):
         img_size: Tuple[int, int] = (64, 64),
         seed: int = 42,
         max_length: int = 5012,
-        headless: bool = True,
+        headless: bool = False,
     ) -> None:
         ACTION_NAMES = [
             "PickupObject",
@@ -333,6 +335,24 @@ class CookEggEnv(AI2ThorBaseEnv):
                 if object_meta["isCooked"] and object_meta["isPickedUp"]:
                     return True
         return False
+
+    def reset(self) -> Tuple[Dict, Dict]:
+        self.fridge_opened = False
+        self.egg_picked_up = False
+        self.egg_cracked = False
+        self.microwave_opened = False
+        self.microwave_opened_finished = False
+        self.microwave_on = False
+        self.egg_cracked_picked_up = False
+        self.egg_cooked = False
+        self.egg_cooked_picked_up = False
+        self.egg_in_pan = False
+        self.egg_in_pot = False
+        self.pan_on_stove = False
+        self.pot_on_stove = False
+        self.stove_on = False
+
+        return super().reset()
 
     def compute_reward(self, event) -> float:
         reward = 0.0
