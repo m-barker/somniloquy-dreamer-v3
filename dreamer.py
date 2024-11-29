@@ -530,17 +530,16 @@ def main(config):
                 trajectory_length=config.eval_trajectory_length,
                 n_consecutive_trajectories=config.eval_n_consecutive_trajectories,
             )
-            if config.enable_language:
-                evaluate_rollouts(
-                    agent,
-                    rollout_samples["imagined_state_samples"],
-                    rollout_samples["imagined_action_samples"],
-                    rollout_samples["posterior_state_samples"],
-                    rollout_samples["observation_samples"],
-                    logger=logger,
-                    trajectory_length=config.eval_trajectory_length,
-                    wandb_run=run,
-                )
+            evaluate_rollouts(
+                agent,
+                rollout_samples["imagined_state_samples"],
+                rollout_samples["imagined_action_samples"],
+                rollout_samples["posterior_state_samples"],
+                rollout_samples["observation_samples"],
+                logger=logger,
+                trajectory_length=config.eval_trajectory_length,
+                wandb_run=run,
+            )
             if config.evaluate_reconstruction_narration:
                 if "crafter" in config.task:
                     crafter_narration_using_obs_reconstruction(

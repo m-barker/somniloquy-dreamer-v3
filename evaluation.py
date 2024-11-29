@@ -338,7 +338,7 @@ def evaluate_rollouts(
         sample_imagined_bleu_scores = []
         sample_reconstructed_bleu_scores = []
 
-        print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
+        # print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
         for index, trajectory in enumerate(
             range(0, len(imagined_state_samples[sample]), trajectory_length)
         ):
@@ -353,9 +353,9 @@ def evaluate_rollouts(
             imagined_states = imagined_state_samples[sample][trajectory:end_index]
             imagined_actions = imagined_action_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
-            print(f"SAMPLED TRAJECTORY IMAGINED LENGTH: {len(imagined_states)}")
-            print(f"POSTERIOR TRAJECTORY LENGTH: {len(posterior_states)}")
-            print(f"OBSERVATION TRAJECTORY LENGTH: {len(observations)}")
+            # print(f"SAMPLED TRAJECTORY IMAGINED LENGTH: {len(imagined_states)}")
+            # print(f"POSTERIOR TRAJECTORY LENGTH: {len(posterior_states)}")
+            # print(f"OBSERVATION TRAJECTORY LENGTH: {len(observations)}")
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
@@ -523,70 +523,77 @@ def evaluate_rollouts(
                     f"Sample {sample} Trajectory {index} Reconstructed BLEU Score Greedy: {posterior_bleu_score_greedy}"
                 )
 
-                imagined_images = [
-                    agent._wm.heads["decoder"](state)["image"].mode()
-                    for state in imagined_states
-                ]
-                reconstructed_images = [
-                    agent._wm.heads["decoder"](state)["image"].mode()
-                    for state in posterior_states
-                ]
-                imagined_images = convert_images_to_numpy(imagined_images)
-                reconstructed_images = convert_images_to_numpy(reconstructed_images)
+            imagined_images = [
+                agent._wm.heads["decoder"](state)["image"].mode()
+                for state in imagined_states
+            ]
+            reconstructed_images = [
+                agent._wm.heads["decoder"](state)["image"].mode()
+                for state in posterior_states
+            ]
+            imagined_images = convert_images_to_numpy(imagined_images)
+            reconstructed_images = convert_images_to_numpy(reconstructed_images)
 
-                reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
-                    [imagined_images, reconstructed_images, images],
-                    3,
-                    len(images),
-                    start_time=trajectory,
+            reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
+                [imagined_images, reconstructed_images, images],
+                3,
+                len(images),
+                start_time=trajectory,
+            )
+            reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
+
+            if save_plots:
+                title = (
+                    f"{logger.step}-sample-{sample}-reconstruction-plot"
+                    if logger is not None
+                    else f"sample-{sample}-reconstruction-plot"
                 )
-                reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
-
-                if save_plots:
-                    title = (
-                        f"{logger.step}-sample-{sample}-reconstruction-plot"
-                        if logger is not None
-                        else f"sample-{sample}-reconstruction-plot"
+                reconstruction_plot.savefig(
+                    os.path.join(
+                        config.logdir,
+                        title,
                     )
-                    reconstruction_plot.savefig(
-                        os.path.join(
-                            config.logdir,
-                            title,
-                        )
-                    )
+                )
 
-                # wandb.log(
-                #     {
-                #         "reconstruction_plot": reconstruction_plot,
-                #         "planned_intent": planned_intent,
-                #         "actual_narration": actual_narration,
-                #     }
-                # )
+        if config.enable_language:
+            sample_mean_reconstructed_bleu_score = np.array(
+                sample_reconstructed_bleu_scores
+            ).mean()
+            sample_mean_imagined_bleu_score = np.array(
+                sample_imagined_bleu_scores
+            ).mean()
 
-        sample_mean_reconstructed_bleu_score = np.array(
-            sample_reconstructed_bleu_scores
-        ).mean()
-        sample_mean_imagined_bleu_score = np.array(sample_imagined_bleu_scores).mean()
-
-        if sample_mean_reconstructed_bleu_score > sample_max_reconstructed_bleu_score:
-            sample_max_reconstructed_bleu_score = sample_mean_reconstructed_bleu_score
-        if sample_mean_imagined_bleu_score > sample_max_imagined_bleu_score:
-            sample_max_imagined_bleu_score = sample_mean_imagined_bleu_score
-
-    bleu_scores = np.array(bleu_scores)
-    posterior_bleu_scores = np.array(posterior_bleu_scores)
-    mean_score = bleu_scores.mean()
-    mean_posterior_score = posterior_bleu_scores.mean()
-    if wandb_run is not None:
-        wandb_run.log(
-            {
-                "mean_imagined_bleu_score": mean_score,
-                "mean_posterior_bleu_score": mean_posterior_score,
-                "max_imagined_bleu_score": sample_max_imagined_bleu_score,
-                "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
-            },
-            step=logger.step,
-        )
+            if (
+                sample_mean_reconstructed_bleu_score
+                > sample_max_reconstructed_bleu_score
+            ):
+                sample_max_reconstructed_bleu_score = (
+                    sample_mean_reconstructed_bleu_score
+                )
+            if sample_mean_imagined_bleu_score > sample_max_imagined_bleu_score:
+                sample_max_imagined_bleu_score = sample_mean_imagined_bleu_score
+    if config.enable_language:
+        bleu_scores = np.array(bleu_scores)
+        posterior_bleu_scores = np.array(posterior_bleu_scores)
+        mean_score = bleu_scores.mean()
+        mean_posterior_score = posterior_bleu_scores.mean()
+        if wandb_run is not None:
+            wandb_run.log(
+                {
+                    "mean_imagined_bleu_score": mean_score,
+                    "mean_posterior_bleu_score": mean_posterior_score,
+                    "max_imagined_bleu_score": sample_max_imagined_bleu_score,
+                    "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
+                    "reconstruction_plot": reconstruction_plot,
+                },
+                step=logger.step,
+            )
+    else:
+        if wandb_run is not None:
+            wandb_run.log(
+                {"reconstruction_plot": reconstruction_plot},
+                step=logger.step,
+            )
 
 
 def get_action_translation_dict(n_actions: int):
