@@ -450,17 +450,17 @@ safegym:
 
 ai2thor:
   steps: 1e8
-  envs: 1
+  envs: 4
   action_repeat: 1
-  eval_episode_num: 1
+  eval_episode_num: 0
   eval_every: 25000
   train_ratio: 64
   dyn_hidden: 1024
-  dyn_deter: 8192
+  dyn_deter: 4096
   units: 1024
   log_every: 500
   dyn_stoch: 32
-  dyn_discrete: 64
+  dyn_discrete: 32
   encoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
   decoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
   actor: { layers: 3, dist: "onehot", std: "none" }

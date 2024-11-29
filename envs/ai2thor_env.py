@@ -278,7 +278,7 @@ class CookEggEnv(AI2ThorBaseEnv):
         img_size: Tuple[int, int] = (64, 64),
         seed: int = 42,
         max_length: int = 5012,
-        headless: bool = False,
+        headless: bool = True,
     ) -> None:
         ACTION_NAMES = [
             "PickupObject",
@@ -356,14 +356,14 @@ class CookEggEnv(AI2ThorBaseEnv):
     @property
     def observation_space(self) -> spaces.Dict:
         img_shape = self._image_size + (3,)
-        spaces = spaces.Dict({"image": spaces.Box(0, 255, img_shape, np.uint8)})
-        spaces.update(
+        my_spaces = {"image": spaces.Box(0, 255, img_shape, np.uint8)}
+        my_spaces.update(
             {
                 k: gym.spaces.Box(0, 1, (1,), dtype=np.float32)
                 for k in self.log_rewards.keys()
             }
         )
-        return spaces
+        return spaces.Dict(my_spaces)
 
     def reset(self) -> Tuple[Dict, Dict]:
         self.fridge_opened = False
