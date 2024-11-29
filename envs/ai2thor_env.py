@@ -329,6 +329,22 @@ class CookEggEnv(AI2ThorBaseEnv):
         self.pot_on_stove = False
         self.stove_on = False
 
+        self.log_rewards = {
+            "log_fridge_opened": 0,
+            "log_egg_picked_up": 0,
+            "log_egg_cracked": 0,
+            "log_microwave_opened": 0,
+            "log_microwave_opened_finished": 0,
+            "log_microwave_on": 0,
+            "log_egg_cracked_picked_up": 0,
+            "log_egg_cooked_picked_up": 0,
+            "log_egg_in_pan": 0,
+            "log_egg_in_pot": 0,
+            "log_pan_on_stove": 0,
+            "log_pot_on_stove": 0,
+            "log_stove_on": 0,
+        }
+
     def is_terminated(self, event) -> bool:
         # Should return terminated if the agent is holding a cooked egg.
         for object_meta in event.metadata["objects"]:
@@ -336,6 +352,18 @@ class CookEggEnv(AI2ThorBaseEnv):
                 if object_meta["isCooked"] and object_meta["isPickedUp"]:
                     return True
         return False
+
+    @property
+    def observation_space(self) -> spaces.Dict:
+        img_shape = self._image_size + (3,)
+        spaces = spaces.Dict({"image": spaces.Box(0, 255, img_shape, np.uint8)})
+        spaces.update(
+            {
+                k: gym.spaces.Box(0, 1, (1,), dtype=np.float32)
+                for k in self.log_rewards.keys()
+            }
+        )
+        return spaces
 
     def reset(self) -> Tuple[Dict, Dict]:
         self.fridge_opened = False
@@ -353,6 +381,9 @@ class CookEggEnv(AI2ThorBaseEnv):
         self.pot_on_stove = False
         self.stove_on = False
 
+        for k in self.log_rewards.keys():
+            self.log_rewards[k] = 0
+
         return super().reset()
 
     def compute_reward(self, event) -> float:
@@ -365,10 +396,12 @@ class CookEggEnv(AI2ThorBaseEnv):
                 if object_meta["isOpen"] and not self.fridge_opened:
                     reward += 1.0
                     self.fridge_opened = True
+                    self.log_rewards["log_fridge_opened"] += 1
             if object_meta["objectType"] == "Microwave":
                 if object_meta["isOpen"] and not self.microwave_opened:
                     reward += 1.0
                     self.microwave_opened = True
+                    self.log_rewards["log_microwave_opened"] += 1
                 elif (
                     not object_meta["isOpen"]
                     and not self.microwave_opened_finished
@@ -376,6 +409,7 @@ class CookEggEnv(AI2ThorBaseEnv):
                 ):
                     reward += 1.0
                     self.microwave_opened_finished = True
+                    self.log_rewards["log_microwave_opened_finished"] += 1
                 elif object_meta["isToggled"] and not self.microwave_on:
                     # Check if there is a cracked egg in the microwave
                     for obj in object_meta["receptacleObjectIds"]:
@@ -384,6 +418,7 @@ class CookEggEnv(AI2ThorBaseEnv):
                                 if obj_to_check_meta["objectId"] == obj:
                                     reward += 5.0
                                     self.microwave_on = True
+                                    self.log_rewards["log_microwave_on"] += 1
                                     break
             if object_meta["objectType"] == "Pan" or object_meta["objectType"] == "Pot":
                 if not self.stove_on:
@@ -396,9 +431,11 @@ class CookEggEnv(AI2ThorBaseEnv):
                                     if not self.egg_in_pan and not self.egg_in_pot:
                                         reward += 1.0
                                     if object_meta["objectType"] == "Pan":
+                                        self.log_rewards["log_egg_in_pan"] += 1
                                         self.egg_in_pan = True
                                     else:
                                         self.egg_in_pot = True
+                                        self.log_rewards["log_egg_in_pot"] += 1
                                     egg_curently_in_pot_pan = True
                                     break
                     if egg_curently_in_pot_pan:
@@ -408,25 +445,31 @@ class CookEggEnv(AI2ThorBaseEnv):
                                     reward += 5.0
                                     if object_meta["objectType"] == "Pan":
                                         self.pan_on_stove = True
+                                        self.log_rewards["log_pan_on_stove"] += 1
                                     else:
                                         self.pot_on_stove = True
+                                        self.log_rewards["log_pot_on_stove"] += 1
                                 if not self.stove_on:
                                     for obj_to_check_meta in event.metadata["objects"]:
                                         if obj_to_check_meta["objectId"] == parent:
                                             if obj_to_check_meta["isOn"]:
                                                 self.stove_on = True
                                                 reward += 1.0
+                                                self.log_rewards["log_stove_on"] += 1
                 # Finally, give rewards for picking up egg, cracked egg, and cooked cracked egg.
                 if object_meta["objectType"] == "Egg":
                     if object_meta["isPickedUp"] and not self.egg_picked_up:
                         self.egg_picked_up = True
                         reward += 1.0
+                        self.log_rewards["log_egg_picked_up"] += 1
                 if object_meta["objectType"] == "EggCracked":
                     if not object_meta["isCooked"] and not self.egg_cracked_picked_up:
                         self.egg_cracked_picked_up = True
                         reward += 1.0
+                        self.log_rewards["log_egg_cracked_picked_up"] += 1
                     elif object_meta["isCooked"] and not self.egg_cooked_picked_up:
                         self.egg_cooked_picked_up
+                        self.log_rewards["log_egg_cooked_picked_up"]
                         reward += 10.0
 
         return reward
@@ -443,7 +486,12 @@ class CookEggEnv(AI2ThorBaseEnv):
         else:
             image = rgb_image  # type: ignore
 
-        return {"image": image, "is_terminal": done, "is_first": is_first}
+        return {
+            "image": image,
+            "is_terminal": done,
+            "is_first": is_first,
+            **self.log_rewards,
+        }
 
 
 if __name__ == "__main__":
