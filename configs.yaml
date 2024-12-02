@@ -27,7 +27,7 @@ defaults:
   narrator: { narration_key: [] }
   conditional_actions: false
   conditional_policy_attempts: 15
-  condition_epsilon: 0.1
+  conditional_epsilon: 0.1
 
   # Environment
   task: "dmc_walker_walk"
