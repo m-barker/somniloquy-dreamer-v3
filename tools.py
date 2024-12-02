@@ -1790,6 +1790,6 @@ def conditional_policy(
         else:
             condition_satisfied = planned_intent != condition
 
-    print(f"Planning conditional policy... imagined sequence: {planned_intent}")
-    print(f"Number of actions: {len(planned_actions)}")
+    # print(f"Planning conditional policy... imagined sequence: {planned_intent}")
+    # print(f"Number of actions: {len(planned_actions)}")
     return planned_actions, log_probs
