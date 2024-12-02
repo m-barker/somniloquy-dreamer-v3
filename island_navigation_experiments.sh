@@ -5,11 +5,16 @@ script="dreamer.py"
 
 # List of argument strings
 arguments=(
+    "--configs safegym --seed 10 --logdir ./logdir/safegym-seed-10-conditional-actions-baseline --conditional_actions True --conditional_policy_attempts 0"
     "--configs safegym --seed 10 --logdir ./logdir/safegym-seed-10-conditional-actions --conditional_actions True"
     "--configs safegym --seed 20 --logdir ./logdir/safegym-seed-20-conditional-actions --conditional_actions True"
     "--configs safegym --seed 30 --logdir ./logdir/safegym-seed-30-conditional-actions --conditional_actions True"
     "--configs safegym --seed 40 --logdir ./logdir/safegym-seed-40-conditional-actions --conditional_actions True"
     "--configs safegym --seed 50 --logdir ./logdir/safegym-seed-50-conditional-actions --conditional_actions True"
+    "--configs safegym --seed 20 --logdir ./logdir/safegym-seed-20-conditional-actions-baseline --conditional_actions True --conditional_policy_attempts 0"
+    "--configs safegym --seed 30 --logdir ./logdir/safegym-seed-30-conditional-actions-baseline --conditional_actions True --conditional_policy_attempts 0"
+    "--configs safegym --seed 40 --logdir ./logdir/safegym-seed-40-conditional-actions-baseline --conditional_actions True --conditional_policy_attempts 0"
+    "--configs safegym --seed 50 --logdir ./logdir/safegym-seed-50-conditional-actions-baseline --conditional_actions True --conditional_policy_attempts 0"
     "--configs safegym --seed 10 --logdir ./logdir/safegym-seed-10 --conditional_actions False"
     "--configs safegym --seed 20 --logdir ./logdir/safegym-seed-20 --conditional_actions False"
     "--configs safegym --seed 30 --logdir ./logdir/safegym-seed-30 --conditional_actions False"
@@ -18,11 +23,16 @@ arguments=(
 )
 
 log_names=(
+    "safe-gym-seed-10-conditional-actions-baseline"
     "safe-gym-seed-10-conditional-actions"
     "safe-gym-seed-20-conditional-actions"
     "safe-gym-seed-30-conditional-actions"
     "safe-gym-seed-40-conditional-actions"
     "safe-gym-seed-50-conditional-actions"
+    "safe-gym-seed-20-conditional-actions-baseline"
+    "safe-gym-seed-30-conditional-actions-baseline"
+    "safe-gym-seed-40-conditional-actions-baseline"
+    "safe-gym-seed-50-conditional-actions-baseline"
     "safe-gym-seed-10"
     "safe-gym-seed-20"
     "safe-gym-seed-30"
