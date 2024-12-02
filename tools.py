@@ -282,6 +282,8 @@ def simulate(
                         actions, log_probs = conditional_policy(agent, starting_state, policy_only=True)  # type: ignore
                     else:
                         actions, log_probs = conditional_policy(agent, starting_state, policy_attempts=config.conditional_policy_attempts)  # type: ignore
+                else:
+                    actions, log_probs = conditional_policy(agent, starting_state)
                 for index, action in enumerate(actions):
                     if type(obs) != type({}):
                         obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
