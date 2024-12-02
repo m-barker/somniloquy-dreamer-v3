@@ -446,7 +446,7 @@ def simulate(
                     for key in list(cache[envs[i].id].keys()):
                         if "log_" in key:
                             logger.scalar(
-                                key, float(np.array(cache[envs[i].id][key]).sum())
+                                key, float(np.array(cache[envs[i].id][key]).mean())
                             )
                             # log items won't be used later
                             cache[envs[i].id].pop(key)
