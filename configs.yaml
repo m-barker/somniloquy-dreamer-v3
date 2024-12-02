@@ -26,6 +26,8 @@ defaults:
   no_convert_list: []
   narrator: { narration_key: [] }
   conditional_actions: false
+  conditional_policy_attempts: 15
+  condition_epsilon: 0.1
 
   # Environment
   task: "dmc_walker_walk"
@@ -415,26 +417,16 @@ safegym:
   action_repeat: 1
   eval_episode_num: 1
   eval_every: 500
-  # dyn_hidden: 1024
-  # dyn_deter: 4096
-  # units: 1024
+  dyn_hidden: 1024
+  dyn_deter: 4096
+  units: 1024
   log_every: 500
-  encoder: {
-      cnn_keys: "image",
-      # cnn_depth: 96,
-      # mlp_layers: 5,
-      # mlp_units: 1024,
-    }
-  decoder: {
-      cnn_keys: "image",
-      # cnn_depth: 96,
-      # mlp_layers: 5,
-      # mlp_units: 1024,
-    }
-  actor: { layers: 2, dist: "onehot", std: "none" }
-  # value: { layers: 5 }
-  # reward_head: { layers: 5 }
-  # cont_head: { layers: 5 }
+  encoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
+  decoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
+  actor: { layers: 3, dist: "onehot", std: "none" }
+  value: { layers: 3 }
+  reward_head: { layers: 3 }
+  cont_head: { layers: 3 }
   narrator: { narration_key: ["occupancy_grid"] }
   imag_gradient: "reinforce"
   enable_language: true

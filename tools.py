@@ -276,7 +276,12 @@ def simulate(
                     starting_state = agent_state[0]
                     prev_action = agent_state[1].squeeze()
                     posterior = starting_state
-                actions, log_probs = conditional_policy(agent, starting_state)  # type: ignore
+                if config.conditional_policy_attempts == 0:
+                    p = np.random.random()
+                    if p > config.conditional_epsilon:
+                        actions, log_probs = conditional_policy(agent, starting_state, policy_only=True)  # type: ignore
+                    else:
+                        actions, log_probs = conditional_policy(agent, starting_state, policy_attempts=config.conditional_policy_attempts)  # type: ignore
                 for index, action in enumerate(actions):
                     if type(obs) != type({}):
                         obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
@@ -1680,6 +1685,7 @@ def conditional_policy(
     condition_check: bool = False,
     policy_attempts: int = 10,
     random_attempts: int = 20,
+    policy_only: bool = False,
 ) -> Tuple[List[np.ndarray], List[torch.Tensor]]:
     """Plans a sequence of actions conditional on a string description of what should or
     shouldn't occur.
@@ -1702,6 +1708,9 @@ def conditional_policy(
         condition. If this is exceeded, then a condition violating action sequence is returned, to allow train# ing
         to continue. Defaults to 20.
 
+        policy_only: (bool, optional) Whether to generate a sequence according to the policy and return, ignoring the condition.
+        Used as a basline.
+
     Returns:
         List[torch.Tensor]: list of actions to take.
     """
@@ -1709,6 +1718,10 @@ def conditional_policy(
     condition_satisfied = False
     total_policy_attempts = 0
     total_random_attempts = 0
+    # Just want one sequence of actions, chosen according to the policy.
+    if policy_only:
+        total_policy_attempts = policy_attempts - 1
+        total_random_attempts = random_attempts
     while not condition_satisfied and total_random_attempts < random_attempts:
         planned_actions: List[np.ndarray] = []
         log_probs = []
