@@ -1721,10 +1721,10 @@ def conditional_policy(
     total_policy_attempts = 0
     total_random_attempts = 0
     # Just want one sequence of actions, chosen according to the policy.
-    if policy_only:
-        total_policy_attempts = policy_attempts - 1
-        total_random_attempts = random_attempts
     while not condition_satisfied and total_random_attempts < random_attempts:
+        if policy_only:
+            total_policy_attempts = policy_attempts - 1
+            total_random_attempts = random_attempts
         planned_actions: List[np.ndarray] = []
         log_probs = []
         latent_state = agent._wm.dynamics.get_feat(starting_state).unsqueeze(0)
