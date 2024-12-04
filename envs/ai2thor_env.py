@@ -582,6 +582,11 @@ class CookEggEnv(AI2ThorBaseEnv):
         if not metadata["lastActionSuccess"]:
             return object_interaction_dict
 
+        # Go from object ID i.e., Sink|-00.70|+00.93|-00.65|SinkBasin
+        # to object name i.e., Sink
+        if object_interacted_with is not None:
+            object_interacted_with = object_interacted_with.split("|")[0]
+
         action_name = metadata["lastAction"]
 
         if action_name == "PickupObject":
