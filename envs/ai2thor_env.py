@@ -157,10 +157,10 @@ class AI2ThorBaseEnv(gym.Env):
         self._step = 0
         self._done = False
         event = self.controller.reset()
+        info = self.filter_metadata(event.metadata, is_first=True)
         self.update_agent_position(event.metadata)
         self.set_closest_objects(event.metadata)
-        obs = self.process_obs(event, is_first=True)
-        info = self.filter_metadata(event.metadata, is_first=True)
+        obs = self.process_obs(event, info, is_first=True)
         return obs, info
 
     def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, Dict]:
@@ -243,10 +243,10 @@ class AI2ThorBaseEnv(gym.Env):
         self.update_agent_position(event.metadata)
         self.set_closest_objects(event.metadata)
 
-        obs = self.process_obs(event)
+        info = self.filter_metadata(event.metadata, object_interacted_with)
+        obs = self.process_obs(event, info)
         reward = self.compute_reward(event)
         done = self.is_terminated(event)
-        info = self.filter_metadata(event.metadata, object_interacted_with)
 
         self._step += 1
         self._done = done or (self.max_length and self._step >= self.max_length)
@@ -272,7 +272,13 @@ class AI2ThorBaseEnv(gym.Env):
     ) -> Dict:
         return metadata
 
-    def process_obs(self, event, is_first: bool = False, done: bool = False) -> Dict:
+    def process_obs(
+        self,
+        event,
+        filtered_meta: Dict[str, str],
+        is_first: bool = False,
+        done: bool = False,
+    ) -> Dict:
         return {}
 
     def seed(self, seed=None):
@@ -517,7 +523,13 @@ class CookEggEnv(AI2ThorBaseEnv):
 
         return reward
 
-    def process_obs(self, event, is_first: bool = False, done: bool = False) -> Dict:
+    def process_obs(
+        self,
+        event,
+        filtered_meta: Dict[str, str],
+        is_first: bool = False,
+        done: bool = False,
+    ) -> Dict:
         rgb_image: np.ndarray = event.frame
 
         h, w, _ = rgb_image.shape
@@ -534,6 +546,7 @@ class CookEggEnv(AI2ThorBaseEnv):
             "is_terminal": done,
             "is_first": is_first,
             **self.log_rewards,
+            **filtered_meta,
         }
 
     def filter_metadata(
@@ -642,6 +655,7 @@ if __name__ == "__main__":
     env = CookEggEnv(headless=False)
     import time
     import json
+    from pprint import pprint
 
     obs, info = env.reset()
 
@@ -701,7 +715,7 @@ if __name__ == "__main__":
             # int_action = optimal_action_sequence[step_count]
             action[int_action] = 1
             obs, reward, done, info = env.step(action)
-            print(info)
+            pprint(obs)
             observations.append(obs["image"])
             step_count += 1
             cum_reward += 1
