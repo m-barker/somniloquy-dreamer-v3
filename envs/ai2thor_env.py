@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Optional
 
 import numpy as np
 import gym
@@ -157,7 +157,7 @@ class AI2ThorBaseEnv(gym.Env):
         self.update_agent_position(event.metadata)
         self.set_closest_objects(event.metadata)
         obs = self.process_obs(event, is_first=True)
-        info = self.filter_metadata(event.metadata)
+        info = self.filter_metadata(event.metadata, is_first=True)
         return obs, info
 
     def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, Dict]:
@@ -174,6 +174,7 @@ class AI2ThorBaseEnv(gym.Env):
         action_index = np.argmax(action)
 
         action_name = self.action_names[action_index]
+        object_interacted_with = None
         no_op = False
         if (
             "Object" in action_name
@@ -187,36 +188,42 @@ class AI2ThorBaseEnv(gym.Env):
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_graspable_object
                     )
+                    object_interacted_with = self.closest_graspable_object
             elif action_name == "PutObject":
                 no_op = self.closest_receptacle == None
                 if not no_op:
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_receptacle
                     )
+                    object_interacted_with = self.closest_receptacle
             elif action_name == "OpenObject" or action_name == "CloseObject":
                 no_op = self.closest_openable_object == None
                 if not no_op:
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_openable_object
                     )
+                    object_interacted_with = self.closest_openable_object
             elif action_name == "BreakObject":
                 no_op = self.closest_breakable_object == None
                 if not no_op:
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_breakable_object
                     )
+                    object_interacted_with = self.closest_breakable_object
             elif action_name == "SliceObject":
                 no_op = self.closest_sliceable_object == None
                 if not no_op:
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_sliceable_object
                     )
+                    object_interacted_with = self.closest_sliceable_object
             elif "Toggle" in action_name:
                 no_op = self.closest_toggleable_object == None
                 if not no_op:
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_toggleable_object
                     )
+                    object_interacted_with = self.closest_toggleable_object
         elif "Held" in action_name:
             event = self.controller.step(
                 action=action_name, moveMagnitude=self.move_magnitude
@@ -236,7 +243,7 @@ class AI2ThorBaseEnv(gym.Env):
         obs = self.process_obs(event)
         reward = self.compute_reward(event)
         done = self.is_terminated(event)
-        info = self.filter_metadata(event.metadata)
+        info = self.filter_metadata(event.metadata, object_interacted_with)
 
         self._step += 1
         self._done = done or (self.max_length and self._step >= self.max_length)
@@ -254,7 +261,12 @@ class AI2ThorBaseEnv(gym.Env):
     def is_terminated(self, event) -> bool:
         return False
 
-    def filter_metadata(self, metadata) -> Dict:
+    def filter_metadata(
+        self,
+        metadata,
+        object_interacted_with: Optional[str] = None,
+        is_first: bool = False,
+    ) -> Dict:
         return metadata
 
     def process_obs(self, event, is_first: bool = False, done: bool = False) -> Dict:
@@ -521,78 +533,166 @@ class CookEggEnv(AI2ThorBaseEnv):
             **self.log_rewards,
         }
 
+    def filter_metadata(
+        self,
+        metadata: Dict,
+        object_interacted_with: Optional[str] = None,
+        is_first: bool = False,
+    ) -> Dict:
+        """Filters the metadata returned by the environment
+        to return a dictionary of data required for downstream tasks (i.e.,
+        narration)
+
+        Args:
+            metadata (Dict): Metadata returned by the controller object
+
+            object_interactied_with (Optional[str]): Optional name of the object that the
+            agent interacted with in this environment step. Defaults to None.
+
+            is_first (bool, optional): Whether this is the first observation of the
+            episode. If true, returns the default null string dict, as
+            no interactions could have happened. Defaults to False.
+
+        Returns:
+            Dict: Dictionary containing object interactions needed for
+            generating the narrations.
+        """
+        object_interaction_dict = {
+            "pickup": "",
+            "drop": "",
+            "open": "",
+            "close": "",
+            "break": "",
+            "slice": "",
+            "toggle_on": "",
+            "toggle_off": "",
+            "throw": "",
+            "put": "",
+        }
+
+        # No interactions could have happened yet
+        if is_first:
+            return object_interaction_dict
+
+        # If action didn't succeed then this is equivalent
+        # to no interaction.
+        if not metadata["lastActionSuccess"]:
+            return object_interaction_dict
+
+        action_name = metadata["lastAction"]
+
+        if action_name == "PickupObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["pickup"] = object_interacted_with
+        elif action_name == "PutObject":
+            assert object_interacted_with is not None
+            receptacle = object_interacted_with
+            # TODO: figure out which object was put in the receptacle
+        elif action_name == "DropHandObject":
+            # TODO: figure out which object the agent was holding
+            pass
+        elif action_name == "ThrowObject":
+            # TODO: figure out which object the agent was holding
+            pass
+        elif action_name == "OpenObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["open"] = object_interacted_with
+        elif action_name == "CloseObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["close"] = object_interacted_with
+        elif action_name == "BreakObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["break"] = object_interacted_with
+        elif action_name == "SliceObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["slice"] = object_interacted_with
+        elif action_name == "ToggleObjectOn":
+            assert object_interacted_with is not None
+            object_interaction_dict["toggle_on"] = object_interacted_with
+        elif action_name == "ToggleObjecctOff":
+            assert object_interacted_with is not None
+            object_interaction_dict["toggle_off"] = object_interacted_with
+
+        return object_interaction_dict
+
 
 if __name__ == "__main__":
     env = CookEggEnv()
     import time
+    import json
 
-    optimal_action_sequence = [
-        20,
-        15,
-        15,
-        15,
-        15,
-        15,
-        15,
-        15,
-        19,
-        9,
-        17,
-        0,
-        11,
-        22,
-        22,
-        0,
-        21,
-        21,
-        19,
-        15,
-        15,
-        15,
-        15,
-        15,
-        15,
-        20,
-        21,
-        18,
-        9,
-        1,
-        10,
-        13,
-        14,
-        9,
-        0,
-    ]
+    obs, info = env.reset()
 
-    for episode in range(1):
-        observations = []
-        step_count = 0
-        obs, info = env.reset()
-        done = False
-        cum_reward = 0.0
-        observations.append(obs["image"])
-        while not done:
-            action = np.zeros(env.action_space.n)
-            # int_action = env.action_space.sample()
-            # int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
-            int_action = optimal_action_sequence[step_count]
-            action[int_action] = 1
-            obs, reward, done, info = env.step(action)
-            observations.append(obs["image"])
-            step_count += 1
-            cum_reward += 1
-            time.sleep(0.01)
-        print(f"Episode {episode} reward: {cum_reward}")
+    with open("floor10-initial-conditions.json", "w") as dst:
+        json.dump(info, dst)
 
-    observations = np.array(observations)
-    print(observations.shape)
-    imgs = [Image.fromarray(img) for img in observations]
-    frame_durations = [250] * (len(imgs) - 1)
-    frame_durations.append(2500)
-    imgs[0].save(
-        "optimal_policy.gif",
-        save_all=True,
-        append_images=imgs[1:],
-        duration=frame_durations,
-        loop=0,
-    )
+    # optimal_action_sequence = [
+    #     20,
+    #     15,
+    #     15,
+    #     15,
+    #     15,
+    #     15,
+    #     15,
+    #     15,
+    #     19,
+    #     9,
+    #     17,
+    #     0,
+    #     11,
+    #     22,
+    #     22,
+    #     0,
+    #     21,
+    #     21,
+    #     19,
+    #     15,
+    #     15,
+    #     15,
+    #     15,
+    #     15,
+    #     15,
+    #     20,
+    #     21,
+    #     18,
+    #     9,
+    #     1,
+    #     10,
+    #     13,
+    #     14,
+    #     9,
+    #     0,
+    # ]
+
+    # for episode in range(1):
+    #     observations = []
+    #     step_count = 0
+    #     obs, info = env.reset()
+    #     done = False
+    #     cum_reward = 0.0
+    #     observations.append(obs["image"])
+    #     while not done:
+    #         action = np.zeros(env.action_space.n)
+    #         # int_action = env.action_space.sample()
+    #         # int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
+    #         int_action = optimal_action_sequence[step_count]
+    #         action[int_action] = 1
+    #         obs, reward, done, info = env.step(action)
+    #         observations.append(obs["image"])
+    #         step_count += 1
+    #         cum_reward += 1
+    #         time.sleep(0.01)
+    #     print(f"Episode {episode} reward: {cum_reward}")
+
+    # observations = np.array(observations)
+    # print(observations.shape)
+    # imgs = [Image.fromarray(img) for img in observations]
+    # frame_durations = [250] * (len(imgs) - 1)
+    # frame_durations.append(2500)
+    # imgs[0].save(
+    #     "optimal_policy.gif",
+    #     save_all=True,
+    #     append_images=imgs[1:],
+    #     duration=frame_durations,
+    #     loop=0,
+    # )

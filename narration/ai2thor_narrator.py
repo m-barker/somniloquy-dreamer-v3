@@ -176,7 +176,7 @@ class CookEggNarrator:
 
         for t in range(trajectory_length):
             for verb, interaction_data in object_interactions.items():
-                if interaction_data[t] is not None:
+                if interaction_data[t] != "":
                     if t == 0:
                         interaction_str += "First "
                     if verb == "pickup":
