@@ -9,6 +9,10 @@ from gym.utils import seeding
 from ai2thor.controller import Controller
 from ai2thor.platform import CloudRendering
 
+from typing import List, Tuple, Dict, Any
+
+import numpy as np
+
 
 class AI2ThorBaseEnv(gym.Env):
     def __init__(
@@ -253,7 +257,7 @@ class AI2ThorBaseEnv(gym.Env):
 
         # print(event.metadata["errorMessage"])
         self.prev_meta = event.metadata
-        return obs, reward, done, info
+        return obs, reward, done, {}
 
     def close(self):
         self.controller.stop()
@@ -541,10 +545,17 @@ class CookEggEnv(AI2ThorBaseEnv):
         else:
             image = rgb_image  # type: ignore
 
+        visible_objects: List[str] = []
+        for obj_meta in event.metadata["objects"]:
+            if obj_meta["visible"]:
+                visible_objects.append(obj_meta["objectType"])
+
         return {
             "image": image,
             "is_terminal": done,
             "is_first": is_first,
+            "agent_position": self.agent_position,
+            "visible_objects": visible_objects,
             **self.log_rewards,
             **filtered_meta,
         }
@@ -704,22 +715,78 @@ if __name__ == "__main__":
         observations = []
         step_count = 0
         obs, info = env.reset()
-        print(info)
-        done = False
-        cum_reward = 0.0
+        visible_objects = []
+        agent_positions = []
+        object_interactions = []
+        pprint(obs)
+        visible_objects.append(obs["visible_objects"])
+        agent_positions.append(obs["agent_position"])
+        object_interactions.append(
+            {
+                "pickup": obs["pickup"],
+                "drop": obs["drop"],
+                "open": obs["open"],
+                "close": obs["close"],
+                "break": obs["break"],
+                "slice": obs["slice"],
+                "toggle_on": obs["toggle_on"],
+                "toggle_off": obs["toggle_off"],
+                "throw": obs["throw"],
+                "put": obs["put"],
+            }
+        )
+
         observations.append(obs["image"])
+        done = False
+        # narrator = CookEggNarrator()
+        cum_reward = 0.0
         while not done:
             action = np.zeros(env.action_space.n)
-            int_action = env.action_space.sample()
-            int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
-            # int_action = optimal_action_sequence[step_count]
+            # int_action = env.action_space.sample()
+            # int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
+            int_action = optimal_action_sequence[step_count]
             action[int_action] = 1
             obs, reward, done, info = env.step(action)
-            pprint(obs)
+            # visible_objects.append(obs["visible_objects"])
+            # agent_positions.append(obs["agent_position"])
+            # object_interactions.append(
+            #     {
+            #         "pickup": obs["pickup"],
+            #         "drop": obs["drop"],
+            #         "open": obs["open"],
+            #         "close": obs["close"],
+            #         "break": obs["break"],
+            #         "slice": obs["slice"],
+            #         "toggle_on": obs["toggle_on"],
+            #         "toggle_off": obs["toggle_off"],
+            #         "throw": obs["throw"],
+            #         "put": obs["put"],
+            #     }
+            # )
+            # if len(visible_objects) == 16:
+            #     combined_dict = {}
+            #     for d in object_interactions:
+            #         for key, value in d.items():
+            #             combined_dict.setdefault(key, []).append(value)
+            #     print(narrator.narrate(visible_objects, agent_positions, combined_dict))
+            #     visible_objects = []
+            #     agent_positions = []
+            #     object_interactions = []
+
             observations.append(obs["image"])
             step_count += 1
             cum_reward += 1
-        print(f"Episode {episode} reward: {cum_reward}")
+            time.sleep(0.1)
+        # print(f"Episode {episode} reward: {cum_reward}")
+        # combined_dict = {}
+        # for d in object_interactions:        # combined_dict = {}
+        # for d in object_interactions:
+        #     for key, value in d.items():
+        #         combined_dict.setdefault(key, []).append(value)
+        # print(narrator.narrate(visible_objects, agent_positions, combined_dict))
+        #     for key, value in d.items():
+        #         combined_dict.setdefault(key, []).append(value)
+        # print(narrator.narrate(visible_objects, agent_positions, combined_dict))
 
     # observations = np.array(observations)
     # print(observations.shape)

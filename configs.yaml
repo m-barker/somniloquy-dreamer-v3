@@ -459,11 +459,26 @@ ai2thor:
   value: { layers: 5 }
   reward_head: { layers: 5 }
   cont_head: { layers: 5 }
-  # narrator: { narration_key: ["occupancy_grid"] }
+  narrator:
+    {
+      narration_key:
+        [
+          "open",
+          "close",
+          "pickup",
+          "put",
+          "slice",
+          "throw",
+          "toggle_off",
+          "toggle_on",
+          "break",
+          "drop",
+        ],
+    }
   imag_gradient: "reinforce"
-  enable_language: false
+  enable_language: True
   evaluate_reconstruction_narration: false
-  # vocab_path: vocab/safegym_island_navigation.json
+  vocab_path: vocab/ai2thor.json
   # dec_max_length: 50
   # enc_max_length: 16
   video_pred_log: true

@@ -151,8 +151,9 @@ class CookEggNarrator:
                 movement_str += (
                     f"and then I will head towards the {biggest_delta_name} "
                 )
-        if movement_str == "":
-            movement_str += "I won't move much "
+        # Check for if the agent doesn't move
+        if "head" not in movement_str:
+            movement_str += "and I won't move much "
         return movement_str
 
     def describe_agents_interaction(
