@@ -37,6 +37,9 @@ class AI2ThorBaseEnv(gym.Env):
         # x, y, z position of agent
         self.agent_position: Tuple[float, float, float] = 0.0, 0.0, 0.0
 
+        # Prev steps metadata. Used for computing which object was dropped, etc.
+        self.prev_meta = None
+
         self.closest_object = None
         self.closest_receptacle = None
         self.closest_graspable_object = None
@@ -249,7 +252,7 @@ class AI2ThorBaseEnv(gym.Env):
         self._done = done or (self.max_length and self._step >= self.max_length)
 
         # print(event.metadata["errorMessage"])
-
+        self.prev_meta = event.metadata
         return obs, reward, done, info
 
     def close(self):
@@ -588,12 +591,26 @@ class CookEggEnv(AI2ThorBaseEnv):
             assert object_interacted_with is not None
             receptacle = object_interacted_with
             # TODO: figure out which object was put in the receptacle
-        elif action_name == "DropHandObject":
+            object_placed = None
+            for obj_meta in self.prev_meta["objects"]:
+                if obj_meta["isPickedUp"]:
+                    object_placed = obj_meta["objectType"]
+                    break
+            assert object_placed is not None
+            object_interaction_dict["put"] = (object_placed, receptacle)
+
+        elif action_name == "DropHandObject" or action_name == "ThrowObject":
             # TODO: figure out which object the agent was holding
-            pass
-        elif action_name == "ThrowObject":
-            # TODO: figure out which object the agent was holding
-            pass
+            object_dropped = None
+            for obj_meta in self.prev_meta["objects"]:
+                if obj_meta["isPickedUp"]:
+                    object_dropped = obj_meta["objectType"]
+                    break
+            assert object_dropped is not None
+            if action_name == "DropHandObject":
+                object_interaction_dict["drop"] = object_dropped
+            else:
+                object_interaction_dict["throw"] = object_dropped
         elif action_name == "OpenObject":
             assert object_interacted_with is not None
             object_interaction_dict["open"] = object_interacted_with
@@ -617,72 +634,73 @@ class CookEggEnv(AI2ThorBaseEnv):
 
 
 if __name__ == "__main__":
-    env = CookEggEnv()
+    env = CookEggEnv(headless=False)
     import time
     import json
 
     obs, info = env.reset()
 
-    with open("floor10-initial-conditions.json", "w") as dst:
-        json.dump(info, dst)
+    # with open("floor10-initial-conditions.json", "w") as dst:
+    #     json.dump(info, dst)
 
-    # optimal_action_sequence = [
-    #     20,
-    #     15,
-    #     15,
-    #     15,
-    #     15,
-    #     15,
-    #     15,
-    #     15,
-    #     19,
-    #     9,
-    #     17,
-    #     0,
-    #     11,
-    #     22,
-    #     22,
-    #     0,
-    #     21,
-    #     21,
-    #     19,
-    #     15,
-    #     15,
-    #     15,
-    #     15,
-    #     15,
-    #     15,
-    #     20,
-    #     21,
-    #     18,
-    #     9,
-    #     1,
-    #     10,
-    #     13,
-    #     14,
-    #     9,
-    #     0,
-    # ]
+    optimal_action_sequence = [
+        20,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        19,
+        9,
+        17,
+        0,
+        11,
+        22,
+        22,
+        0,
+        21,
+        21,
+        19,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        20,
+        21,
+        18,
+        9,
+        1,
+        10,
+        13,
+        14,
+        9,
+        0,
+    ]
 
-    # for episode in range(1):
-    #     observations = []
-    #     step_count = 0
-    #     obs, info = env.reset()
-    #     done = False
-    #     cum_reward = 0.0
-    #     observations.append(obs["image"])
-    #     while not done:
-    #         action = np.zeros(env.action_space.n)
-    #         # int_action = env.action_space.sample()
-    #         # int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
-    #         int_action = optimal_action_sequence[step_count]
-    #         action[int_action] = 1
-    #         obs, reward, done, info = env.step(action)
-    #         observations.append(obs["image"])
-    #         step_count += 1
-    #         cum_reward += 1
-    #         time.sleep(0.01)
-    #     print(f"Episode {episode} reward: {cum_reward}")
+    for episode in range(1):
+        observations = []
+        step_count = 0
+        obs, info = env.reset()
+        print(info)
+        done = False
+        cum_reward = 0.0
+        observations.append(obs["image"])
+        while not done:
+            action = np.zeros(env.action_space.n)
+            int_action = env.action_space.sample()
+            int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
+            # int_action = optimal_action_sequence[step_count]
+            action[int_action] = 1
+            obs, reward, done, info = env.step(action)
+            print(info)
+            observations.append(obs["image"])
+            step_count += 1
+            cum_reward += 1
+        print(f"Episode {episode} reward: {cum_reward}")
 
     # observations = np.array(observations)
     # print(observations.shape)
