@@ -153,7 +153,7 @@ class CookEggNarrator:
                 )
         # Check for if the agent doesn't move
         if "head" not in movement_str:
-            movement_str += "and I won't move much "
+            movement_str += "and I wont move much "
         return movement_str
 
     def describe_agents_interaction(
