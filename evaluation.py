@@ -365,7 +365,20 @@ def evaluate_rollouts(
             if config.enable_language:
                 narration_keys = config.narrator["narration_key"]
 
-                if type(narration_keys) is str:
+                if "ai2thor" in config.task:
+                    narration_data = {}
+                    for narration_key in narration_keys:
+                        for obs in observations:
+                            if narration_key not in narration_data.keys():
+                                narration_data[narration_key] = [
+                                    obs["obs"][narration_key]
+                                ]
+                            else:
+                                narration_data[narration_key].append(
+                                    obs["obs"][narration_key]
+                                )
+
+                elif type(narration_keys) is str:
                     try:
                         narration_data = [obs[narration_keys] for obs in observations]
                     except KeyError:
@@ -454,11 +467,28 @@ def evaluate_rollouts(
                     ]
                 )
 
-                if type(narration_data) is dict:
+                if "ai2thor" in config.task:
+                    print(narration_data)
+                    actual_narration = agent._wm.narrator.narrate(
+                        # batch["visible_objects"][current_index:end_index],
+                        narration_data["agent_position"],
+                        {
+                            "pickup": narration_data["pickup"],
+                            "drop": narration_data["drop"],
+                            "break": narration_data["break"],
+                            "open": narration_data["open"],
+                            "close": narration_data["close"],
+                            "slice": narration_data["slice"],
+                            "toggle_on": narration_data["toggle_on"],
+                            "toggle_off": narration_data["toggle_off"],
+                            "throw": narration_data["throw"],
+                            "put": narration_data["put"],
+                        },
+                    )
+                elif type(narration_data) is dict:
                     if len(narration_data.keys()) == 1:  # type: ignore
                         narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
-                actual_narration = agent._wm.narrator.narrate(narration_data)
-
+                    actual_narration = agent._wm.narrator.narrate(narration_data)
                 try:
                     bleu_score = bleu_metric_from_strings(
                         planned_intent, actual_narration
@@ -637,11 +667,24 @@ def get_posterior_state(
     """
 
     no_convert_list = []
-    ignore_list = []
+    ignore_list = [
+        "open",
+        "close",
+        "pickup",
+        "put",
+        "slice",
+        "throw",
+        "toggle_off",
+        "toggle_on",
+        "break",
+        "drop",
+        "agent_position",
+    ]
     if no_convert is not None:
         no_convert_list = no_convert
     if obs_to_ignore is not None:
-        ignore_list = obs_to_ignore
+        for ignore in obs_to_ignore:
+            ignore_list.append(ignore)
 
     transition = obs.copy()
     transition = add_batch_to_obs(transition)

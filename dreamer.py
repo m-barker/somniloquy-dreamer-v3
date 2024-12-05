@@ -33,6 +33,7 @@ from narration.minigrd_narrator import (
     MiniGridComplexTeleportNarrator,
 )
 from narration.safetygym_narrator import IslandNavigationNarrator
+from narration.ai2thor_narrator import CookEggNarrator
 from evaluation import (
     sample_rollouts,
     evaluate_rollouts,
@@ -110,18 +111,21 @@ class Dreamer(nn.Module):
                             "inventory",
                             "achievements",
                             "privileged_obs",
-                        ],
+                        ]
+                        + self._config.narrator["narration_key"],
                     )
-                    if self._config.enable_language:
-                        self._wm.intent_prediction(
-                            next(self._dataset),
-                            ignore_keys=[
-                                "semantic",
-                                "inventory",
-                                "achievements",
-                                "privileged_obs",
-                            ],
-                        )
+
+                    # if self._config.enable_language:
+                    #     self._wm.intent_prediction(
+                    #         next(self._dataset),
+                    #         ignore_keys=[
+                    #             "semantic",
+                    #             "inventory",
+                    #             "achievements",
+                    #             "privileged_obs",
+                    #         ]
+                    #         + self._config.narrator["narration_key"],
+                    #     )
                     self._logger.video("train_openl", to_np(openl))
                     pass
                 self._logger.write(fps=True)
@@ -138,7 +142,10 @@ class Dreamer(nn.Module):
             latent = action = None
         else:
             latent, action = state
-        obs = self._wm.preprocess(obs, keys_to_ignore=["privileged_obs"])
+        obs = self._wm.preprocess(
+            obs,
+            keys_to_ignore=["privileged_obs"] + self._config.narrator["narration_key"],
+        )
         embed = self._wm.encoder(obs)
         latent, _ = self._wm.dynamics.obs_step(latent, action, embed, obs["is_first"])
         if self._config.eval_state_mean:
@@ -217,6 +224,8 @@ def configure_narrator(config):
         narrator = CrafterNarrator()
     elif "safegym" in config.task:
         narrator = IslandNavigationNarrator()
+    elif "ai2thor" in config.task:
+        narrator = CookEggNarrator()
 
     return narrator
 
@@ -577,11 +586,11 @@ def main(config):
                     next(eval_dataset),
                     ignore_keys=config.narrator["narration_key"],
                 )
-                if config.enable_language:
-                    agent._wm.intent_prediction(
-                        next(eval_dataset),
-                        ignore_keys=config.narrator["narration_key"],
-                    )
+                # if config.enable_language:
+                #     agent._wm.intent_prediction(
+                #         next(eval_dataset),
+                #         ignore_keys=config.narrator["narration_key"],
+                #     )
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
         agent.training = True

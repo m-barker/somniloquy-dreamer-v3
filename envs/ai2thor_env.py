@@ -555,7 +555,7 @@ class CookEggEnv(AI2ThorBaseEnv):
             "is_terminal": done,
             "is_first": is_first,
             "agent_position": self.agent_position,
-            "visible_objects": visible_objects,
+            # "visible_objects": visible_objects,
             **self.log_rewards,
             **filtered_meta,
         }
@@ -594,7 +594,7 @@ class CookEggEnv(AI2ThorBaseEnv):
             "toggle_on": "",
             "toggle_off": "",
             "throw": "",
-            "put": "",
+            "put": ("", ""),
         }
 
         # No interactions could have happened yet

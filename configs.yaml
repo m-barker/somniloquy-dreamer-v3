@@ -442,14 +442,18 @@ safegym:
 
 ai2thor:
   steps: 1e8
-  envs: 4
+  envs: 1
   action_repeat: 1
-  eval_episode_num: 0
+  eval_episode_num: 1
   eval_every: 25000
   train_ratio: 64
+  prefill: 2500
   dyn_hidden: 1024
   dyn_deter: 4096
   units: 1024
+  # dyn_hidden: 512
+  # dyn_deter: 1024
+  # units: 256
   log_every: 500
   dyn_stoch: 32
   dyn_discrete: 32
@@ -459,6 +463,12 @@ ai2thor:
   value: { layers: 5 }
   reward_head: { layers: 5 }
   cont_head: { layers: 5 }
+  # encoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 512 }
+  # decoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 512 }
+  # actor: { layers: 3, dist: "onehot", std: "none" }
+  # value: { layers: 3 }
+  # reward_head: { layers: 3 }
+  # cont_head: { layers: 3 }
   narrator:
     {
       narration_key:
@@ -473,17 +483,32 @@ ai2thor:
           "toggle_on",
           "break",
           "drop",
+          "agent_position",
         ],
     }
+  no_convert_list:
+    [
+      "open",
+      "close",
+      "pickup",
+      "put",
+      "slice",
+      "throw",
+      "toggle_off",
+      "toggle_on",
+      "break",
+      "drop",
+      "agent_position",
+    ]
   imag_gradient: "reinforce"
   enable_language: True
   evaluate_reconstruction_narration: false
   vocab_path: vocab/ai2thor.json
-  # dec_max_length: 50
-  # enc_max_length: 16
+  dec_max_length: 200
+  enc_max_length: 16
   video_pred_log: true
   task: "ai2thor_cook_egg"
-  time_limit: 10000
+  time_limit: 100
   conditional_actions: false
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 

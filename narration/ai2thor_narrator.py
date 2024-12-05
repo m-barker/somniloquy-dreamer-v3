@@ -177,7 +177,11 @@ class CookEggNarrator:
 
         for t in range(trajectory_length):
             for verb, interaction_data in object_interactions.items():
-                if interaction_data[t] != "":
+                if verb == "put":
+                    data_exists = not np.array_equal(interaction_data[t], ["", ""])
+                else:
+                    data_exists = interaction_data[t] != ""
+                if data_exists:
                     if t == 0:
                         interaction_str += "First "
                     if verb == "pickup":
@@ -185,7 +189,7 @@ class CookEggNarrator:
                             f"I will pickup a {interaction_data[t]} and then "
                         )
                     elif verb == "drop":
-                        interaction_str += f"I will drop the {interaction_data[t]} that I am holding and then"
+                        interaction_str += f"I will drop the {interaction_data[t]} that I am holding and then "
                     elif verb == "open":
                         interaction_str += (
                             f"I will open the {interaction_data[t]} and then "
@@ -228,14 +232,14 @@ class CookEggNarrator:
 
     def narrate(
         self,
-        visible_objects: List[List[str]],
+        # visible_objects: List[List[str]],
         agent_positions: List[Tuple[float, float, float]],
         object_interactions: Dict[str, List[Any]],
     ) -> str:
         narration = ""
         # Describe what the agent can see
         # - requires sequential list of visible objects
-        narration += self.describe_agents_observations(visible_objects)
+        # narration += self.describe_agents_observations(visible_objects)
 
         # Describe the agent's movement
         # - ideally should store landmark coordinates and describe

@@ -250,6 +250,7 @@ class WorldModel(nn.Module):
             self.vocab,
             self.device,
             data["is_first"],
+            config=self._config,
         ).reshape(-1, self._narration_max_dec_seq)
         # Shape (batch, seq_len, latent_state_dim)
         feat = self.dynamics.get_feat(post)
@@ -489,14 +490,23 @@ class WorldModel(nn.Module):
             true_actions_tokens,
         )
 
-    def _train(self, data):
-        # action (batch_size, batch_length, act_dim)
-        # image (batch_size, batch_length, h, w, ch)
-        # reward (batch_size, batch_length)
-        # discount (batch_size, batch_length)
+    def _process_narration_data(self, data: Dict):
+        """Processes the data stored in the replay buffer into the task-appropriate narration
+        data format.
+
+        Args:
+            data (Dict): Replay buffer sample.
+        """
+
         narration_keys = []
         # if self._config.enable_language:
         narration_keys = self._config.narrator["narration_key"]
+
+        if "ai2thor" in self._config.task:
+            narration_data = {}
+            for narration_key in narration_keys:
+                narration_data[narration_key] = data[narration_key]
+            return narration_data
         if type(narration_keys) is list:
             narration_data = {k: deepcopy(data[k]) for k in narration_keys}
         else:
@@ -504,6 +514,17 @@ class WorldModel(nn.Module):
         if type(narration_data) is dict:
             if len(narration_data.keys()) == 1:  # type: ignore
                 narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
+
+        return narration_data
+
+    def _train(self, data):
+        # action (batch_size, batch_length, act_dim)
+        # image (batch_size, batch_length, h, w, ch)
+        # reward (batch_size, batch_length)
+        # discount (batch_size, batch_length)
+
+        narration_keys = self._config.narrator["narration_key"]
+        narration_data = self._process_narration_data(data)
 
         data = self.preprocess(
             data,

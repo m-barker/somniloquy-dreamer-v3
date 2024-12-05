@@ -44,7 +44,8 @@
     "mug": 42,
     "pan": 43,
     "papertowelroll": 44,
-    "pen": 46,
+    "pen": 45,
+    "holding": 46,
     "pencil": 47,
     "peppershaker": 48,
     "plate": 49,
@@ -103,5 +104,8 @@
     "put": 102,
     "interact": 103,
     "with": 104,
-    "any": 105
+    "any": 105,
+    "drop": 106,
+    "that": 107,
+    "am": 108
 }
