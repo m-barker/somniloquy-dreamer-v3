@@ -110,15 +110,15 @@ class AI2ThorBaseEnv(gym.Env):
                 if object_meta["distance"] < nearest_toggleable_dist:
                     nearest_toggleable_name = object_meta["objectId"]
                     nearest_toggleable_dist = object_meta["distance"]
-            if object_meta["openable"]:
+            if object_meta["openable"] and not object_meta["isOpen"]:
                 if object_meta["distance"] < nearest_openable_dist:
                     nearest_openable_name = object_meta["objectId"]
                     nearest_openable_dist = object_meta["distance"]
-            if object_meta["sliceable"]:
+            if object_meta["sliceable"] and not object_meta["isSliced"]:
                 if object_meta["distance"] < nearest_sliceable_dist:
                     nearest_sliceable_name = object_meta["objectId"]
                     nearest_sliceable_dist = object_meta["distance"]
-            if object_meta["breakable"]:
+            if object_meta["breakable"] and not object_meta["isBroken"]:
                 if object_meta["distance"] < nearest_breakable_dist:
                     nearest_breakable_name = object_meta["objectId"]
                     nearest_breakable_dist = object_meta["distance"]
@@ -206,6 +206,7 @@ class AI2ThorBaseEnv(gym.Env):
             elif action_name == "OpenObject" or action_name == "CloseObject":
                 no_op = self.closest_openable_object == None
                 if not no_op:
+                    print(f"Opening object {self.closest_openable_object}")
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_openable_object
                     )
@@ -433,6 +434,9 @@ class CookEggEnv(AI2ThorBaseEnv):
 
     def compute_reward(self, event) -> float:
         reward = 0.0
+        # Penalty for failing an action.
+        if not event.metadata["lastActionSuccess"]:
+            reward -= 1
         for object_meta in event.metadata["objects"]:
             # Agent must see the object to get the reward
             if not object_meta["visible"]:
@@ -690,7 +694,7 @@ if __name__ == "__main__":
         22,
         22,
         0,
-        21,
+        21,  # "visible_objects": visible_objects,
         21,
         19,
         15,
@@ -715,11 +719,10 @@ if __name__ == "__main__":
         observations = []
         step_count = 0
         obs, info = env.reset()
-        visible_objects = []
+        # visible_objects = []
         agent_positions = []
         object_interactions = []
-        pprint(obs)
-        visible_objects.append(obs["visible_objects"])
+        # visible_objects.append(obs["visible_objects"])
         agent_positions.append(obs["agent_position"])
         object_interactions.append(
             {
@@ -743,8 +746,8 @@ if __name__ == "__main__":
         while not done:
             action = np.zeros(env.action_space.n)
             # int_action = env.action_space.sample()
-            # int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
-            int_action = optimal_action_sequence[step_count]
+            int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
+            # int_action = optimal_action_sequence[step_count]
             action[int_action] = 1
             obs, reward, done, info = env.step(action)
             # visible_objects.append(obs["visible_objects"])

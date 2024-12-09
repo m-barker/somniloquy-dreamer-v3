@@ -24,7 +24,7 @@ class CookEggNarrator:
         }
 
         # Required distance for considering a change in the agent's relative position
-        self.movement_delta = 1.5  # 1.5m
+        self.movement_delta = 0.5  # 0.5m
 
     def describe_agents_observations(self, visible_objects: List[List[str]]) -> str:
         """Describes what the agent sees during a sequence of environment observations.
