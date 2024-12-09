@@ -182,7 +182,7 @@ class CookEggNarrator:
                 else:
                     data_exists = interaction_data[t] != ""
                 if data_exists:
-                    if t == 0:
+                    if interaction_str == "":
                         interaction_str += "First "
                     if verb == "pickup":
                         interaction_str += (
