@@ -86,6 +86,8 @@ class AI2ThorBaseEnv(gym.Env):
         nearest_toggleable_dist = float("inf")
         nearest_openable_name = None
         nearest_openable_dist = float("inf")
+        nearest_closeable_name = None
+        nearest_closeable_dist = float("inf")
         nearest_sliceable_name = None
         nearest_sliceable_dist = float("inf")
         nearest_breakable_name = None
@@ -114,6 +116,10 @@ class AI2ThorBaseEnv(gym.Env):
                 if object_meta["distance"] < nearest_openable_dist:
                     nearest_openable_name = object_meta["objectId"]
                     nearest_openable_dist = object_meta["distance"]
+            if object_meta["openable"] and object_meta["isOpen"]:
+                if object_meta["distance"] < nearest_openable_dist:
+                    nearest_closeable_name = object_meta["objectId"]
+                    nearest_closeable_dist = object_meta["distance"]
             if object_meta["sliceable"] and not object_meta["isSliced"]:
                 if object_meta["distance"] < nearest_sliceable_dist:
                     nearest_sliceable_name = object_meta["objectId"]
@@ -128,6 +134,7 @@ class AI2ThorBaseEnv(gym.Env):
         self.closest_graspable_object = nearest_graspable_name
         self.closest_toggleable_object = nearest_toggleable_name
         self.closest_openable_object = nearest_openable_name
+        self.closest_closeable_object = nearest_closeable_name
         self.closest_sliceable_object = nearest_sliceable_name
         self.closest_breakable_object = nearest_breakable_name
 
@@ -203,14 +210,20 @@ class AI2ThorBaseEnv(gym.Env):
                         action=action_name, objectId=self.closest_receptacle
                     )
                     object_interacted_with = self.closest_receptacle
-            elif action_name == "OpenObject" or action_name == "CloseObject":
+            elif action_name == "OpenObject":
                 no_op = self.closest_openable_object == None
                 if not no_op:
-                    print(f"Opening object {self.closest_openable_object}")
                     event = self.controller.step(
                         action=action_name, objectId=self.closest_openable_object
                     )
                     object_interacted_with = self.closest_openable_object
+            elif action_name == "CloseObject":
+                no_op = self.closest_closeable_object == None
+                if not no_op:
+                    event = self.controller.step(
+                        action=action_name, objectId=self.closest_closeable_object
+                    )
+                    object_interacted_with = self.closest_closeable_object
             elif action_name == "BreakObject":
                 no_op = self.closest_breakable_object == None
                 if not no_op:
