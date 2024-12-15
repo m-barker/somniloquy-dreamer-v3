@@ -114,18 +114,6 @@ class Dreamer(nn.Module):
                         ]
                         + self._config.narrator["narration_key"],
                     )
-
-                    # if self._config.enable_language:
-                    #     self._wm.intent_prediction(
-                    #         next(self._dataset),
-                    #         ignore_keys=[
-                    #             "semantic",
-                    #             "inventory",
-                    #             "achievements",
-                    #             "privileged_obs",
-                    #         ]
-                    #         + self._config.narrator["narration_key"],
-                    #     )
                     self._logger.video("train_openl", to_np(openl))
                     pass
                 self._logger.write(fps=True)
@@ -584,11 +572,6 @@ def main(config):
                     next(eval_dataset),
                     ignore_keys=config.narrator["narration_key"],
                 )
-                # if config.enable_language:
-                #     agent._wm.intent_prediction(
-                #         next(eval_dataset),
-                #         ignore_keys=config.narrator["narration_key"],
-                #     )
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
         agent.training = True
