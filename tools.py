@@ -171,8 +171,6 @@ def simulate(
     no_save_obs: Optional[List[str]] = None,
     info_keys_to_store: Optional[List[str]] = None,
     wandb_run=None,
-    config=None,
-    train_env=None,
 ) -> Tuple:
     """Runs agent interaction with the environment.
 
@@ -258,186 +256,53 @@ def simulate(
                     # replace obs with done by initial state
                     obs[index] = result[0]
             # step agents
-
-            if config is not None and config.conditional_actions:
-                from evaluation import get_posterior_state
-
-                if agent_state is None:
-                    obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
-                    obs = agent._wm.preprocess(obs, keys_to_ignore=["privileged_obs"])
-                    embed = agent._wm.encoder(obs)
-                    starting_state, _ = agent._wm.dynamics.obs_step(
-                        None, None, embed, obs["is_first"]
-                    )
-                    prev_action = None
-                    posterior = None
-                else:
-                    starting_state = agent_state[0]
-                    prev_action = agent_state[1].squeeze()
-                    posterior = starting_state
-                if config.conditional_policy_attempts == 0:
-                    p = np.random.random()
-                    if p > config.conditional_epsilon:
-                        actions, log_probs = conditional_policy(agent, starting_state, policy_only=True)  # type: ignore
-                    else:
-                        actions, log_probs = conditional_policy(agent, starting_state, policy_attempts=config.conditional_policy_attempts)  # type: ignore
-                else:
-                    actions, log_probs = conditional_policy(agent, starting_state)
-                for index, action in enumerate(actions):
-                    if type(obs) != type({}):
-                        obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
-                    _, _ = agent(obs, done, agent_state)
-                    action = [
-                        {
-                            "action": action,
-                            "logprob": (
-                                log_probs[index].detach().cpu().numpy()
-                                if isinstance(log_probs[index], torch.Tensor)
-                                else log_probs[index]
-                            ),
-                        }
-                    ]  # type: ignore
-                    results = [e.step(a) for e, a in zip(envs, action)]
-                    results = [r() for r in results]
-
-                    if (
-                        agent._config.task == "safegym_island_navigation"
-                        and logger.step % 100 == 0
-                    ):
-                        wandb_run.log(
-                            {
-                                "water_incidents": envs[0]._env.num_water_incidents
-                                + train_env._env.num_water_incidents
-                            },
-                            step=logger.step,
-                        )
-
-                    if prev_action is not None:
-                        prev_action = torch.Tensor(prev_action).to(device=config.device)
-                    obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
-                    posterior = get_posterior_state(
-                        agent,
-                        obs[0],
-                        no_convert=no_convert,
-                        obs_to_ignore=ignore,
-                        prev_state=posterior,
-                        prev_action=(
-                            prev_action.unsqueeze(0)
-                            if prev_action is not None
-                            else None
-                        ),
-                    )
-                    prev_action = action[0]["action"]
-
-                    if len(action[0]["action"].shape) > 1:
-                        action[0]["action"] = action[0]["action"].squeeze()
-
-                    obs = list(obs)
-                    reward = list(reward)
-                    done = np.stack(done)  # type: ignore
-                    episode += int(done.sum())
-                    length += 1
-                    step += len(envs)
-                    length *= 1 - done
-                    # add to cache
-                    for a, result, env in zip(action, results, envs):
-                        o, r, d, info = result
-                        o = {
-                            k: (v if k in no_convert else convert(v))
-                            for k, v in o.items()
-                            if k not in ignore
-                        }
-                        transition = o.copy()
-                        if isinstance(a, dict):
-                            transition.update(a)
-                        else:
-                            transition["action"] = a
-                        transition["reward"] = r
-                        transition["discount"] = info.get(
-                            "discount", np.array(1 - float(d))
-                        )
-
-                        for key in info_keys:
-                            if key in info:
-                                transition[key] = info[key]
-
-                        add_to_cache(cache, env.id, transition, no_convert=no_convert)
-                    agent_state = (
-                        posterior,
-                        torch.Tensor(action[0]["action"])
-                        .unsqueeze(0)
-                        .to(device=config.device),
-                    )
-                    if done.any():
-                        break
-                agent_state = (
-                    posterior,
-                    torch.Tensor(action[0]["action"])
-                    .unsqueeze(0)
-                    .to(device=config.device),
-                )
+            obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
+            # agent_state is tuple (latent, action), where latent is the latent dict and
+            # action is a dict of action, logprob
+            action, agent_state = agent(obs, done, agent_state)
+            if isinstance(action, dict):
+                action = [
+                    {k: np.array(action[k][i].detach().cpu()) for k in action}
+                    for i in range(len(envs))
+                ]
             else:
-                obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}  # type: ignore
-                # agent_state is tuple (latent, action), where latent is the latent dict and
-                # action is a dict of action, logprob
-                action, agent_state = agent(obs, done, agent_state)
-                if isinstance(action, dict):
-                    action = [
-                        {k: np.array(action[k][i].detach().cpu()) for k in action}
-                        for i in range(len(envs))
-                    ]
+                action = np.array(action)
+            assert len(action) == len(envs)
+
+            # step envs
+            results = [e.step(a) for e, a in zip(envs, action)]
+            results = [r() for r in results]
+
+            # print(f"RESULTS: {results}")
+            obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
+            obs = list(obs)
+            reward = list(reward)
+            done = np.stack(done)  # type: ignore
+            episode += int(done.sum())
+            length += 1
+            step += len(envs)
+            length *= 1 - done
+            # add to cache
+            for a, result, env in zip(action, results, envs):
+                o, r, d, info = result
+                o = {
+                    k: (v if k in no_convert else convert(v))
+                    for k, v in o.items()
+                    if k not in ignore
+                }
+                transition = o.copy()
+                if isinstance(a, dict):
+                    transition.update(a)
                 else:
-                    action = np.array(action)
-                assert len(action) == len(envs)
-                # step envs
-                results = [e.step(a) for e, a in zip(envs, action)]
-                results = [r() for r in results]
+                    transition["action"] = a
+                transition["reward"] = r
+                transition["discount"] = info.get("discount", np.array(1 - float(d)))
 
-                if (
-                    config is not None
-                    and config.task == "safegym_island_navigation"
-                    and logger.step % 100 == 0
-                ):
-                    wandb_run.log(
-                        {
-                            "water_incidents": envs[0]._env.num_water_incidents
-                            + train_env._env.num_water_incidents
-                        },
-                        step=logger.step,
-                    )
+                for key in info_keys:
+                    if key in info:
+                        transition[key] = info[key]
 
-                # print(f"RESULTS: {results}")
-                obs, reward, done = zip(*[p[:3] for p in results])  # type: ignore
-                obs = list(obs)
-                reward = list(reward)
-                done = np.stack(done)  # type: ignore
-                episode += int(done.sum())
-                length += 1
-                step += len(envs)
-                length *= 1 - done
-                # add to cache
-                for a, result, env in zip(action, results, envs):
-                    o, r, d, info = result
-                    o = {
-                        k: (v if k in no_convert else convert(v))
-                        for k, v in o.items()
-                        if k not in ignore
-                    }
-                    transition = o.copy()
-                    if isinstance(a, dict):
-                        transition.update(a)
-                    else:
-                        transition["action"] = a
-                    transition["reward"] = r
-                    transition["discount"] = info.get(
-                        "discount", np.array(1 - float(d))
-                    )
-
-                    for key in info_keys:
-                        if key in info:
-                            transition[key] = info[key]
-
-                    add_to_cache(cache, env.id, transition, no_convert=no_convert)
+                add_to_cache(cache, env.id, transition, no_convert=no_convert)
 
             if done.any():
                 indices = [index for index, d in enumerate(done) if d]
@@ -577,7 +442,6 @@ def erase_over_episodes(cache: dict, dataset_size: int) -> int:
         else:
             del cache[key]
     return step_in_dataset
-
 
 
 def convert(value, precision=32):

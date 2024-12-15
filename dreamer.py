@@ -529,8 +529,6 @@ def main(config):
                 no_save_obs=["rays"],
                 info_keys_to_store=config.narrator["narration_key"],
                 wandb_run=run,
-                config=config,
-                train_env=train_envs[0],
             )
             rollout_samples = sample_rollouts(
                 agent,
@@ -607,8 +605,6 @@ def main(config):
             no_save_obs=["rays"],
             info_keys_to_store=config.narrator["narration_key"],
             wandb_run=run,
-            config=config,
-            train_env=eval_envs[0],
         )
         items_to_save = {
             "agent_state_dict": agent.state_dict(),
