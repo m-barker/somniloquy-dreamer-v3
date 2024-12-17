@@ -364,6 +364,7 @@ class CookEggEnv(AI2ThorBaseEnv):
             "LookDown",
             "ThrowObject",
         ]
+        OBJECT_STR_TO_ID = {"": 0}
         super().__init__(
             action_names=ACTION_NAMES,
             scene="FloorPlan10",

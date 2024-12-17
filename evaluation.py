@@ -60,6 +60,7 @@ def imagine_trajectory(
                 else:
                     actions[t] = torch.zeros_like(actions[t - 1])
             continue
+        # No actions provided; sample the learned policy.
         if actions is None:
             action = agent._task_behavior.actor(latent_state).sample().squeeze(0)
             imagined_actions.append(action)
@@ -127,7 +128,7 @@ def rollout_trajectory(
             )
             continue
         action = actions[t]
-        # if actions are all zeros, trajectory is done
+        # if actions are all zeros, imagined trajectory is done
         if torch.all(action == 0):
             done = True
             continue
@@ -468,7 +469,6 @@ def evaluate_rollouts(
                 )
 
                 if "ai2thor" in config.task:
-                    print(narration_data)
                     actual_narration = agent._wm.narrator.narrate(
                         # batch["visible_objects"][current_index:end_index],
                         narration_data["agent_position"],
