@@ -116,6 +116,7 @@ def rollout_trajectory(
     posterior_states: List[torch.Tensor] = []
     posterior_info: List[Dict[str, Any]] = []
     done = False
+    env_done = False
     for t in range(trajectory_length):
         if done or env_done:
             posterior_states.append(torch.zeros_like(latent_state))
@@ -362,7 +363,7 @@ def evaluate_rollouts(
             # print(f"SAMPLED TRAJECTORY IMAGINED LENGTH: {len(imagined_states)}")
             # print(f"POSTERIOR TRAJECTORY LENGTH: {len(posterior_states)}")
             # print(f"OBSERVATION TRAJECTORY LENGTH: {len(observations)}")
-            
+
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
