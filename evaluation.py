@@ -26,7 +26,7 @@ def imagine_trajectory(
     initial_state: Dict[str, torch.Tensor],
     trajectory_length: int,
     actions: Optional[List[torch.Tensor]] = None,
-) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+) -> Tuple[List[torch.Tensor], List[torch.Tensor], bool]:
     """Samples a trajectory of imagined rollouts from the world model and
     actor. Returns the imagined states and actions.
 
@@ -39,7 +39,8 @@ def imagine_trajectory(
         is used.
 
     Returns:
-        Tuple[List[torch.Tensor], List[torch.Tensor]]: Imagined states and actions.
+        Tuple[List[torch.Tensor], List[torch.Tensor]]: Imagined states and actions, and whether
+        the world model predicts the trajectory terminates.
     """
     if actions is None:
         imagined_actions: List[torch.Tensor] = []
@@ -78,8 +79,8 @@ def imagine_trajectory(
         if predicted_continue[0, 0].detach().cpu().numpy() < 0.5:
             done = True
     if actions is None:
-        return imagained_states, imagined_actions
-    return imagained_states, actions
+        return imagained_states, imagined_actions, done
+    return imagained_states, actions, done
 
 
 @torch.no_grad()
@@ -89,7 +90,7 @@ def rollout_trajectory(
     trajectory_length: int,
     actions: Union[List[torch.Tensor], torch.Tensor],
     env,
-) -> Tuple[List[torch.Tensor], List[Dict[str, Any]], List[Dict[str, Any]]]:
+) -> Tuple[List[torch.Tensor], List[Dict[str, Any]], List[Dict[str, Any]], bool]:
     """Rolls out a trajectory given the planned actions. Returns the posterior
     states and the environment observations.
 
@@ -101,8 +102,8 @@ def rollout_trajectory(
         env (Damy): Environment to rollout the actions in.
 
     Returns:
-        Tuple[List[torch.Tensor], List[Dict[str, Any]], List[Dict[str, Any]]]: Posterior states and environment obs and
-        posterior info.
+        Tuple[List[torch.Tensor], List[Dict[str, Any]], List[Dict[str, Any]], bool]: Posterior states and environment obs and
+        posterior info, and whether the environment terminates.
     """
 
     observations: List[Dict[str, Any]] = []
@@ -116,7 +117,7 @@ def rollout_trajectory(
     posterior_info: List[Dict[str, Any]] = []
     done = False
     for t in range(trajectory_length):
-        if done:
+        if done or env_done:
             posterior_states.append(torch.zeros_like(latent_state))
             observations.append(
                 {
@@ -132,7 +133,7 @@ def rollout_trajectory(
         if torch.all(action == 0):
             done = True
             continue
-        obs, reward, done, info = env.step(
+        obs, reward, env_done, info = env.step(
             {"action": action.squeeze(0).detach().cpu().numpy()}
         )()
         posterior = get_posterior_state(
@@ -142,7 +143,7 @@ def rollout_trajectory(
             {
                 "obs": obs,
                 "reward": reward,
-                "done": done,
+                "done": env_done,
                 "info": info,
             }
         )
@@ -151,7 +152,7 @@ def rollout_trajectory(
         posterior_info.append(posterior)
         prev_state = posterior
 
-    return posterior_states, observations, posterior_info
+    return posterior_states, observations, posterior_info, env_done
 
 
 def get_user_actions(env, trajectory_length: int, starting_obs) -> List[torch.Tensor]:
@@ -249,13 +250,13 @@ def sample_rollouts(
             assert user_env is not None
             user_obs, user_info = user_env.reset()()
             actions = get_user_actions(user_env, trajectory_length, user_obs)
-        imagined_states, imagined_actions = imagine_trajectory(
+        imagined_states, imagined_actions, imagined_done = imagine_trajectory(
             agent=agent,
             initial_state=initial_state,
             trajectory_length=trajectory_length,
             actions=actions,
         )
-        posterior_states, observations, posteriors = rollout_trajectory(
+        posterior_states, observations, posteriors, env_done = rollout_trajectory(
             agent=agent,
             initial_state=initial_state,
             trajectory_length=trajectory_length,
@@ -268,18 +269,22 @@ def sample_rollouts(
         observation_samples.append(observations)
         if n_consecutive_trajectories > 1:
             for traj in range(n_consecutive_trajectories - 1):
+                if imagined_done or env_done:
+                    continue
                 initial_state = posteriors[-1]
-                imagined_states, imagined_actions = imagine_trajectory(
+                imagined_states, imagined_actions, imagined_done = imagine_trajectory(
                     agent=agent,
                     initial_state=initial_state,
                     trajectory_length=trajectory_length,
                 )
-                posterior_states, observations, posteriors = rollout_trajectory(
-                    agent=agent,
-                    initial_state=initial_state,
-                    trajectory_length=trajectory_length,
-                    actions=imagined_actions,
-                    env=env,
+                posterior_states, observations, posteriors, env_done = (
+                    rollout_trajectory(
+                        agent=agent,
+                        initial_state=initial_state,
+                        trajectory_length=trajectory_length,
+                        actions=imagined_actions,
+                        env=env,
+                    )
                 )
                 imagined_state_samples[-1].extend(imagined_states)
                 imagined_action_samples[-1].extend(imagined_actions)
@@ -357,6 +362,7 @@ def evaluate_rollouts(
             # print(f"SAMPLED TRAJECTORY IMAGINED LENGTH: {len(imagined_states)}")
             # print(f"POSTERIOR TRAJECTORY LENGTH: {len(posterior_states)}")
             # print(f"OBSERVATION TRAJECTORY LENGTH: {len(observations)}")
+            
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
