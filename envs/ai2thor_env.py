@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, List, Optional
+from typing import Tuple, Dict, List, Optional, Set
 
 import numpy as np
 import gym
@@ -563,17 +563,11 @@ class CookEggEnv(AI2ThorBaseEnv):
         else:
             image = rgb_image  # type: ignore
 
-        visible_objects: List[str] = []
-        for obj_meta in event.metadata["objects"]:
-            if obj_meta["visible"]:
-                visible_objects.append(obj_meta["objectType"])
-
         return {
             "image": image,
             "is_terminal": done,
             "is_first": is_first,
             "agent_position": self.agent_position,
-            # "visible_objects": visible_objects,
             **self.log_rewards,
             **filtered_meta,
         }
@@ -648,6 +642,247 @@ class CookEggEnv(AI2ThorBaseEnv):
 
         elif action_name == "DropHandObject" or action_name == "ThrowObject":
             # TODO: figure out which object the agent was holding
+            object_dropped = None
+            for obj_meta in self.prev_meta["objects"]:
+                if obj_meta["isPickedUp"]:
+                    object_dropped = obj_meta["objectType"]
+                    break
+            assert object_dropped is not None
+            if action_name == "DropHandObject":
+                object_interaction_dict["drop"] = object_dropped
+            else:
+                object_interaction_dict["throw"] = object_dropped
+        elif action_name == "OpenObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["open"] = object_interacted_with
+        elif action_name == "CloseObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["close"] = object_interacted_with
+        elif action_name == "BreakObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["break"] = object_interacted_with
+        elif action_name == "SliceObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["slice"] = object_interacted_with
+        elif action_name == "ToggleObjectOn":
+            assert object_interacted_with is not None
+            object_interaction_dict["toggle_on"] = object_interacted_with
+        elif action_name == "ToggleObjecctOff":
+            assert object_interacted_with is not None
+            object_interaction_dict["toggle_off"] = object_interacted_with
+
+        return object_interaction_dict
+
+
+class PickupObjects(AI2ThorBaseEnv):
+    """Gymnasium environment that defines a task to pick up as many
+    objects as possible in an ai2thor kitchen environment.
+
+    The agent gets rewarded for each UNIQUE object that it picks
+    up (such that spamming drop pickup on the same object is not
+    an optimal strategy).
+
+    """
+
+    def __init__(
+        self,
+        img_size: Tuple[int, int] = (64, 64),
+        seed: int = 42,
+        max_length: int = 5012,
+        headless: bool = True,
+    ) -> None:
+        ACTION_NAMES = [
+            "PickupObject",
+            "PutObject",
+            "DropHandObject",
+            "MoveHeldObjectAhead",
+            "MoveHeldObjectBack",
+            "MoveHeldObjectLeft",
+            "MoveHeldObjectRight",
+            "MoveHeldObjectUp",
+            "MoveHeldObjectDown",
+            "OpenObject",
+            "CloseObject",
+            "BreakObject",
+            "SliceObject",
+            "ToggleObjectOn",
+            "ToggleObjectOff",
+            "MoveAhead",
+            "MoveBack",
+            "MoveLeft",
+            "MoveRight",
+            "RotateRight",
+            "RotateLeft",
+            "LookUp",
+            "LookDown",
+            "ThrowObject",
+        ]
+        OBJECT_STR_TO_ID = {"": 0}
+        super().__init__(
+            action_names=ACTION_NAMES,
+            scene="FloorPlan10",
+            img_size=img_size,
+            seed=seed,
+            max_length=max_length,
+            headless=headless,
+        )
+
+        # Contains all unique objects in the scene
+        self.unique_objects: Set[str] = set()
+        # Contains all the unique objects picked up this episode
+        self.picked_up_unique_objects: Set[str] = set()
+
+        # This gets populated with all the scene's objects
+        # once reset() is called.
+        self.log_rewards: Dict[str, int] = {}
+
+    def is_terminated(self, event) -> bool:
+        # This environment terminates once every object
+        # is picked up
+        return len(self.unique_objects) > 0 and len(self.unique_objects) == len(
+            self.picked_up_unique_objects
+        )
+
+    @property
+    def observation_space(self) -> spaces.Dict:
+        img_shape = self._image_size + (3,)
+        my_spaces = {"image": spaces.Box(0, 255, img_shape, np.uint8)}
+        my_spaces.update(
+            {
+                k: gym.spaces.Box(-np.inf, np.inf, (1,), dtype=np.uint8)
+                for k in self.log_rewards.keys()
+            }
+        )
+        return spaces.Dict(my_spaces)
+
+    def reset(self) -> Tuple[Dict, Dict]:
+
+        self._step = 0
+        self._done = False
+        event = self.controller.reset()
+        info = self.filter_metadata(event.metadata, is_first=True)
+        self.update_agent_position(event.metadata)
+        self.set_closest_objects(event.metadata)
+        obs = self.process_obs(event, info, is_first=True)
+
+        for object_meta in event.metadata["objects"]:
+            self.unique_objects.add(object_meta["objectType"])
+
+        for obj_name in self.unique_objects:
+            self.log_rewards[obj_name] = 0
+
+        self.picked_up_unique_objects = set()
+
+        return obs, info
+
+    def compute_reward(self, event) -> float:
+        reward = 0.0
+        for object_meta in event.metadata["objects"]:
+            if (
+                object_meta["isPickedUp"]
+                and object_meta["objectType"] not in self.picked_up_unique_objects
+            ):
+                reward += 1.0
+                self.picked_up_unique_objects.add(object_meta["objectType"])
+                self.log_rewards[object_meta["objectType"]] = 1
+
+        return reward
+
+    def process_obs(
+        self,
+        event,
+        filtered_meta: Dict[str, str],
+        is_first: bool = False,
+        done: bool = False,
+    ) -> Dict:
+        rgb_image: np.ndarray = event.frame
+
+        h, w, _ = rgb_image.shape
+
+        if (h, w) != self._image_size:
+            image = Image.fromarray(rgb_image)
+            image = image.resize(self._image_size, resample=Image.BILINEAR)  # type: ignore
+            image = np.asarray(image)  # type: ignore
+        else:
+            image = rgb_image  # type: ignore
+
+        return {
+            "image": image,
+            "is_terminal": done,
+            "is_first": is_first,
+            "agent_position": self.agent_position,
+            **self.log_rewards,
+            **filtered_meta,
+        }
+
+    def filter_metadata(
+        self,
+        metadata: Dict,
+        object_interacted_with: Optional[str] = None,
+        is_first: bool = False,
+    ) -> Dict:
+        """Filters the metadata returned by the environment
+        to return a dictionary of data required for downstream tasks (i.e.,
+        narration)
+
+        Args:
+            metadata (Dict): Metadata returned by the controller object
+
+            object_interactied_with (Optional[str]): Optional name of the object that the
+            agent interacted with in this environment step. Defaults to None.
+
+            is_first (bool, optional): Whether this is the first observation of the
+            episode. If true, returns the default null string dict, as
+            no interactions could have happened. Defaults to False.
+
+        Returns:
+            Dict: Dictionary containing object interactions needed for
+            generating the narrations.
+        """
+        object_interaction_dict = {
+            "pickup": "",
+            "drop": "",
+            "open": "",
+            "close": "",
+            "break": "",
+            "slice": "",
+            "toggle_on": "",
+            "toggle_off": "",
+            "throw": "",
+            "put": ("", ""),
+        }
+
+        # No interactions could have happened yet
+        if is_first:
+            return object_interaction_dict
+
+        # If action didn't succeed then this is equivalent
+        # to no interaction.
+        if not metadata["lastActionSuccess"]:
+            return object_interaction_dict
+
+        # Go from object ID i.e., Sink|-00.70|+00.93|-00.65|SinkBasin
+        # to object name i.e., Sink
+        if object_interacted_with is not None:
+            object_interacted_with = object_interacted_with.split("|")[0]
+
+        action_name = metadata["lastAction"]
+
+        if action_name == "PickupObject":
+            assert object_interacted_with is not None
+            object_interaction_dict["pickup"] = object_interacted_with
+        elif action_name == "PutObject":
+            assert object_interacted_with is not None
+            receptacle = object_interacted_with
+            object_placed = None
+            for obj_meta in self.prev_meta["objects"]:
+                if obj_meta["isPickedUp"]:
+                    object_placed = obj_meta["objectType"]
+                    break
+            assert object_placed is not None
+            object_interaction_dict["put"] = (object_placed, receptacle)
+
+        elif action_name == "DropHandObject" or action_name == "ThrowObject":
             object_dropped = None
             for obj_meta in self.prev_meta["objects"]:
                 if obj_meta["isPickedUp"]:
