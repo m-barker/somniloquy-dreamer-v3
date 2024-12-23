@@ -51,7 +51,7 @@ class MiniGrid:
 
         elif task_name == "teleport5x5":
             if self._human_render:
-                env = Teleport5by5(render_mode="human")
+                env = Teleport5by5()
             else:
                 env = Teleport5by5()
             if self._full_obs:
@@ -64,7 +64,7 @@ class MiniGrid:
                 env.action_space = gym.spaces.Discrete(3)
         elif task_name == "teleport_complex":
             if self._human_render:
-                env = TeleportComplex(render_mode="human")
+                env = TeleportComplex()
             else:
                 env = TeleportComplex()
             if self._full_obs:
