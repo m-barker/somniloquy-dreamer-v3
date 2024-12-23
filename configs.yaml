@@ -328,6 +328,7 @@ minigrid:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
+  eval_n_consecutive_trajectories: 2
   eval_every: 1000
   log_every: 500
   encoder: { cnn_keys: "image", cnn_depth: 64 }
@@ -350,6 +351,7 @@ minigrid-language:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
+  eval_n_consecutive_trajectories: 2
   eval_every: 1000
   log_every: 500
   encoder: { cnn_keys: "image", cnn_depth: 64 }
@@ -405,6 +407,7 @@ minigrid-reconstruction:
   imag_gradient: "reinforce"
   actions: needed
   evaluate_reconstruction_narration: true
+  eval_n_consecutive_trajectories: 2
   video_pred_log: true
   task: "minigrid_teleport_complex"
   time_limit: 1024
