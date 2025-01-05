@@ -246,7 +246,12 @@ def sample_rollouts(
     for sample in range(n_samples):
         obs, info = env.reset()()
         initial_state = get_posterior_state(agent, obs, no_convert, ignore)
-
+        initial_obs = {
+            "obs": obs,
+            "reward": 0.0,
+            "done": False,
+            "info": info,
+        }
         actions = None
         if user_actions:
             assert user_env is not None
@@ -268,6 +273,7 @@ def sample_rollouts(
         imagined_state_samples.append(imagined_states)
         imagined_action_samples.append(imagined_actions)
         posterior_state_samples.append(posterior_states)
+        observations.insert(0, initial_obs)
         observation_samples.append(observations)
         if n_consecutive_trajectories > 1:
             for traj in range(n_consecutive_trajectories - 1):
@@ -291,6 +297,8 @@ def sample_rollouts(
                 imagined_state_samples[-1].extend(imagined_states)
                 imagined_action_samples[-1].extend(imagined_actions)
                 posterior_state_samples[-1].extend(posterior_states)
+                # Last trajectory's obs is first obs in current trajectory.
+                observations.insert(0, observation_samples[-1][-1])
                 observation_samples[-1].extend(observations)
 
     return {
@@ -496,52 +504,54 @@ def evaluate_rollouts(
                 sample_reconstructed_bleu_scores.append(posterior_bleu_score)
 
                 print(
-                    f"Sample {sample} Trajectory {index} Planned Intent: {planned_intent}"
+                    f"Sample {sample} steps {trajectory} : {end_index} Planned Intent: {planned_intent}"
                 )
                 print(
-                    f"Sample {sample} Trajectory {index} Reconstructed Intent: {reconstructed_intent}"
+                    f"Sample {sample} steps {trajectory} : {end_index} Reconstructed Intent: {reconstructed_intent}"
                 )
                 print(
-                    f"Sample {sample} Trajectory {index} Actual Narration: {actual_narration}"
+                    f"Sample {sample} steps {trajectory} : {end_index} Actual Narration: {actual_narration}"
                 )
                 print(
-                    f"Sample {sample} Trajectory {index} Imagined BLEU Score: {bleu_score}"
+                    f"Sample {sample} steps {trajectory} : {end_index} Imagined BLEU Score: {bleu_score}"
                 )
                 print(
-                    f"Sample {sample} Trajectory {index} Reconstructed BLEU Score: {posterior_bleu_score}"
+                    f"Sample {sample} steps {trajectory} : {end_index} Reconstructed BLEU Score: {posterior_bleu_score}"
                 )
 
-            imagined_images = [
-                agent._wm.heads["decoder"](state)["image"].mode()
-                for state in imagined_states
-            ]
-            reconstructed_images = [
-                agent._wm.heads["decoder"](state)["image"].mode()
-                for state in posterior_states
-            ]
-            imagined_images = convert_images_to_numpy(imagined_images)
-            reconstructed_images = convert_images_to_numpy(reconstructed_images)
+                imagined_images = [
+                    agent._wm.heads["decoder"](state)["image"].mode()
+                    for state in imagined_states
+                ]
+                reconstructed_images = [
+                    agent._wm.heads["decoder"](state)["image"].mode()
+                    for state in posterior_states
+                ]
+                imagined_images = convert_images_to_numpy(imagined_images)
+                reconstructed_images = convert_images_to_numpy(reconstructed_images)
 
-            reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
-                [imagined_images, reconstructed_images, images],
-                3,
-                len(images),
-                start_time=trajectory,
-            )
-            reconstruction_plot.suptitle(f"Sample {sample} Trajectory {index}")
-
-            if save_plots:
-                title = (
-                    f"{logger.step}-sample-{sample}-reconstruction-plot"
-                    if logger is not None
-                    else f"sample-{sample}-reconstruction-plot"
+                reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
+                    [imagined_images, reconstructed_images, images],
+                    3,
+                    len(images),
+                    start_time=trajectory,
                 )
-                reconstruction_plot.savefig(
-                    os.path.join(
-                        config.logdir,
-                        title,
+                reconstruction_plot.suptitle(
+                    f"Sample {sample} steps {trajectory} : {end_index}"
+                )
+
+                if save_plots:
+                    title = (
+                        f"{logger.step}-sample-{sample}-steps-{trajectory}-{end_index}-reconstruction-plot"
+                        if logger is not None
+                        else f"sample-{sample}-reconstruction-plot"
                     )
-                )
+                    reconstruction_plot.savefig(
+                        os.path.join(
+                            config.logdir,
+                            title,
+                        )
+                    )
 
         if config.enable_language:
             sample_mean_reconstructed_bleu_score = np.array(
@@ -987,7 +997,7 @@ def minigrid_narration_using_obs_reconstruction(
             imagined_states = imagined_state_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
             # Happens when environment (or imagined trajectory) terminates early.
-            if len(imagined_states) == 0:
+            if len(imagined_states) == 0 or len(observations) == 0:
                 continue
 
             true_occupancy_grid = [
@@ -1156,7 +1166,7 @@ def crafter_narration_using_obs_reconstruction(
             imagined_states = imagined_state_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
             # Happens when environment (or imagined trajectory) terminates early.
-            if len(imagined_states) == 0:
+            if len(imagined_states) == 0 or len(observations) == 0:
                 continue
 
             imagined_narration_obs: Dict[str, Any] = {

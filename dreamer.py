@@ -532,7 +532,8 @@ def main(config):
                 rollout_samples["posterior_state_samples"],
                 rollout_samples["observation_samples"],
                 logger=logger,
-                trajectory_length=config.eval_trajectory_length,
+                trajectory_length=config.eval_trajectory_length
+                + 1,  # +1 as we include starting states
                 wandb_run=run,
             )
             if config.evaluate_reconstruction_narration:
@@ -544,7 +545,7 @@ def main(config):
                         rollout_samples["posterior_state_samples"],
                         rollout_samples["observation_samples"],
                         logger=logger,
-                        trajectory_length=config.eval_trajectory_length,
+                        trajectory_length=config.eval_trajectory_length + 1,
                         wandb_run=run,
                     )
                 elif "minigrid" in config.task:
@@ -555,7 +556,7 @@ def main(config):
                         rollout_samples["posterior_state_samples"],
                         rollout_samples["observation_samples"],
                         logger=logger,
-                        trajectory_length=config.eval_trajectory_length,
+                        trajectory_length=config.eval_trajectory_length + 1,
                         wandb_run=run,
                         narrator=configure_narrator(config),
                         obs_size=train_envs[0]

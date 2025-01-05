@@ -688,7 +688,7 @@ class PickupObjects(AI2ThorBaseEnv):
         self,
         img_size: Tuple[int, int] = (64, 64),
         seed: int = 42,
-        max_length: int = 5012,
+        max_length: int = 10000,
         headless: bool = True,
     ) -> None:
         ACTION_NAMES = [
