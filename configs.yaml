@@ -20,7 +20,7 @@ defaults:
   checkpoint: null
   n_eval_samples: 10
   eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 1
+  eval_n_consecutive_trajectories: 10
   token_sampling_method: "nucleus"
   ignore_list: []
   no_convert_list: []
@@ -368,7 +368,7 @@ minigrid-language:
   actions: needed
   enable_language: true
   vocab_path: vocab/minigrid_teleport_complex.json
-  dec_max_length: 100
+  dec_max_length: 150
   enc_max_length: 16
   video_pred_log: true
   task: "minigrid_teleport_complex"
