@@ -40,14 +40,14 @@ def imagine_trajectory(
 
     Returns:
         Tuple[List[torch.Tensor], List[torch.Tensor]]: Imagined states and actions, and whether
-        the world model predicts the trajectory terminates.
+        the world model predicts the trajectory terminates, includes initial state.
     """
     if actions is None:
         imagined_actions: List[torch.Tensor] = []
     prev_state = initial_state
     done = False
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
-    imagained_states: List[torch.Tensor] = []
+    imagained_states: List[torch.Tensor] = [latent_state]
     for t in range(trajectory_length):
         # If world model thinks the episode terminates, pad the states/actions
         # with zeros.
@@ -113,8 +113,8 @@ def rollout_trajectory(
 
     prev_state = initial_state
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
-    posterior_states: List[torch.Tensor] = []
-    posterior_info: List[Dict[str, Any]] = []
+    posterior_states: List[torch.Tensor] = [latent_state]
+    posterior_info: List[Dict[str, Any]] = [initial_state]
     done = False
     env_done = False
     for t in range(trajectory_length):
@@ -223,7 +223,7 @@ def sample_rollouts(
         agent (Dreamer): Dreamer agent containing the world model and actor.
         env (Damy): Environment to sample rollouts from.
         n_samples (int): Number of rollouts to sample.
-        trajectory_length (int, optional): Length of the imagined trajectory. Defaults to 16.
+        trajectory_length (int, optional): Length of the imagined trajectory. Defaults to 15.
         n_consecutive_trajectories (int, optional): Number of consecutive trajectories to sample. Defaults to 1.
         user_actions (bool, optional): Whether the actions the agent imagines taking is provided by the user or
         the learned policy. Defaults to False.
@@ -246,6 +246,7 @@ def sample_rollouts(
     for sample in range(n_samples):
         obs, info = env.reset()()
         initial_state = get_posterior_state(agent, obs, no_convert, ignore)
+
         actions = None
         if user_actions:
             assert user_env is not None
@@ -349,9 +350,9 @@ def evaluate_rollouts(
         for index, trajectory in enumerate(
             range(0, len(imagined_state_samples[sample]), trajectory_length)
         ):
-            # Adjust the end index if the environment terminated early
             end_index = trajectory + trajectory_length
             observations = observation_samples[sample][trajectory:end_index]
+            # Adjust the end index if the environment terminated early
             for i, obs in enumerate(observations):
                 if obs["obs"] is None:
                     end_index = i
@@ -447,34 +448,6 @@ def evaluate_rollouts(
                     ]
                 )
 
-                # our batch size is 1 so take first item in list
-                planned_intent_greedy = agent._wm.heads["language"].generate(
-                    imagined_state_tensor,
-                    agent._wm.vocab,
-                    config.dec_max_length,
-                    sampling_method="greedy",
-                )[0]
-                planned_intent_greedy = " ".join(
-                    [
-                        word
-                        for word in planned_intent.split()
-                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
-                    ]
-                )
-                reconstructed_intent_greedy = agent._wm.heads["language"].generate(
-                    posterior_state_tensor,
-                    agent._wm.vocab,
-                    config.dec_max_length,
-                    sampling_method="greedy",
-                )[0]
-                reconstructed_intent_greedy = " ".join(
-                    [
-                        word
-                        for word in reconstructed_intent.split()
-                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
-                    ]
-                )
-
                 if "ai2thor" in config.task:
                     actual_narration = agent._wm.narrator.narrate(
                         # batch["visible_objects"][current_index:end_index],
@@ -496,6 +469,10 @@ def evaluate_rollouts(
                     if len(narration_data.keys()) == 1:  # type: ignore
                         narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
                     actual_narration = agent._wm.narrator.narrate(narration_data)
+                else:
+                    raise ValueError(
+                        f"Unhandled narration data type: {type(narration_data)}"
+                    )
                 try:
                     bleu_score = bleu_metric_from_strings(
                         planned_intent, actual_narration
@@ -513,20 +490,6 @@ def evaluate_rollouts(
                 except ValueError:
                     posterior_bleu_score = torch.tensor(0.0)
 
-                try:
-                    posterior_bleu_score_greedy = bleu_metric_from_strings(
-                        reconstructed_intent_greedy, actual_narration
-                    )
-                except ValueError:
-                    posterior_bleu_score_greedy = torch.tensor(0.0)
-
-                try:
-                    bleu_score_greedy = bleu_metric_from_strings(
-                        planned_intent_greedy, actual_narration
-                    )
-                except ValueError:
-                    bleu_score_greedy = torch.tensor(0.0)
-
                 posterior_bleu_scores.append(float(posterior_bleu_score))
 
                 sample_imagined_bleu_scores.append(bleu_score)
@@ -536,13 +499,7 @@ def evaluate_rollouts(
                     f"Sample {sample} Trajectory {index} Planned Intent: {planned_intent}"
                 )
                 print(
-                    f"Sample {sample} Trajectory {index} Planned Intent Greedy: {planned_intent_greedy}"
-                )
-                print(
                     f"Sample {sample} Trajectory {index} Reconstructed Intent: {reconstructed_intent}"
-                )
-                print(
-                    f"Sample {sample} Trajectory {index} Reconstructed Intent Greedy: {reconstructed_intent_greedy}"
                 )
                 print(
                     f"Sample {sample} Trajectory {index} Actual Narration: {actual_narration}"
@@ -552,12 +509,6 @@ def evaluate_rollouts(
                 )
                 print(
                     f"Sample {sample} Trajectory {index} Reconstructed BLEU Score: {posterior_bleu_score}"
-                )
-                print(
-                    f"Sample {sample} Trajectory {index} Imagined BLEU Score Greedy: {bleu_score_greedy}"
-                )
-                print(
-                    f"Sample {sample} Trajectory {index} Reconstructed BLEU Score Greedy: {posterior_bleu_score_greedy}"
                 )
 
             imagined_images = [
