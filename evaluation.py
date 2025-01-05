@@ -1238,7 +1238,7 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 50
+                    * 10
                 ).astype(np.uint8)
                 for state in imagined_states
             ]
@@ -1249,7 +1249,7 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 50
+                    * 10
                 ).astype(np.uint8)
                 for state in imagined_states
             ]
@@ -1272,7 +1272,7 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 50
+                    * 10
                 ).astype(np.uint8)
                 for state in posterior_states
             ]
@@ -1283,7 +1283,7 @@ def crafter_narration_using_obs_reconstruction(
                     .cpu()
                     .numpy()
                     .flatten()
-                    * 50
+                    * 10
                 ).astype(np.uint8)
                 for state in posterior_states
             ]

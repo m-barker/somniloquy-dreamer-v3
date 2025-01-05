@@ -79,9 +79,9 @@ class Crafter:
 
         # Max entity ID is 18
         flattened_grid = local_grid.flatten() / 18
-        # For now, assuming there won't be more than 50 items or achievements
-        flattened_inventory = np.array(list(info["inventory"].values())) / 50
-        flattened_achievements = np.array(list(info["achievements"].values())) / 50
+        # For now, assuming there won't be more than 10 items or achievements
+        flattened_inventory = np.array(list(info["inventory"].values())) / 10
+        flattened_achievements = np.array(list(info["achievements"].values())) / 10
 
         # assert flattened_achievements.max() <= 1
         # assert flattened_inventory.max() <= 1
@@ -128,9 +128,9 @@ class Crafter:
 
         # Max entity ID is 18
         flattened_grid = local_grid.flatten() / 18
-        # For now, assuming there won't be more than 50 items or achievements
-        flattened_inventory = np.array(list(info["inventory"].values())) / 50
-        flattened_achievements = np.array(list(info["achievements"].values())) / 50
+        # For now, assuming there won't be more than 10 items or achievements
+        flattened_inventory = np.array(list(info["inventory"].values())) / 10
+        flattened_achievements = np.array(list(info["achievements"].values())) / 10
 
         # assert flattened_achievements.max() <= 1
         # assert flattened_inventory.max() <= 1
