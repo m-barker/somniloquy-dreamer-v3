@@ -395,7 +395,7 @@ minigrid-language:
   actions: needed
   enable_language: true
   vocab_path: vocab/minigrid_teleport_complex.json
-  dec_max_length: 150
+  dec_max_length: 200
   enc_max_length: 16
   video_pred_log: true
   task: "minigrid_teleport_complex"
