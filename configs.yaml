@@ -289,6 +289,43 @@ crafter-reconstruction:
   cont_head: { layers: 1 }
   imag_gradient: "reinforce"
 
+crafter-reconstruction-small:
+  task: crafter_reward
+  step: 1e6
+  evaluate_reconstruction_narration: true
+  action_repeat: 1
+  envs: 1
+  eval_episode_num: 1
+  eval_every: 500
+  train_ratio: 512
+  video_pred_log: true
+  log_every: 500
+  no_convert_list: ["semantic", "inventory", "achievements"]
+  encoder:
+    {
+      mlp_keys: "flattened_grid|flattened_inventory|flattened_achievements",
+      cnn_keys: "image",
+      cnn_depth: 64,
+      mlp_layers: 3,
+      mlp_units: 1024,
+    }
+  decoder:
+    {
+      mlp_keys: "flattened_grid|flattened_inventory|flattened_achievements",
+      cnn_keys: "image",
+      cnn_depth: 64,
+      mlp_layers: 3,
+      mlp_units: 1024,
+    }
+  dyn_hidden: 512
+  dyn_deter: 1024
+  units: 512
+  actor: { layers: 3, dist: "onehot", std: "none" }
+  value: { layers: 3 }
+  reward_head: { layers: 1 }
+  cont_head: { layers: 1 }
+  imag_gradient: "reinforce"
+
 atari100k:
   steps: 4e5
   envs: 1
