@@ -586,12 +586,6 @@ def evaluate_rollouts(
                 },
                 step=logger.step,
             )
-    else:
-        if wandb_run is not None:
-            wandb_run.log(
-                {"reconstruction_plot": reconstruction_plot},
-                step=logger.step,
-            )
 
 
 def get_action_translation_dict(n_actions: int):
