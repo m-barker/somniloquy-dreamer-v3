@@ -663,7 +663,7 @@ class WorldModel(nn.Module):
                 scaled = {
                     key: value * self._scales.get(key, 1.0)
                     for key, value in losses.items()
-                    if key != "action_prediction"
+                    if (key != "action_prediction" and key != "language")
                 }
                 model_loss = sum(scaled.values()) + kl_loss
             if self._config.action_prediction:
@@ -671,6 +671,13 @@ class WorldModel(nn.Module):
                     torch.mean(model_loss) + torch.mean(losses["action_prediction"]),
                     self.parameters(),
                 )
+            elif self._config.enable_language:
+                # mean of language loss is already taken
+                metrics = self._model_opt(
+                    torch.mean(model_loss) + losses["language"],
+                    self.parameters(),
+                )
+
             else:
                 metrics = self._model_opt(
                     torch.mean(model_loss),

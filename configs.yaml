@@ -476,6 +476,44 @@ minigrid-reconstruction:
   task: "minigrid_teleport_complex"
   time_limit: 1024
 
+minigrid-reconstruction-small:
+  steps: 1e5
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 1000
+  log_every: 500
+  encoder:
+    {
+      mlp_keys: "flattened_occupancy_grid",
+      cnn_keys: "image",
+      cnn_depth: 64,
+      mlp_layers: 3,
+      mlp_units: 1024,
+    }
+  decoder:
+    {
+      mlp_keys: "flattened_occupancy_grid",
+      cnn_keys: "image",
+      cnn_depth: 64,
+      mlp_layers: 3,
+      mlp_units: 1024,
+    }
+  dyn_hidden: 512
+  dyn_deter: 1024
+  units: 512
+  actor: { layers: 3, dist: "onehot", std: "none" }
+  value: { layers: 3 }
+  reward_head: { layers: 1 }
+  cont_head: { layers: 1 }
+  imag_gradient: "reinforce"
+  actions: needed
+  evaluate_reconstruction_narration: true
+  eval_n_consecutive_trajectories: 2
+  video_pred_log: true
+  task: "minigrid_teleport_complex"
+  time_limit: 1024
+
 minedojo:
   steps: 1e8
   envs: 1
