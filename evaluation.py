@@ -825,7 +825,7 @@ def display_image(image: np.ndarray, target_size: Tuple[int, int] = (600, 600)) 
 
 
 def display_images_as_video(
-    images, delay=100, window_name="Video Loop", target_size=(600, 600)
+    images, delay=100, window_name="Video Loop", target_size=(600, 600), loop=False
 ):
     while True:
         for img in images:
@@ -839,6 +839,9 @@ def display_images_as_video(
             if key == ord("q"):
                 cv2.destroyAllWindows()
                 return
+
+        if not loop:
+            return
 
 
 def interactive_language_to_action(agent, env) -> None:
@@ -1332,6 +1335,85 @@ def crafter_narration_using_obs_reconstruction(
         },
         step=logger.step,
     )
+
+
+def visual_plan_evaluation(
+    agent, env, output_folder: str, plan_length: int = 15
+) -> None:
+
+    env_done, imagined_done = None, None
+    prev_state, prev_action = None
+    prev_obs, info = env.reset()()
+    config = agent._config
+    no_convert = config.no_convert_list
+    ignore = config.ignore_list
+    plan_number = 1
+    while not (env_done or imagined_done):
+        initial_state = get_posterior_state(
+            agent,
+            prev_obs,
+            no_convert,
+            ignore,
+            prev_state,
+            prev_action,
+        )
+        imagined_states, imagined_actions, imagined_done = imagine_trajectory(
+            agent=agent,
+            initial_state=initial_state,
+            trajectory_length=plan_length,
+        )
+        # (T, D)
+        imagined_state_tensor = torch.cat(imagined_states, dim=0)
+        # (1, T, D)
+        imagined_state_tensor = imagined_state_tensor.unsqueeze(0)
+        # our batch size is 1 so take first item in list
+        translated_plan_tokens = agent._wm.heads["language"].generate(
+            imagined_state_tensor,
+            agent._wm.vocab,
+            config.dec_max_length,
+            sampling_method=config.token_sampling_method,
+        )[0]
+        translated_plan_str = " ".join(
+            [
+                word
+                for word in translated_plan_tokens.split()
+                if word not in ["<BOS>", "<EOS>", "<PAD>"]
+            ]
+        )
+
+        with open(os.path.join(output_folder, "translated_plan.txt"), "a+") as f:
+            f.write(f"{plan_number}. {translated_plan_str}\n")
+
+        posterior_states, observations, posteriors, env_done = rollout_trajectory(
+            agent=agent,
+            initial_state=initial_state,
+            trajectory_length=plan_length,
+            actions=imagined_actions,
+            env=env,
+        )
+
+        os.makedirs(os.path.join(output_folder, f"plan_step_{plan_number}_images"))
+
+        # + 1 for starting state
+        for plan_step in range(plan_length + 1):
+            if plan_step == 0:
+                img = prev_obs["obs"]["image"]
+            else:
+                img = observations[plan_step]["obs"]["image"]
+            resized_img = cv2.resize(img, (600, 600), interpolation=cv2.INTER_NEAREST)
+            cv2.imwrite(
+                os.path.join(
+                    output_folder,
+                    f"plan_step_{plan_number}_images",
+                    f"image_{plan_step + 1}",
+                ),
+                resized_img,
+            )
+
+        prev_state = imagined_states[-1]
+        prev_action = imagined_actions[-1]
+        prev_obs = observations[-1]
+        plan_number += 1
 
 
 if __name__ == "__main__":
