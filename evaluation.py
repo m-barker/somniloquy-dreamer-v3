@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
+from tqdm import tqdm
+
 
 from tools import (
     add_batch_to_obs,
@@ -1474,7 +1476,7 @@ def evaluate_consecutive_translations(
     bleu_sample_scores: List[List[float]] = [[] for _ in range(100)]
     blue_sample_reset_scores: List[List[float]] = [[] for _ in range(100)]
 
-    for sample in range(100):
+    for sample in tqdm(range(100)):
         env_done, imagined_done = None, None
         env_reset_done, imagined_done_reset = None, None
         prev_state, prev_action = None, None
@@ -1580,15 +1582,15 @@ def evaluate_consecutive_translations(
             bleu_scores.append(bleu_score)
             bleu_scores_reset.append(bleu_score_reset)
 
-            print(f"Plan {plan_number} Translated Plan No Reset: {translated_plan_str}")
-            print(f"Plan {plan_number} True Narration No Reset: {true_narration}")
-            print(
-                "-----------------------------------------------------------------------"
-            )
-            print(
-                f"Plan {plan_number} Translated Plan Reset: {translated_plan_str_reset}"
-            )
-            print(f"Plan {plan_number} True Narration Reset: {true_narration_reset}")
+            # print(f"Plan {plan_number} Translated Plan No Reset: {translated_plan_str}")
+            # print(f"Plan {plan_number} True Narration No Reset: {true_narration}")
+            # print(
+            #     "-----------------------------------------------------------------------"
+            # )
+            # print(
+            #     f"Plan {plan_number} Translated Plan Reset: {translated_plan_str_reset}"
+            # )
+            # print(f"Plan {plan_number} True Narration Reset: {true_narration_reset}")
 
             prev_state = posteriors[-1]
             prev_action = imagined_actions[-1]
