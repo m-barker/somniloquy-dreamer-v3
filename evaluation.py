@@ -322,6 +322,95 @@ def convert_images_to_numpy(images: List[torch.Tensor]) -> List[np.ndarray]:
     return [np.clip(255 * img, 0, 255).astype(np.uint8) for img in images]
 
 
+def configure_narration_data(
+    narration_keys: Union[str, List[str]],
+    observations: List[Dict[str, Any]],
+    task_name: str,
+) -> Union[Dict[str, List[str]], List[Dict[str, str]]]:
+    """Configures the data from the observations for narration.
+
+    Args:
+        narration_keys (Union[str, List[str]]): Keys to extract from observations for narration.
+        observations (List[Dict[str, Any]]): List of observations from which to extract data.
+        task_name (str): Name of the task to determine the format of the narration data.
+
+    Raises:
+        ValueError: If the narration_keys type is invalid.
+
+    Returns:
+        Union[Dict[str, List[str]], List[Dict[str, str]]]: Configured narration data.
+    """
+
+    if "ai2thor" in task_name:
+        narration_data: Dict[str, List[str]] = {}
+        for narration_key in narration_keys:
+            for obs in observations:
+                if narration_key not in narration_data.keys():
+                    narration_data[narration_key] = [obs["obs"][narration_key]]
+                else:
+                    narration_data[narration_key].append(obs["obs"][narration_key])
+
+    elif type(narration_keys) is str:
+        try:
+            narration_data = [obs[narration_keys] for obs in observations]  # type: ignore
+        except KeyError:
+            narration_data = [obs["info"][narration_keys] for obs in observations]  # type: ignore
+    elif type(narration_keys) is list:
+        try:
+            narration_data = [
+                {key: obs[key] for key in narration_keys} for obs in observations
+            ]  # type: ignore
+        except KeyError:
+            narration_data = [
+                {key: obs["info"][key] for key in narration_keys}
+                for obs in observations
+            ]  # type: ignore
+        # Comine into a single dictionary
+        narration_data = {
+            key: [data[key] for data in narration_data] for key in narration_keys  # type: ignore
+        }  # type: ignore
+    else:
+        raise ValueError(f"Invalid narration_keys: {narration_keys}")
+
+    return narration_data
+
+
+def generate_translation(
+    agent,
+    config,
+    latent_states: List[torch.Tensor],
+) -> str:
+    """Returns a string containing the translated latent state plan._
+
+    Args:
+        agent: Trained World Model.
+        config: configuration params of the world Model.
+        latent_states (List[torch.Tensor]): List containing each
+        latent state plan step.
+
+    Returns:
+        str: Latent state plan translation.
+    """
+
+    # (T, N, C) -> (N, T, C)
+    latent_state_tensor = torch.cat(latent_states, dim=0).permute(1, 0, 2)
+    # our batch size is 1 so take first item in list
+    plan_translation = agent._wm.heads["language"].generate(
+        latent_state_tensor,
+        agent._wm.vocab,
+        config.dec_max_length,
+        sampling_method=config.token_sampling_method,
+    )[0]
+    plan_translation = " ".join(
+        [
+            word
+            for word in plan_translation.split()
+            if word not in ["<BOS>", "<EOS>", "<PAD>"]
+        ]
+    )
+    return plan_translation
+
+
 @torch.no_grad()
 def evaluate_rollouts(
     agent,
@@ -380,97 +469,29 @@ def evaluate_rollouts(
             rewards = [obs["reward"] for obs in observations]
 
             if config.enable_language:
-                narration_keys = config.narrator["narration_key"]
-
-                if "ai2thor" in config.task:
-                    narration_data = {}
-                    for narration_key in narration_keys:
-                        for obs in observations:
-                            if narration_key not in narration_data.keys():
-                                narration_data[narration_key] = [
-                                    obs["obs"][narration_key]
-                                ]
-                            else:
-                                narration_data[narration_key].append(
-                                    obs["obs"][narration_key]
-                                )
-
-                elif type(narration_keys) is str:
-                    try:
-                        narration_data = [obs[narration_keys] for obs in observations]
-                    except KeyError:
-                        narration_data = [
-                            obs["info"][narration_keys] for obs in observations
-                        ]
-                elif type(narration_keys) is list:
-                    try:
-                        narration_data = [
-                            {key: obs[key] for key in narration_keys}
-                            for obs in observations
-                        ]
-                    except KeyError:
-                        narration_data = [
-                            {key: obs["info"][key] for key in narration_keys}
-                            for obs in observations
-                        ]
-                    # Comine into a single dictionary
-                    narration_data = {
-                        key: [data[key] for data in narration_data]
-                        for key in narration_keys
-                    }  # type: ignore
-                else:
-                    raise ValueError(f"Invalid narration_keys: {narration_keys}")
-
-                # (T, N, C) -> (N, T, C)
-                imagined_state_tensor = torch.cat(imagined_states, dim=0).permute(
-                    1, 0, 2
+                narration_data = configure_narration_data(
+                    config.narrator["narration_key"], observations, config.task
                 )
-                posterior_state_tensor = torch.cat(posterior_states, dim=0).permute(
-                    1, 0, 2
-                )
-                # our batch size is 1 so take first item in list
-                planned_intent = agent._wm.heads["language"].generate(
-                    imagined_state_tensor,
-                    agent._wm.vocab,
-                    config.dec_max_length,
-                    sampling_method=config.token_sampling_method,
-                )[0]
-                planned_intent = " ".join(
-                    [
-                        word
-                        for word in planned_intent.split()
-                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
-                    ]
-                )
-                reconstructed_intent = agent._wm.heads["language"].generate(
-                    posterior_state_tensor,
-                    agent._wm.vocab,
-                    config.dec_max_length,
-                    sampling_method=config.token_sampling_method,
-                )[0]
-                reconstructed_intent = " ".join(
-                    [
-                        word
-                        for word in reconstructed_intent.split()
-                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
-                    ]
+
+                planned_intent = generate_translation(agent, config, imagined_states)
+                reconstructed_intent = generate_translation(
+                    agent, config, posterior_states
                 )
 
                 if "ai2thor" in config.task:
                     actual_narration = agent._wm.narrator.narrate(
-                        # batch["visible_objects"][current_index:end_index],
-                        narration_data["agent_position"],
+                        narration_data["agent_position"],  # type: ignore
                         {
-                            "pickup": narration_data["pickup"],
-                            "drop": narration_data["drop"],
-                            "break": narration_data["break"],
-                            "open": narration_data["open"],
-                            "close": narration_data["close"],
-                            "slice": narration_data["slice"],
-                            "toggle_on": narration_data["toggle_on"],
-                            "toggle_off": narration_data["toggle_off"],
-                            "throw": narration_data["throw"],
-                            "put": narration_data["put"],
+                            "pickup": narration_data["pickup"],  # type: ignore
+                            "drop": narration_data["drop"],  # type: ignore
+                            "break": narration_data["break"],  # type: ignore
+                            "open": narration_data["open"],  # type: ignore
+                            "close": narration_data["close"],  # type: ignore
+                            "slice": narration_data["slice"],  # type: ignore
+                            "toggle_on": narration_data["toggle_on"],  # type: ignore
+                            "toggle_off": narration_data["toggle_off"],  # type: ignore
+                            "throw": narration_data["throw"],  # type: ignore
+                            "put": narration_data["put"],  # type: ignore
                         },
                     )
                 elif type(narration_data) is dict:
@@ -770,7 +791,7 @@ def evaluate_language_to_action(
     for t in range(len(translated_action_tokens)):
         translated_one_hot_actions[t, translated_action_tokens[t]] = 1
     print(f"TRANSLATED ACTIONS: {translated_action_tokens}")
-    posterior_states, observations, _ = rollout_trajectory(
+    posterior_states, observations, _, _ = rollout_trajectory(
         agent=agent,
         initial_state=current_state,
         trajectory_length=len(translated_one_hot_actions),
@@ -900,7 +921,7 @@ def interactive_language_to_action(agent, env) -> None:
         for t in range(len(translated_action_tokens)):
             translated_one_hot_actions[t, translated_action_tokens[t]] = 1
 
-        _, observations, posterior_states = rollout_trajectory(
+        _, observations, posterior_states, _ = rollout_trajectory(
             agent=agent,
             initial_state=starting_state_posterior,
             trajectory_length=len(translated_one_hot_actions),
@@ -1362,22 +1383,7 @@ def visual_plan_evaluation(
             initial_state=initial_state,
             trajectory_length=plan_length,
         )
-        # (T, B, D) -> (B, T, D)
-        imagined_state_tensor = torch.cat(imagined_states, dim=0).permute(1, 0, 2)
-        # our batch size is 1 so take first item in list
-        translated_plan_tokens = agent._wm.heads["language"].generate(
-            imagined_state_tensor,
-            agent._wm.vocab,
-            config.dec_max_length,
-            sampling_method=config.token_sampling_method,
-        )[0]
-        translated_plan_str = " ".join(
-            [
-                word
-                for word in translated_plan_tokens.split()
-                if word not in ["<BOS>", "<EOS>", "<PAD>"]
-            ]
-        )
+        translated_plan_str = generate_translation(agent, config, imagined_states)
 
         with open(os.path.join(output_folder, "translated_plan.txt"), "a+") as f:
             f.write(f"{plan_number}. {translated_plan_str}\n")
