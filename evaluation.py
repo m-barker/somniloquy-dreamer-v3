@@ -1456,7 +1456,7 @@ def evaluate_consecutive_translations(
     env_no_reset,
     plan_length: int = 15,
     output_path: str = "./consecutive_translation_evaluation.png",
-    max_consecutive_plans: Optional[int] = None,
+    max_consecutive_plans: Optional[int] = 5,
 ) -> None:
     """Evaluates the performance of the translator across consecutive
     plans, to see how translation performance is impacted by a degrading
@@ -1473,10 +1473,10 @@ def evaluate_consecutive_translations(
         consecutive plans to evaluate. If None, keeps going until the episode terminates.
         Defaults to None.
     """
-    bleu_sample_scores: List[List[float]] = [[] for _ in range(100)]
-    blue_sample_reset_scores: List[List[float]] = [[] for _ in range(100)]
+    bleu_sample_scores: List[List[float]] = [[] for _ in range(10)]
+    blue_sample_reset_scores: List[List[float]] = [[] for _ in range(10)]
 
-    for sample in tqdm(range(100)):
+    for sample in tqdm(range(10)):
         env_done, imagined_done = None, None
         env_reset_done, imagined_done_reset = None, None
         prev_state, prev_action = None, None
