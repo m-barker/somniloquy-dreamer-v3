@@ -394,7 +394,7 @@ def generate_narration(
         str: Ground truth narration.
     """
 
-    if "ai2thor" in config.task:
+    if "ai2thor" in task_name:
         actual_narration = agent._wm.narrator.narrate(
             narration_data["agent_position"],  # type: ignore
             {
