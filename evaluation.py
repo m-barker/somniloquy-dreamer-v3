@@ -457,6 +457,23 @@ def generate_translation(
     return plan_translation
 
 
+def get_narration_baseline_str(task_name: str) -> str:
+    """Gets a baseline narration string used to capture the constant elements
+    due to the rule-based narrator.
+
+    Args:
+        task_name (str): Name of the task to determine the baseline narration.
+
+    Returns:
+        str: Baseline string.
+    """
+
+    if "crafter" in task_name:
+        return "I will see. I will not harvest anything. I will not craft anything. I will not eat anything and get more hungry. I will not drink anything and get more thirsty. I will not sleep and get more tired."
+    else:
+        raise ValueError(f"Unhandled task name: {task_name}")
+
+
 @torch.no_grad()
 def evaluate_rollouts(
     agent,
@@ -1456,6 +1473,7 @@ def evaluate_consecutive_translations(
     env_no_reset,
     plan_length: int = 15,
     output_path: str = "./consecutive_translation_evaluation.png",
+    n_samples: int = 100,
     max_consecutive_plans: Optional[int] = None,
 ) -> None:
     """Evaluates the performance of the translator across consecutive
@@ -1469,14 +1487,19 @@ def evaluate_consecutive_translations(
         env_no_reset: Environment to rollout in without resetting the latent state.
         plan_length (int, optional): Number of steps in each plan. Defaults to 15.
         output_path (str, optional): Path to save the output plot. Defaults to "./consecutive_translation_evaluation.png".
+        n_samples (int, optional): Number of samples to evaluate. Defaults to 100.
         max_consecutive_plans (Optional[int], optional): Optional maximum number of
         consecutive plans to evaluate. If None, keeps going until the episode terminates.
         Defaults to None.
     """
-    bleu_sample_scores: List[List[float]] = [[] for _ in range(100)]
-    blue_sample_reset_scores: List[List[float]] = [[] for _ in range(100)]
+    bleu_sample_scores: List[List[float]] = [[] for _ in range(n_samples)]
+    blue_sample_reset_scores: List[List[float]] = [[] for _ in range(n_samples)]
+    bleu_sample_baseline_scores: List[List[float]] = [[] for _ in range(n_samples)]
+    bleu_sample_reset_baseline_scores: List[List[float]] = [
+        [] for _ in range(n_samples)
+    ]
 
-    for sample in tqdm(range(100)):
+    for sample in tqdm(range(n_samples)):
         env_done, imagined_done = None, None
         env_reset_done, imagined_done_reset = None, None
         prev_state, prev_action = None, None
@@ -1488,6 +1511,8 @@ def evaluate_consecutive_translations(
         plan_number = 1
         bleu_scores: List[float] = []
         bleu_scores_reset: List[float] = []
+        bleu_baseline_scores: List[float] = []
+        bleu_baseline_scores_reset: List[float] = []
         while not (env_done or imagined_done) and not (
             env_reset_done or imagined_done_reset
         ):
@@ -1569,6 +1594,7 @@ def evaluate_consecutive_translations(
             true_narration_reset = generate_narration(
                 agent, config.task, narration_data_reset
             )
+            baseline_narration = get_narration_baseline_str(config.task)
 
             bleu_score = float(
                 bleu_metric_from_strings(translated_plan_str, true_narration)
@@ -1578,9 +1604,17 @@ def evaluate_consecutive_translations(
                     translated_plan_str_reset, true_narration_reset
                 )
             )
+            bleu_basline_score = float(
+                bleu_metric_from_strings(baseline_narration, true_narration)
+            )
+            bleu_basline_score_reset = float(
+                bleu_metric_from_strings(baseline_narration, true_narration_reset)
+            )
 
             bleu_scores.append(bleu_score)
             bleu_scores_reset.append(bleu_score_reset)
+            bleu_baseline_scores.append(bleu_basline_score)
+            bleu_baseline_scores_reset.append(bleu_basline_score_reset)
 
             # print(f"Plan {plan_number} Translated Plan No Reset: {translated_plan_str}")
             # print(f"Plan {plan_number} True Narration No Reset: {true_narration}")
@@ -1605,6 +1639,8 @@ def evaluate_consecutive_translations(
 
             bleu_sample_scores[sample].append(bleu_score)
             blue_sample_reset_scores[sample].append(bleu_score_reset)
+            bleu_sample_baseline_scores[sample].append(bleu_basline_score)
+            bleu_sample_reset_baseline_scores[sample].append(bleu_basline_score_reset)
 
     # From https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html#sphx-glr-gallery-lines-bars-and-markers-barchart-py
     # Compute mean and standard deviation of the BLEU scores
@@ -1619,21 +1655,43 @@ def evaluate_consecutive_translations(
             len(max(blue_sample_reset_scores, key=lambda x: len(x))),
         ]
     )  # type: ignore
+    bleu_baseline_scores = np.zeros(
+        [
+            len(bleu_sample_baseline_scores),
+            len(max(bleu_sample_baseline_scores, key=lambda x: len(x))),
+        ]
+    )  # type: ignore
+    bleu_baseline_scores_reset = np.zeros(
+        [
+            len(bleu_sample_reset_baseline_scores),
+            len(max(bleu_sample_reset_baseline_scores, key=lambda x: len(x))),
+        ]
+    )  # type: ignore
 
     for i, row in enumerate(bleu_sample_scores):
         bleu_scores[i, : len(row)] = row  # type: ignore
     for i, row in enumerate(blue_sample_reset_scores):
         bleu_scores_reset[i, : len(row)] = row  # type: ignore
+    for i, row in enumerate(bleu_sample_baseline_scores):
+        bleu_baseline_scores[i, : len(row)] = row  # type: ignore
+    for i, row in enumerate(bleu_sample_reset_baseline_scores):
+        bleu_baseline_scores_reset[i, : len(row)] = row  # type: ignore
 
     # Set 0s to NaNs
     bleu_scores[bleu_scores == 0] = np.nan
     bleu_scores_reset[bleu_scores_reset == 0] = np.nan
+    bleu_baseline_scores[bleu_baseline_scores == 0] = np.nan
+    bleu_baseline_scores_reset[bleu_baseline_scores_reset == 0] = np.nan
 
     bleu_scores = np.nanmean(bleu_scores, axis=0)
     bleu_scores_reset = np.nanmean(bleu_scores_reset, axis=0)
+    bleu_baseline_scores = np.nanmean(bleu_baseline_scores, axis=0)
+    bleu_baseline_scores_reset = np.nanmean(bleu_baseline_scores_reset, axis=0)
 
     bleu_score_std = bleu_scores.std(axis=0)  # type: ignore
     bleu_score_reset_std = bleu_scores_reset.std(axis=0)  # type: ignore
+    bleu_baseline_score_std = bleu_baseline_scores.std(axis=0)  # type: ignore
+    bleu_baseline_score_reset_std = bleu_baseline_scores_reset.std(axis=0)  # type: ignore
 
     bleu_data = {"No Reset": bleu_scores, "Reset": bleu_scores_reset}
     plan_labels = [f"Plan {i}" for i in range(1, len(bleu_scores) + 1)]
@@ -1653,6 +1711,24 @@ def evaluate_consecutive_translations(
             yerr=bleu_score_std if experiment == "No Reset" else bleu_score_reset_std,
             fmt="none",
             ecolor="black",
+            capsize=5,
+            capthick=2,
+        )
+        # Add baseline as red error bar
+        ax.errorbar(
+            x + offset,
+            (
+                bleu_baseline_scores
+                if experiment == "No Reset"
+                else bleu_baseline_scores_reset
+            ),
+            yerr=(
+                bleu_baseline_score_std
+                if experiment == "No Reset"
+                else bleu_baseline_score_reset_std
+            ),
+            fmt="none",
+            ecolor="red",
             capsize=5,
             capthick=2,
         )
