@@ -1471,121 +1471,148 @@ def evaluate_consecutive_translations(
         consecutive plans to evaluate. If None, keeps going until the episode terminates.
         Defaults to None.
     """
-    env_done, imagined_done = None, None
-    env_reset_done, imagined_done_reset = None, None
-    prev_state, prev_action = None, None
-    prev_obs, info = env_no_reset.reset()()
-    prev_obs_reset, info_reset = env.reset()()
-    config = agent._config
-    no_convert = config.no_convert_list
-    ignore = config.ignore_list
-    plan_number = 1
-    bleu_scores: List[float] = []
-    bleu_scores_reset: List[float] = []
-    while not (env_done or imagined_done) and not (
-        env_reset_done or imagined_done_reset
-    ):
-        initial_state = get_posterior_state(
-            agent,
-            prev_obs,
-            no_convert,
-            ignore,
-            prev_state,
-            prev_action,
-        )
+    bleu_sample_scores: List[List[float]] = [[] for _ in range(100)]
+    blue_sample_reset_scores: List[List[float]] = [[] for _ in range(100)]
 
-        # To evaluate the performance impact of resetting the latent
-        # state after each plan.
-        initial_state_reset = get_posterior_state(
-            agent,
-            prev_obs_reset,
-            no_convert,
-            ignore,
-            None,
-            None,
-        )
+    for sample in range(100):
+        env_done, imagined_done = None, None
+        env_reset_done, imagined_done_reset = None, None
+        prev_state, prev_action = None, None
+        prev_obs, info = env_no_reset.reset()()
+        prev_obs_reset, info_reset = env.reset()()
+        config = agent._config
+        no_convert = config.no_convert_list
+        ignore = config.ignore_list
+        plan_number = 1
+        bleu_scores: List[float] = []
+        bleu_scores_reset: List[float] = []
+        while not (env_done or imagined_done) and not (
+            env_reset_done or imagined_done_reset
+        ):
+            initial_state = get_posterior_state(
+                agent,
+                prev_obs,
+                no_convert,
+                ignore,
+                prev_state,
+                prev_action,
+            )
 
-        imagined_states, imagined_actions, imagined_done = imagine_trajectory(
-            agent=agent,
-            initial_state=initial_state,
-            trajectory_length=plan_length,
-        )
-        translated_plan_str = generate_translation(agent, config, imagined_states)
+            # To evaluate the performance impact of resetting the latent
+            # state after each plan.
+            initial_state_reset = get_posterior_state(
+                agent,
+                prev_obs_reset,
+                no_convert,
+                ignore,
+                None,
+                None,
+            )
 
-        imagined_states_reset, imagined_actions_reset, imagined_done_reset = (
-            imagine_trajectory(
+            imagined_states, imagined_actions, imagined_done = imagine_trajectory(
                 agent=agent,
-                initial_state=initial_state_reset,
+                initial_state=initial_state,
                 trajectory_length=plan_length,
             )
-        )
+            translated_plan_str = generate_translation(agent, config, imagined_states)
 
-        translated_plan_str_reset = generate_translation(
-            agent, config, imagined_states_reset
-        )
+            imagined_states_reset, imagined_actions_reset, imagined_done_reset = (
+                imagine_trajectory(
+                    agent=agent,
+                    initial_state=initial_state_reset,
+                    trajectory_length=plan_length,
+                )
+            )
 
-        # Posterior states are in Tensor form, posteriors are in dictionary form.
-        posterior_states, observations, posteriors, env_done = rollout_trajectory(
-            agent=agent,
-            initial_state=initial_state,
-            trajectory_length=plan_length,
-            actions=imagined_actions,
-            env=env_no_reset,
-        )
+            translated_plan_str_reset = generate_translation(
+                agent, config, imagined_states_reset
+            )
 
-        posterior_states_reset, observations_reset, posteriors_reset, env_reset_done = (
-            rollout_trajectory(
+            # Posterior states are in Tensor form, posteriors are in dictionary form.
+            posterior_states, observations, posteriors, env_done = rollout_trajectory(
+                agent=agent,
+                initial_state=initial_state,
+                trajectory_length=plan_length,
+                actions=imagined_actions,
+                env=env_no_reset,
+            )
+
+            (
+                posterior_states_reset,
+                observations_reset,
+                posteriors_reset,
+                env_reset_done,
+            ) = rollout_trajectory(
                 agent=agent,
                 initial_state=initial_state_reset,
                 trajectory_length=plan_length,
                 actions=imagined_actions_reset,
                 env=env,
             )
-        )
 
-        # Filter out the None observations; obs are padded with Nones after the episode terminates
-        observations = [obs for obs in observations if obs["obs"] is not None]
-        observations_reset = [
-            obs for obs in observations_reset if obs["obs"] is not None
-        ]
+            # Filter out the None observations; obs are padded with Nones after the episode terminates
+            observations = [obs for obs in observations if obs["obs"] is not None]
+            observations_reset = [
+                obs for obs in observations_reset if obs["obs"] is not None
+            ]
 
-        narration_data = configure_narration_data(
-            config.narrator["narration_key"], observations, config.task
-        )
-        narration_data_reset = configure_narration_data(
-            config.narrator["narration_key"], observations_reset, config.task
-        )
+            narration_data = configure_narration_data(
+                config.narrator["narration_key"], observations, config.task
+            )
+            narration_data_reset = configure_narration_data(
+                config.narrator["narration_key"], observations_reset, config.task
+            )
 
-        true_narration = generate_narration(agent, config.task, narration_data)
-        true_narration_reset = generate_narration(
-            agent, config.task, narration_data_reset
-        )
+            true_narration = generate_narration(agent, config.task, narration_data)
+            true_narration_reset = generate_narration(
+                agent, config.task, narration_data_reset
+            )
 
-        bleu_score = float(
-            bleu_metric_from_strings(translated_plan_str, true_narration)
-        )
-        bleu_score_reset = float(
-            bleu_metric_from_strings(translated_plan_str_reset, true_narration_reset)
-        )
+            bleu_score = float(
+                bleu_metric_from_strings(translated_plan_str, true_narration)
+            )
+            bleu_score_reset = float(
+                bleu_metric_from_strings(
+                    translated_plan_str_reset, true_narration_reset
+                )
+            )
 
-        bleu_scores.append(bleu_score)
-        bleu_scores_reset.append(bleu_score_reset)
+            bleu_scores.append(bleu_score)
+            bleu_scores_reset.append(bleu_score_reset)
 
-        print(f"Plan {plan_number} Translated Plan No Reset: {translated_plan_str}")
-        print(f"Plan {plan_number} True Narration No Reset: {true_narration}")
-        print("-----------------------------------------------------------------------")
-        print(f"Plan {plan_number} Translated Plan Reset: {translated_plan_str_reset}")
-        print(f"Plan {plan_number} True Narration Reset: {true_narration_reset}")
+            print(f"Plan {plan_number} Translated Plan No Reset: {translated_plan_str}")
+            print(f"Plan {plan_number} True Narration No Reset: {true_narration}")
+            print(
+                "-----------------------------------------------------------------------"
+            )
+            print(
+                f"Plan {plan_number} Translated Plan Reset: {translated_plan_str_reset}"
+            )
+            print(f"Plan {plan_number} True Narration Reset: {true_narration_reset}")
 
-        prev_state = posteriors[-1]
-        prev_action = imagined_actions[-1]
-        prev_obs = observations[-1]["obs"]
-        prev_obs_reset = observations_reset[-1]["obs"]
-        plan_number += 1
-        if max_consecutive_plans is not None and plan_number > max_consecutive_plans:
-            break
+            prev_state = posteriors[-1]
+            prev_action = imagined_actions[-1]
+            prev_obs = observations[-1]["obs"]
+            prev_obs_reset = observations_reset[-1]["obs"]
+            plan_number += 1
+            if (
+                max_consecutive_plans is not None
+                and plan_number > max_consecutive_plans
+            ):
+                break
+
+            bleu_sample_scores[sample].append(bleu_score)
+            blue_sample_reset_scores[sample].append(bleu_score_reset)
 
     # From https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html#sphx-glr-gallery-lines-bars-and-markers-barchart-py
+    # Compute mean and standard deviation of the BLEU scores
+    bleu_scores = np.array(bleu_sample_scores)  # type: ignore
+    bleu_scores_reset = np.array(blue_sample_reset_scores)  # type: ignore
+    bleu_scores = bleu_scores.mean(axis=0)  # type: ignore
+    bleu_scores_reset = bleu_scores_reset.mean(axis=0)  # type: ignore
+    bleu_score_std = bleu_scores.std(axis=0)  # type: ignore
+    bleu_score_reset_std = bleu_scores_reset.std(axis=0)  # type: ignore
+
     bleu_data = {"No Reset": bleu_scores, "Reset": bleu_scores_reset}
     plan_labels = [f"Plan {i}" for i in range(1, len(bleu_scores) + 1)]
     x = np.arange(len(plan_labels))
@@ -1598,6 +1625,16 @@ def evaluate_consecutive_translations(
         offset = width * multiplier
         rects = ax.bar(x + offset, score, width, label=experiment)
         ax.bar_label(rects, padding=2, fmt="%.2f")
+        # Add error bars
+        ax.errorbar(
+            x + offset,
+            score,
+            yerr=bleu_score_std if experiment == "No Reset" else bleu_score_reset_std,
+            fmt="none",
+            ecolor="black",
+            capsize=5,
+            capthick=2,
+        )
         multiplier += 1
 
     ax.set_ylabel("BLEU Score [0-1]")
