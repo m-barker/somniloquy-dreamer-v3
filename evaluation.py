@@ -375,6 +375,50 @@ def configure_narration_data(
     return narration_data
 
 
+def generate_narration(
+    agent,
+    task_name: str,
+    narration_data: Union[Dict[str, List[str]], List[Dict[str, str]]],
+) -> str:
+    """Generates the ground truth narration from a sequence of environment
+    observations, pre-formatted to the correct information that the narrator
+    requires.
+
+    Args:
+        agent: Dreamer agent that contains the narrator component.
+        task_name (str): Name of the task to determine the format of the narration.
+        narration_data (Union[Dict[str, List[str]], List[Dict[str, str]]]):
+        Data to narrate.
+
+    Returns:
+        str: Ground truth narration.
+    """
+
+    if "ai2thor" in config.task:
+        actual_narration = agent._wm.narrator.narrate(
+            narration_data["agent_position"],  # type: ignore
+            {
+                "pickup": narration_data["pickup"],  # type: ignore
+                "drop": narration_data["drop"],  # type: ignore
+                "break": narration_data["break"],  # type: ignore
+                "open": narration_data["open"],  # type: ignore
+                "close": narration_data["close"],  # type: ignore
+                "slice": narration_data["slice"],  # type: ignore
+                "toggle_on": narration_data["toggle_on"],  # type: ignore
+                "toggle_off": narration_data["toggle_off"],  # type: ignore
+                "throw": narration_data["throw"],  # type: ignore
+                "put": narration_data["put"],  # type: ignore
+            },
+        )
+    elif type(narration_data) is dict:
+        if len(narration_data.keys()) == 1:  # type: ignore
+            narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
+        actual_narration = agent._wm.narrator.narrate(narration_data)
+    else:
+        raise ValueError(f"Unhandled narration data type: {type(narration_data)}")
+    return actual_narration
+
+
 def generate_translation(
     agent,
     config,
@@ -477,31 +521,9 @@ def evaluate_rollouts(
                 reconstructed_intent = generate_translation(
                     agent, config, posterior_states
                 )
-
-                if "ai2thor" in config.task:
-                    actual_narration = agent._wm.narrator.narrate(
-                        narration_data["agent_position"],  # type: ignore
-                        {
-                            "pickup": narration_data["pickup"],  # type: ignore
-                            "drop": narration_data["drop"],  # type: ignore
-                            "break": narration_data["break"],  # type: ignore
-                            "open": narration_data["open"],  # type: ignore
-                            "close": narration_data["close"],  # type: ignore
-                            "slice": narration_data["slice"],  # type: ignore
-                            "toggle_on": narration_data["toggle_on"],  # type: ignore
-                            "toggle_off": narration_data["toggle_off"],  # type: ignore
-                            "throw": narration_data["throw"],  # type: ignore
-                            "put": narration_data["put"],  # type: ignore
-                        },
-                    )
-                elif type(narration_data) is dict:
-                    if len(narration_data.keys()) == 1:  # type: ignore
-                        narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
-                    actual_narration = agent._wm.narrator.narrate(narration_data)
-                else:
-                    raise ValueError(
-                        f"Unhandled narration data type: {type(narration_data)}"
-                    )
+                actual_narration = generate_narration(
+                    agent, config.task, narration_data
+                )
                 try:
                     bleu_score = bleu_metric_from_strings(
                         planned_intent, actual_narration
@@ -1424,6 +1446,155 @@ def visual_plan_evaluation(
         prev_action = imagined_actions[-1]
         prev_obs = observations[-1]["obs"]
         plan_number += 1
+
+
+def evaluate_consecutive_translations(
+    agent,
+    env,
+    plan_length: int = 15,
+    output_path: str = "./consecutive_translation_evaluation.png",
+    max_consecutive_plans: Optional[int] = None,
+) -> None:
+    """Evaluates the performance of the translator across consecutive
+    plans, to see how translation performance is impacted by a degrading
+    latent-state representation, due to the RNN having to remember more and
+    more.
+
+    Args:
+        agent: Trained Dreamer Model.
+        env: Environment to plan and rollout in.
+        plan_length (int, optional): Number of steps in each plan. Defaults to 15.
+        output_path (str, optional): Path to save the output plot. Defaults to "./consecutive_translation_evaluation.png".
+        max_consecutive_plans (Optional[int], optional): Optional maximum number of
+        consecutive plans to evaluate. If None, keeps going until the episode terminates.
+        Defaults to None.
+    """
+    env_done, imagined_done = None, None
+    prev_state, prev_action = None, None
+    prev_obs, info = env.reset()()
+    config = agent._config
+    no_convert = config.no_convert_list
+    ignore = config.ignore_list
+    plan_number = 1
+    bleu_scores: List[float] = []
+    bleu_scores_reset: List[float] = []
+    while not (env_done or imagined_done):
+        initial_state = get_posterior_state(
+            agent,
+            prev_obs,
+            no_convert,
+            ignore,
+            prev_state,
+            prev_action,
+        )
+
+        # To evaluate the performance impact of resetting the latent
+        # state after each plan.
+        initial_state_reset = get_posterior_state(
+            agent,
+            prev_obs,
+            no_convert,
+            ignore,
+            None,
+            None,
+        )
+
+        imagined_states, imagined_actions, imagined_done = imagine_trajectory(
+            agent=agent,
+            initial_state=initial_state,
+            trajectory_length=plan_length,
+        )
+        translated_plan_str = generate_translation(agent, config, imagined_states)
+
+        imagined_states_reset, imagined_actions_reset, imagined_done_reset = (
+            imagine_trajectory(
+                agent=agent,
+                initial_state=initial_state_reset,
+                trajectory_length=plan_length,
+            )
+        )
+
+        translated_plan_str = generate_translation(agent, config, imagined_states)
+        translated_plan_str_reset = generate_translation(
+            agent, config, imagined_states_reset
+        )
+
+        # Posterior states are in Tensor form, posteriors are in dictionary form.
+        posterior_states, observations, posteriors, env_done = rollout_trajectory(
+            agent=agent,
+            initial_state=initial_state,
+            trajectory_length=plan_length,
+            actions=imagined_actions,
+            env=env,
+        )
+
+        posterior_states_reset, observations_reset, posteriors_reset, env_done_reset = (
+            rollout_trajectory(
+                agent=agent,
+                initial_state=initial_state_reset,
+                trajectory_length=plan_length,
+                actions=imagined_actions_reset,
+                env=env,
+            )
+        )
+
+        # Filter out the None observations; obs are padded with Nones after the episode terminates
+        observations = [obs for obs in observations if obs["obs"] is not None]
+        observations_reset = [
+            obs for obs in observations_reset if obs["obs"] is not None
+        ]
+
+        narration_data = configure_narration_data(
+            config.narrator["narration_key"], observations, config.task
+        )
+        narration_data_reset = configure_narration_data(
+            config.narrator["narration_key"], observations_reset, config.task
+        )
+
+        true_narration = generate_narration(agent, config.task, narration_data)
+        true_narration_reset = generate_narration(
+            agent, config.task, narration_data_reset
+        )
+
+        bleu_score = float(
+            bleu_metric_from_strings(translated_plan_str, true_narration)
+        )
+        bleu_score_reset = float(
+            bleu_metric_from_strings(translated_plan_str_reset, true_narration_reset)
+        )
+
+        bleu_scores.append(bleu_score)
+        bleu_scores_reset.append(bleu_score_reset)
+
+        prev_state = posteriors[-1]
+        prev_action = imagined_actions[-1]
+        prev_obs = observations[-1]["obs"]
+        plan_number += 1
+        if max_consecutive_plans is not None and plan_number > max_consecutive_plans:
+            break
+
+    # From https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html#sphx-glr-gallery-lines-bars-and-markers-barchart-py
+    bleu_data = {"No Reset": bleu_scores, "Reset": bleu_scores_reset}
+    plan_labels = [f"Plan {i}" for i in range(1, len(bleu_scores) + 1)]
+    x = np.arange(len(plan_labels))
+    width = 0.25  # the width of the bars
+    multiplier = 0
+
+    fig, ax = plt.subplots(layout="constrained")
+
+    for experiment, score in bleu_data.items():
+        offset = width * multiplier
+        rects = ax.bar(x + offset, score, width, label=experiment)
+        ax.bar_label(rects, padding=3)
+        multiplier += 1
+
+    ax.set_ylabel("BLEU Score [0-1]")
+    ax.set_title("Plan BLEU Scores with and without Resetting Latent Starting State")
+    ax.set_xticks(x + width, plan_labels)
+    ax.legend(loc="upper left", ncols=2)
+    ax.set_ylim(0, 250)
+
+    plt.savefig(output_path)
 
 
 if __name__ == "__main__":
