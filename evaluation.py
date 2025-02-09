@@ -1342,7 +1342,7 @@ def visual_plan_evaluation(
 ) -> None:
 
     env_done, imagined_done = None, None
-    prev_state, prev_action = None
+    prev_state, prev_action = None, None
     prev_obs, info = env.reset()()
     config = agent._config
     no_convert = config.no_convert_list
@@ -1362,10 +1362,8 @@ def visual_plan_evaluation(
             initial_state=initial_state,
             trajectory_length=plan_length,
         )
-        # (T, D)
-        imagined_state_tensor = torch.cat(imagined_states, dim=0)
-        # (1, T, D)
-        imagined_state_tensor = imagined_state_tensor.unsqueeze(0)
+        # (T, B, D) -> (B, T, D)
+        imagined_state_tensor = torch.cat(imagined_states, dim=0).permute(1, 0, 2)
         # our batch size is 1 so take first item in list
         translated_plan_tokens = agent._wm.heads["language"].generate(
             imagined_state_tensor,
@@ -1397,22 +1395,28 @@ def visual_plan_evaluation(
         # + 1 for starting state
         for plan_step in range(plan_length + 1):
             if plan_step == 0:
-                img = prev_obs["obs"]["image"]
+                img = prev_obs["image"]
             else:
-                img = observations[plan_step]["obs"]["image"]
-            resized_img = cv2.resize(img, (600, 600), interpolation=cv2.INTER_NEAREST)
+                if observations[plan_step - 1]["obs"] is None:
+                    break
+                img = observations[plan_step - 1]["obs"]["image"]
+            resized_img = cv2.resize(
+                cv2.cvtColor(img, cv2.COLOR_RGB2BGR),
+                (600, 600),
+                interpolation=cv2.INTER_NEAREST,
+            )
             cv2.imwrite(
                 os.path.join(
                     output_folder,
                     f"plan_step_{plan_number}_images",
-                    f"image_{plan_step + 1}",
+                    f"image_{plan_step + 1}.png",
                 ),
                 resized_img,
             )
 
-        prev_state = imagined_states[-1]
+        prev_state = posteriors[-1]
         prev_action = imagined_actions[-1]
-        prev_obs = observations[-1]
+        prev_obs = observations[-1]["obs"]
         plan_number += 1
 
 
