@@ -1591,7 +1591,7 @@ def evaluate_consecutive_translations(
     ax.set_ylabel("BLEU Score [0-1]")
     ax.set_title("Plan BLEU Scores with and without Resetting Latent Starting State")
     ax.set_xticks(x + width, plan_labels)
-    ax.legend(loc="upper left", ncols=2)
+    ax.legend(loc="upper left", ncol=2)
     ax.set_ylim(0, 250)
 
     plt.savefig(output_path)
