@@ -1451,6 +1451,7 @@ def visual_plan_evaluation(
 def evaluate_consecutive_translations(
     agent,
     env,
+    env_no_reset,
     plan_length: int = 15,
     output_path: str = "./consecutive_translation_evaluation.png",
     max_consecutive_plans: Optional[int] = None,
@@ -1463,6 +1464,7 @@ def evaluate_consecutive_translations(
     Args:
         agent: Trained Dreamer Model.
         env: Environment to plan and rollout in.
+        env_no_reset: Environment to rollout in without resetting the latent state.
         plan_length (int, optional): Number of steps in each plan. Defaults to 15.
         output_path (str, optional): Path to save the output plot. Defaults to "./consecutive_translation_evaluation.png".
         max_consecutive_plans (Optional[int], optional): Optional maximum number of
@@ -1471,7 +1473,8 @@ def evaluate_consecutive_translations(
     """
     env_done, imagined_done = None, None
     prev_state, prev_action = None, None
-    prev_obs, info = env.reset()()
+    prev_obs, info = env_no_reset.reset()()
+    prev_obs_reset, info_reset = env.reset()()
     config = agent._config
     no_convert = config.no_convert_list
     ignore = config.ignore_list
@@ -1492,7 +1495,7 @@ def evaluate_consecutive_translations(
         # state after each plan.
         initial_state_reset = get_posterior_state(
             agent,
-            prev_obs,
+            prev_obs_reset,
             no_convert,
             ignore,
             None,
@@ -1514,7 +1517,6 @@ def evaluate_consecutive_translations(
             )
         )
 
-        translated_plan_str = generate_translation(agent, config, imagined_states)
         translated_plan_str_reset = generate_translation(
             agent, config, imagined_states_reset
         )
@@ -1525,7 +1527,7 @@ def evaluate_consecutive_translations(
             initial_state=initial_state,
             trajectory_length=plan_length,
             actions=imagined_actions,
-            env=env,
+            env=env_no_reset,
         )
 
         posterior_states_reset, observations_reset, posteriors_reset, env_done_reset = (
@@ -1569,6 +1571,7 @@ def evaluate_consecutive_translations(
         prev_state = posteriors[-1]
         prev_action = imagined_actions[-1]
         prev_obs = observations[-1]["obs"]
+        prev_obs_reset = observations_reset[-1]["obs"]
         plan_number += 1
         if max_consecutive_plans is not None and plan_number > max_consecutive_plans:
             break
