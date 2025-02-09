@@ -1585,14 +1585,14 @@ def evaluate_consecutive_translations(
     for experiment, score in bleu_data.items():
         offset = width * multiplier
         rects = ax.bar(x + offset, score, width, label=experiment)
-        ax.bar_label(rects, padding=3)
+        ax.bar_label(rects, padding=3, fmt="%.2f")
         multiplier += 1
 
     ax.set_ylabel("BLEU Score [0-1]")
     ax.set_title("Plan BLEU Scores with and without Resetting Latent Starting State")
     ax.set_xticks(x + width, plan_labels)
     ax.legend(loc="upper left", ncol=2)
-    ax.set_ylim(0, 250)
+    ax.set_ylim(0, 1)
 
     plt.savefig(output_path)
 
