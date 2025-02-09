@@ -130,7 +130,7 @@ class MiniGrid:
             reward,
             obs["encoded_image"],
             is_last=self._done,
-            is_terminal=over or truncated,
+            is_terminal=over,
         )
 
     def reset(self, seed=None, **kwargs):
