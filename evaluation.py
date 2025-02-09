@@ -1456,7 +1456,7 @@ def evaluate_consecutive_translations(
     env_no_reset,
     plan_length: int = 15,
     output_path: str = "./consecutive_translation_evaluation.png",
-    max_consecutive_plans: Optional[int] = 5,
+    max_consecutive_plans: Optional[int] = None,
 ) -> None:
     """Evaluates the performance of the translator across consecutive
     plans, to see how translation performance is impacted by a degrading
@@ -1608,10 +1608,30 @@ def evaluate_consecutive_translations(
 
     # From https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html#sphx-glr-gallery-lines-bars-and-markers-barchart-py
     # Compute mean and standard deviation of the BLEU scores
-    bleu_scores = np.array(bleu_sample_scores)  # type: ignore
-    bleu_scores_reset = np.array(blue_sample_reset_scores)  # type: ignore
-    bleu_scores = bleu_scores.mean(axis=0)  # type: ignore
-    bleu_scores_reset = bleu_scores_reset.mean(axis=0)  # type: ignore
+
+    # From https://stackoverflow.com/questions/43146266/convert-list-of-lists-with-different-lengths-to-a-numpy-array
+    bleu_scores = np.zeros(
+        [len(bleu_sample_scores), len(max(bleu_sample_scores, key=lambda x: len(x)))]
+    )  # type: ignore
+    bleu_scores_reset = np.zeros(
+        [
+            len(blue_sample_reset_scores),
+            len(max(blue_sample_reset_scores, key=lambda x: len(x))),
+        ]
+    )  # type: ignore
+
+    for i, row in enumerate(bleu_sample_scores):
+        bleu_scores[i, : len(row)] = row  # type: ignore
+    for i, row in enumerate(blue_sample_reset_scores):
+        bleu_scores_reset[i, : len(row)] = row  # type: ignore
+
+    # Set 0s to NaNs
+    bleu_scores[bleu_scores == 0] = np.nan
+    bleu_scores_reset[bleu_scores_reset == 0] = np.nan
+
+    bleu_scores = np.nanmean(bleu_scores, axis=0)
+    bleu_scores_reset = np.nanmean(bleu_scores_reset, axis=0)
+
     bleu_score_std = bleu_scores.std(axis=0)  # type: ignore
     bleu_score_reset_std = bleu_scores_reset.std(axis=0)  # type: ignore
 
@@ -1626,7 +1646,6 @@ def evaluate_consecutive_translations(
     for experiment, score in bleu_data.items():
         offset = width * multiplier
         rects = ax.bar(x + offset, score, width, label=experiment)
-        ax.bar_label(rects, padding=2, fmt="%.2f")
         # Add error bars
         ax.errorbar(
             x + offset,
