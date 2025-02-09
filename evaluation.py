@@ -1472,6 +1472,7 @@ def evaluate_consecutive_translations(
         Defaults to None.
     """
     env_done, imagined_done = None, None
+    env_reset_done, imagined_done_reset = None, None
     prev_state, prev_action = None, None
     prev_obs, info = env_no_reset.reset()()
     prev_obs_reset, info_reset = env.reset()()
@@ -1481,7 +1482,9 @@ def evaluate_consecutive_translations(
     plan_number = 1
     bleu_scores: List[float] = []
     bleu_scores_reset: List[float] = []
-    while not (env_done or imagined_done):
+    while not (env_done or imagined_done) and not (
+        env_reset_done or imagined_done_reset
+    ):
         initial_state = get_posterior_state(
             agent,
             prev_obs,
@@ -1530,7 +1533,7 @@ def evaluate_consecutive_translations(
             env=env_no_reset,
         )
 
-        posterior_states_reset, observations_reset, posteriors_reset, env_done_reset = (
+        posterior_states_reset, observations_reset, posteriors_reset, env_reset_done = (
             rollout_trajectory(
                 agent=agent,
                 initial_state=initial_state_reset,
@@ -1568,6 +1571,12 @@ def evaluate_consecutive_translations(
         bleu_scores.append(bleu_score)
         bleu_scores_reset.append(bleu_score_reset)
 
+        print(f"Plan {plan_number} Translated Plan No Reset: {translated_plan_str}")
+        print(f"Plan {plan_number} True Narration No Reset: {true_narration}")
+        print("-----------------------------------------------------------------------")
+        print(f"Plan {plan_number} Translated Plan Reset: {translated_plan_str_reset}")
+        print(f"Plan {plan_number} True Narration Reset: {true_narration_reset}")
+
         prev_state = posteriors[-1]
         prev_action = imagined_actions[-1]
         prev_obs = observations[-1]["obs"]
@@ -1588,14 +1597,14 @@ def evaluate_consecutive_translations(
     for experiment, score in bleu_data.items():
         offset = width * multiplier
         rects = ax.bar(x + offset, score, width, label=experiment)
-        ax.bar_label(rects, padding=3, fmt="%.2f")
+        ax.bar_label(rects, padding=2, fmt="%.2f")
         multiplier += 1
 
     ax.set_ylabel("BLEU Score [0-1]")
     ax.set_title("Plan BLEU Scores with and without Resetting Latent Starting State")
     ax.set_xticks(x + width, plan_labels)
     ax.legend(loc="upper left", ncol=2)
-    ax.set_ylim(0, 1)
+    ax.set_ylim(0, 1.2)
 
     plt.savefig(output_path)
 
