@@ -1473,10 +1473,10 @@ def evaluate_consecutive_translations(
         consecutive plans to evaluate. If None, keeps going until the episode terminates.
         Defaults to None.
     """
-    bleu_sample_scores: List[List[float]] = [[] for _ in range(10)]
-    blue_sample_reset_scores: List[List[float]] = [[] for _ in range(10)]
+    bleu_sample_scores: List[List[float]] = [[] for _ in range(100)]
+    blue_sample_reset_scores: List[List[float]] = [[] for _ in range(100)]
 
-    for sample in tqdm(range(10)):
+    for sample in tqdm(range(100)):
         env_done, imagined_done = None, None
         env_reset_done, imagined_done_reset = None, None
         prev_state, prev_action = None, None
@@ -1638,7 +1638,7 @@ def evaluate_consecutive_translations(
     bleu_data = {"No Reset": bleu_scores, "Reset": bleu_scores_reset}
     plan_labels = [f"Plan {i}" for i in range(1, len(bleu_scores) + 1)]
     x = np.arange(len(plan_labels))
-    width = 0.25  # the width of the bars
+    width = 0.4  # the width of the bars
     multiplier = 0
 
     fig, ax = plt.subplots(layout="constrained")
