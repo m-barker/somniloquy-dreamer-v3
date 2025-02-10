@@ -101,6 +101,7 @@ class WorldModel(nn.Module):
                 d_model=feat_size,
                 target_vocab_size=len(self.vocab),
                 max_seq_length=config.dec_max_length,
+                embed_size=feat_size,
             )
             self._narration_max_enc_seq = config.enc_max_length
             self._narration_max_dec_seq = config.dec_max_length
