@@ -336,7 +336,7 @@ class CookEggEnv(AI2ThorBaseEnv):
         img_size: Tuple[int, int] = (64, 64),
         seed: int = 42,
         max_length: int = 5012,
-        headless: bool = True,
+        headless: bool = False,
     ) -> None:
         ACTION_NAMES = [
             "PickupObject",
@@ -689,7 +689,7 @@ class PickupObjects(AI2ThorBaseEnv):
         img_size: Tuple[int, int] = (64, 64),
         seed: int = 42,
         max_length: int = 10000,
-        headless: bool = True,
+        headless: bool = False,
     ) -> None:
         ACTION_NAMES = [
             "PickupObject",
