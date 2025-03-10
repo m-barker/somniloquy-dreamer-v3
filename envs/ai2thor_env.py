@@ -262,8 +262,8 @@ class AI2ThorBaseEnv(gym.Env):
         self.set_closest_objects(event.metadata)
 
         info = self.filter_metadata(event.metadata, object_interacted_with)
-        obs = self.process_obs(event, info)
         reward = self.compute_reward(event)
+        obs = self.process_obs(event, info)
         done = self.is_terminated(event)
 
         self._step += 1
@@ -692,6 +692,7 @@ class PickupObjects(AI2ThorBaseEnv):
         seed: int = 42,
         max_length: int = 10000,
         headless: bool = False,
+        reconstruct_obs = False,
     ) -> None:
         ACTION_NAMES = [
             "PickupObject",
@@ -731,6 +732,7 @@ class PickupObjects(AI2ThorBaseEnv):
 
         # Contains all unique objects in the scene
         self.unique_objects: Set[str] = set()
+        self.pickupable_unique_objects: Set[str] = set()
         # Contains all the unique objects picked up this episode
         self.picked_up_unique_objects: Set[str] = set()
 
@@ -738,13 +740,20 @@ class PickupObjects(AI2ThorBaseEnv):
         # once reset() is called.
         self.log_rewards: Dict[str, int] = {}
 
+        # Used to add the additional objects that can be picked up once they have
+        # been sliced or cracked. E.g., another unique object is "AppleSliced".
         self.sliced_mutables: List[str] = ["Apple", "Bread", "Lettuce", "Potato", "Tomato"]
         self.cracked_mutables: List[str] = ["Egg"]
+        
+        # If true, one-hot encoded object interactions are added to the observation.
+        # This is used to construct a translation baseline.
+        self.reconstruct_obs: bool = reconstruct_obs
+        
 
     def is_terminated(self, event) -> bool:
         # This environment terminates once every object
         # is picked up
-        return len(self.unique_objects) > 0 and len(self.unique_objects) == len(
+        return len(self.pickupable_unique_objects) > 0 and len(self.pickupable_unique_objects) == len(
             self.picked_up_unique_objects
         )
 
@@ -765,28 +774,53 @@ class PickupObjects(AI2ThorBaseEnv):
         self._step = 0
         self._done = False
         event = self.controller.reset()
+        
+        # Need to add objects that only appear once mutated
+        # e.g., AppleSliced
+        for object_meta in event.metadata["objects"]:
+            self.unique_objects.add(object_meta["objectType"])
+            if not object_meta["pickupable"]:
+                continue
+            self.pickupable_unique_objects.add(object_meta["objectType"])
+            if object_meta["objectType"] in self.sliced_mutables:
+                self.pickupable_unique_objects.add(f"{object_meta['objectType']}Sliced")
+                self.unique_objects.add(f"{object_meta['objectType']}Sliced")
+            if object_meta["objectType"] in self.cracked_mutables:
+                self.pickupable_unique_objects.add(f"{object_meta['objectType']}Cracked")
+                self.unique_objects.add(f"{object_meta['objectType']}Cracked")
+                
+        self.object_ids = None
+        if self.reconstruct_obs:
+            self.object_ids = {obj: i for i, obj in enumerate(self.unique_objects)}
+            self.observation_space.spaces.update(
+                {
+                    "agent_position": gym.spaces.Box(-np.inf, np.inf, (3,), dtype=np.float32),
+                    "pickup": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "drop": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "open": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "close": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "break": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "slice": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "toggle_on": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "toggle_off": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "throw": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "put_object": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                    "put_receptacle": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
+                }
+            )
+            
+
+        for obj_name in self.pickupable_unique_objects:
+            self.log_rewards[f'log_{obj_name}'] = 0
+
+        print(self.pickupable_unique_objects)
+        self.picked_up_unique_objects = set()
+        
         info = self.filter_metadata(event.metadata, is_first=True)
         self.update_agent_position(event.metadata)
         self.set_closest_objects(event.metadata)
         obs = self.process_obs(event, info, is_first=True)
 
-        # Need to add objects that only appear once mutated
-        # e.g., AppleSliced
-
-        for object_meta in event.metadata["objects"]:
-            self.unique_objects.add(object_meta["objectType"])
-            if object_meta["objectType"] in self.sliced_mutables:
-                self.unique_objects.add(f"{object_meta['objectType']}Sliced")
-            if object_meta["objectType"] in self.cracked_mutables:
-                self.unique_objects.add(f"{object_meta['objectType']}Cracked")
-        
-
-
-        for obj_name in self.unique_objects:
-            self.log_rewards[obj_name] = 0
-
-        print(self.unique_objects)
-        self.picked_up_unique_objects = set()
 
         return obs, info
 
@@ -799,7 +833,7 @@ class PickupObjects(AI2ThorBaseEnv):
             ):
                 reward += 1.0
                 self.picked_up_unique_objects.add(object_meta["objectType"])
-                self.log_rewards[object_meta["objectType"]] = 1
+                self.log_rewards[f"log_{object_meta['objectType']}"] = 1
 
         return reward
 
@@ -821,6 +855,65 @@ class PickupObjects(AI2ThorBaseEnv):
         else:
             image = rgb_image  # type: ignore
 
+        
+        if self.reconstruct_obs:
+            pickup_vec = np.zeros(len(self.unique_objects))
+            drop_vec = np.zeros(len(self.unique_objects))
+            open_vec = np.zeros(len(self.unique_objects))
+            close_vec = np.zeros(len(self.unique_objects))
+            break_vec = np.zeros(len(self.unique_objects))
+            slice_vec = np.zeros(len(self.unique_objects))
+            toggle_on_vec = np.zeros(len(self.unique_objects))
+            toggle_off_vec = np.zeros(len(self.unique_objects))
+            throw_vec = np.zeros(len(self.unique_objects))
+            put_object_vec = np.zeros(len(self.unique_objects))
+            put_receptacle_vec = np.zeros(len(self.unique_objects))
+            
+            if not is_first:
+                assert self.object_ids is not None
+                if filtered_meta["pickup"]:
+                    pickup_vec[self.object_ids[filtered_meta["pickup"]]] = 1
+                if filtered_meta["drop"]:
+                    drop_vec[self.object_ids[filtered_meta["drop"]]] = 1
+                if filtered_meta["open"]:
+                    open_vec[self.object_ids[filtered_meta["open"]]] = 1
+                if filtered_meta["close"]:
+                    close_vec[self.object_ids[filtered_meta["close"]]] = 1
+                if filtered_meta["break"]:
+                    break_vec[self.object_ids[filtered_meta["break"]]] = 1
+                if filtered_meta["slice"]:
+                    slice_vec[self.object_ids[filtered_meta["slice"]]] = 1
+                if filtered_meta["toggle_on"]:
+                    toggle_on_vec[self.object_ids[filtered_meta["toggle_on"]]] = 1
+                if filtered_meta["toggle_off"]:
+                    toggle_off_vec[self.object_ids[filtered_meta["toggle_off"]]] = 1
+                if filtered_meta["throw"]:
+                    throw_vec[self.object_ids[filtered_meta["throw"]]] = 1
+                if filtered_meta["put"][0]:
+                    put_object_vec[self.object_ids[filtered_meta["put"][0]]] = 1
+                if filtered_meta["put"][1]: 
+                    put_receptacle_vec[self.object_ids[filtered_meta["put"][1]]] = 1
+            
+            return {
+                "image": image,
+                "is_terminal": done,
+                "is_first": is_first,
+                "agent_position": self.agent_position,
+                **self.log_rewards,
+                **filtered_meta,
+                "pickup_vec": pickup_vec,
+                "drop_vec": drop_vec,
+                "open_vec": open_vec,
+                "close_vec": close_vec,
+                "break_vec": break_vec,
+                "slice_vec": slice_vec,
+                "toggle_on_vec": toggle_on_vec,
+                "toggle_off_vec": toggle_off_vec,
+                "throw_vec": throw_vec,
+                "put_object_vec": put_object_vec,
+                "put_receptacle_vec": put_receptacle_vec,
+            }
+        
         return {
             "image": image,
             "is_terminal": done,
@@ -933,6 +1026,27 @@ class PickupObjects(AI2ThorBaseEnv):
 
 
 if __name__ == "__main__":
-    env = PickupObjects()
+    env = PickupObjects(reconstruct_obs=True)
 
     obs, info = env.reset()
+    print(f"Observation: {obs}")
+    print(f"Info: {info}")
+    
+    done = False
+    while not done:
+        action = np.zeros(len(env.action_names))
+        # Take random action
+        action[np.random.randint(0, len(env.action_names))] = 1
+        obs, reward, done, info = env.step(action)
+        interesting = False
+        for k, v in obs.items():
+            # Check if any object interaction happened
+            if isinstance(v, np.ndarray) and k != "image":
+                if np.any(v):
+                    interesting = True
+        if interesting:
+            print(f"Observation: {obs}")
+            print(f"Reward: {reward}")
+            print(f"Info: {info}")
+            print(f"Done: {done}")
+            print("---------------------------------------------------")
