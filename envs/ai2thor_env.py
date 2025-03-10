@@ -790,8 +790,10 @@ class PickupObjects(AI2ThorBaseEnv):
                 self.unique_objects.add(f"{object_meta['objectType']}Cracked")
                 
         self.object_ids = None
+        self.inverse_object_ids = None
         if self.reconstruct_obs:
             self.object_ids = {obj: i for i, obj in enumerate(self.unique_objects)}
+            self.inverse_object_ids = {i: obj for i, obj in enumerate(self.unique_objects)}
             self.observation_space.spaces.update(
                 {
                     "agent_position": gym.spaces.Box(-np.inf, np.inf, (3,), dtype=np.float32),

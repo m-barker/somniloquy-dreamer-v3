@@ -40,6 +40,7 @@ from evaluation import (
     evaluate_language_to_action,
     crafter_narration_using_obs_reconstruction,
     minigrid_narration_using_obs_reconstruction,
+    ai2thor_narration_using_obs_reconstruction,
 )
 
 
@@ -567,6 +568,19 @@ def main(config):
                         .observation_space["occupancy_grid"]
                         .shape,
                     )
+                elif "ai2thor" in config.task:
+                    ai2thor_narration_using_obs_reconstruction(
+                        agent,
+                        eval_envs[0],
+                        rollout_samples["imagined_state_samples"],
+                        rollout_samples["imagined_action_samples"],
+                        rollout_samples["posterior_state_samples"],
+                        rollout_samples["observation_samples"],
+                        logger=logger,
+                        wandb_run=run,
+                        trajectory_length=config.eval_trajectory_length + 1,
+                    )
+                
 
             if config.enable_language_to_action:
                 evaluate_language_to_action(

@@ -19,6 +19,7 @@ from tools import (
     bleu_metric_from_strings,
 )
 from narration.crafter_narrator import CrafterNarrator
+from narration.ai2thor_narrator import CookEggNarrator
 from generate_plots import generate_image_reconstruction_plot
 
 
@@ -1372,6 +1373,175 @@ def crafter_narration_using_obs_reconstruction(
                 reconstructed_bleu_score = 0.0
             try:
                 imagined_narration = narrator.narrate(imagined_narration_obs)
+                imagined_bleu_score = float(
+                    bleu_metric_from_strings(imagined_narration, true_narration)
+                )
+                print(f"Imagined Narration: {imagined_narration}")
+
+            except Exception as e:
+                print(f"Failed to generated imagined narration: {e}")
+                imagined_bleu_score = 0.0
+
+            print(f"Reconstructed_BLEU_score: {reconstructed_bleu_score}")
+            print(f"Imagined BLEU score: {imagined_bleu_score}")
+
+            reconstructed_bleu_scores.append(reconstructed_bleu_score)
+            imagined_bleu_scores.append(imagined_bleu_score)
+    imagined_bleu_scores = np.array(imagined_bleu_scores)
+    reconstructed_bleu_scores = np.array(reconstructed_bleu_scores)
+    mean_imagined_score = imagined_bleu_scores.mean()
+    mean_posterior_score = reconstructed_bleu_scores.mean()
+    wandb_run.log(
+        {
+            "obs_decoding_mean_imagined_bleu_score": mean_imagined_score,
+            "obs_decoding_mean_posterior_bleu_score": mean_posterior_score,
+        },
+        step=logger.step,
+    )
+
+
+def ai2thor_narration_using_obs_reconstruction(
+    agent,
+    env,
+    imagined_state_samples: List[List[torch.Tensor]],
+    imagined_action_samples: List[List[torch.Tensor]],
+    posterior_state_samples: List[List[torch.Tensor]],
+    observation_samples: List[List[Dict[str, Any]]],
+    logger,
+    wandb_run,
+    trajectory_length: int = 16,
+) -> None:
+    """Decodes the latetnt state to compute reconstructed observations
+    that are then passed to the rule-based narrator directly, to evaluate
+    the extent to which we need the transformer component.
+
+    Args:
+        agent (_type_): Dreamer agent that contains the world model.
+        env (_type_): AI2THOR environment.
+        imagined_state_samples (List[List[torch.Tensor]]): (n_samples, n_trajectories * traj_length)
+        imagined_action_samples (List[List[torch.Tensor]]): (n_samples, n_trajectories * traj_length)
+        posterior_state_samples (List[List[torch.Tensor]]): (n_samples, n_trajectories * traj_length)
+        observation_samples (List[List[Dict[str, Any]]]): (n_samples, n_trajectories * traj_length)
+        trajectory_length (int, optional): Length of each trajectory. Defaults to 16.
+    """
+    reconstructed_bleu_scores = []
+    imagined_bleu_scores = []
+    reverse_object_id_dict = env.env.inverse_object_ids
+    interaction_vec_keys = [
+        "pickup_vec",
+        "drop_vec",
+        "open_vec",
+        "close_vec",
+        "break_vec",
+        "slice_vec",
+        "toggle_on_vec",
+        "toggle_off_vec",
+        "throw_vec",
+        "put_object_vec",
+        "put_receptacle_vec",
+    ]
+
+    for sample in range(len(imagined_state_samples)):
+        for index, trajectory in enumerate(
+            range(0, len(imagined_state_samples[sample]), trajectory_length)
+        ):
+            # Adjust the end index if the environment terminated early
+            end_index = trajectory + trajectory_length
+            observations = observation_samples[sample][trajectory:end_index]
+            for index, obs in enumerate(observations):
+                if obs["obs"] is None:
+                    end_index = index
+                    break
+            observations = observation_samples[sample][trajectory:end_index]
+            imagined_states = imagined_state_samples[sample][trajectory:end_index]
+            posterior_states = posterior_state_samples[sample][trajectory:end_index]
+            # Happens when environment (or imagined trajectory) terminates early.
+            if len(imagined_states) == 0 or len(observations) == 0:
+                continue
+
+            imagined_agent_positions: List[Tuple[float, float, float]] = []
+            imagined_agent_interactions: Dict[str, List[Any]] = {}
+
+            reconstructed_agent_positions: List[Tuple[float, float, float]] = []
+            reconstructed_agent_interactions: Dict[str, List[Any]] = {}
+
+            for state in range(len(imagined_states)):
+                imagined_obs = agent._wm.heads["decoder"](state)
+                reconstructed_obs = agent._wm.heads["decoder"](state)
+
+                imagined_agent_positions.append(imagined_obs["agent_position"])
+                reconstructed_agent_positions.append(
+                    reconstructed_obs["agent_position"]
+                )
+
+                for interaction_key in interaction_vec_keys:
+                    imagined_interaction = imagined_obs[interaction_key]
+                    reconstructed_interaction = reconstructed_obs[interaction_key]
+
+                    # From one-hot encoding to object name
+                    if torch.any(imagined_interaction != 0):
+                        object_name = reverse_object_id_dict[
+                            imagined_interaction.argmax().item()
+                        ]
+                        # Remove _vec
+                        imagined_agent_interactions[interaction_key[:-4]].append(
+                            object_name
+                        )
+                    else:
+                        imagined_agent_interactions[interaction_key[:-4]].append("")
+
+                    if torch.any(reconstructed_interaction != 0):
+                        object_name = reverse_object_id_dict[
+                            reconstructed_interaction.argmax().item()
+                        ]
+                        reconstructed_agent_interactions[interaction_key[:-4]].append(
+                            object_name
+                        )
+                    else:
+                        reconstructed_agent_interactions[interaction_key[:-4]].append(
+                            ""
+                        )
+
+                # Merge two put encodings into one as expected by the narrator
+                imagined_agent_interactions["put"].append(
+                    (
+                        imagined_agent_interactions["put_object"],
+                        imagined_agent_interactions["put_receptacle"],
+                    )
+                )
+
+                reconstructed_agent_interactions["put"].append(
+                    (
+                        reconstructed_agent_interactions["put_object"],
+                        reconstructed_agent_interactions["put_receptacle"],
+                    )
+                )
+
+                # Remove the individual put_object and put_receptacle keys
+                imagined_agent_interactions.pop("put_object")
+                imagined_agent_interactions.pop("put_receptacle")
+                reconstructed_agent_interactions.pop("put_object")
+                reconstructed_agent_interactions.pop("put_receptacle")
+
+            narrator = CookEggNarrator()
+            true_narration = narrator.narrate(narration_data)  # type: ignore
+            print(f"True Narration: {true_narration}")
+            try:
+                reconstructed_narration = narrator.narrate(
+                    reconstructed_agent_positions, reconstructed_agent_interactions
+                )
+                reconstructed_bleu_score = float(
+                    bleu_metric_from_strings(reconstructed_narration, true_narration)
+                )
+                print(f"Reconstruction Narration: {reconstructed_narration}")
+
+            except Exception as e:
+                print(f"Failed to generated reconstructed narration: {e}")
+                reconstructed_bleu_score = 0.0
+            try:
+                imagined_narration = narrator.narrate(
+                    reconstructed_agent_positions, reconstructed_agent_interactions
+                )
                 imagined_bleu_score = float(
                     bleu_metric_from_strings(imagined_narration, true_narration)
                 )
