@@ -267,7 +267,7 @@ class AI2ThorBaseEnv(gym.Env):
         done = self.is_terminated(event)
 
         self._step += 1
-        self._done = done or (self.max_length and self._step >= self.max_length)
+        self._done = bool(done or (self.max_length and self._step >= self.max_length))
 
         # print(event.metadata["errorMessage"])
         self.prev_meta = event.metadata
@@ -916,139 +916,6 @@ class PickupObjects(AI2ThorBaseEnv):
 
 
 if __name__ == "__main__":
-    env = CookEggEnv(headless=False)
-    import time
-    import json
-    from pprint import pprint
+    env = PickupObjects()
 
     obs, info = env.reset()
-
-    # with open("floor10-initial-conditions.json", "w") as dst:
-    #     json.dump(info, dst)
-
-    optimal_action_sequence = [
-        20,
-        15,
-        15,
-        15,
-        15,
-        15,
-        15,
-        15,
-        19,
-        9,
-        17,
-        0,
-        11,
-        22,
-        22,
-        0,
-        21,  # "visible_objects": visible_objects,
-        21,
-        19,
-        15,
-        15,
-        15,
-        15,
-        15,
-        15,
-        20,
-        21,
-        18,
-        9,
-        1,
-        10,
-        13,
-        14,
-        9,
-        0,
-    ]
-
-    for episode in range(1):
-        observations = []
-        step_count = 0
-        obs, info = env.reset()
-        # visible_objects = []
-        agent_positions = []
-        object_interactions = []
-        # visible_objects.append(obs["visible_objects"])
-        agent_positions.append(obs["agent_position"])
-        object_interactions.append(
-            {
-                "pickup": obs["pickup"],
-                "drop": obs["drop"],
-                "open": obs["open"],
-                "close": obs["close"],
-                "break": obs["break"],
-                "slice": obs["slice"],
-                "toggle_on": obs["toggle_on"],
-                "toggle_off": obs["toggle_off"],
-                "throw": obs["throw"],
-                "put": obs["put"],
-            }
-        )
-
-        observations.append(obs["image"])
-        done = False
-        # narrator = CookEggNarrator()
-        cum_reward = 0.0
-        while not done:
-            action = np.zeros(env.action_space.n)
-            # int_action = env.action_space.sample()
-            int_action = int(input(f"Please enter action, 0-{env.action_space.n - 1}"))
-            # int_action = optimal_action_sequence[step_count]
-            action[int_action] = 1
-            obs, reward, done, info = env.step(action)
-            # visible_objects.append(obs["visible_objects"])
-            # agent_positions.append(obs["agent_position"])
-            # object_interactions.append(
-            #     {
-            #         "pickup": obs["pickup"],
-            #         "drop": obs["drop"],
-            #         "open": obs["open"],
-            #         "close": obs["close"],
-            #         "break": obs["break"],
-            #         "slice": obs["slice"],
-            #         "toggle_on": obs["toggle_on"],
-            #         "toggle_off": obs["toggle_off"],
-            #         "throw": obs["throw"],
-            #         "put": obs["put"],
-            #     }
-            # )
-            # if len(visible_objects) == 16:
-            #     combined_dict = {}
-            #     for d in object_interactions:
-            #         for key, value in d.items():
-            #             combined_dict.setdefault(key, []).append(value)
-            #     print(narrator.narrate(visible_objects, agent_positions, combined_dict))
-            #     visible_objects = []
-            #     agent_positions = []
-            #     object_interactions = []
-
-            observations.append(obs["image"])
-            step_count += 1
-            cum_reward += 1
-            time.sleep(0.1)
-        # print(f"Episode {episode} reward: {cum_reward}")
-        # combined_dict = {}
-        # for d in object_interactions:        # combined_dict = {}
-        # for d in object_interactions:
-        #     for key, value in d.items():
-        #         combined_dict.setdefault(key, []).append(value)
-        # print(narrator.narrate(visible_objects, agent_positions, combined_dict))
-        #     for key, value in d.items():
-        #         combined_dict.setdefault(key, []).append(value)
-        # print(narrator.narrate(visible_objects, agent_positions, combined_dict))
-
-    # observations = np.array(observations)
-    # print(observations.shape)
-    # imgs = [Image.fromarray(img) for img in observations]
-    # frame_durations = [250] * (len(imgs) - 1)
-    # frame_durations.append(2500)
-    # imgs[0].save(
-    #     "optimal_policy.gif",
-    #     save_all=True,
-    #     append_images=imgs[1:],
-    #     duration=frame_durations,
-    #     loop=0,
-    # )
