@@ -633,6 +633,7 @@ class CookEggEnv(AI2ThorBaseEnv):
             receptacle = object_interacted_with
             # TODO: figure out which object was put in the receptacle
             object_placed = None
+            assert self.prev_meta is not None
             for obj_meta in self.prev_meta["objects"]:
                 if obj_meta["isPickedUp"]:
                     object_placed = obj_meta["objectType"]
@@ -643,6 +644,7 @@ class CookEggEnv(AI2ThorBaseEnv):
         elif action_name == "DropHandObject" or action_name == "ThrowObject":
             # TODO: figure out which object the agent was holding
             object_dropped = None
+            assert self.prev_meta is not None
             for obj_meta in self.prev_meta["objects"]:
                 if obj_meta["isPickedUp"]:
                     object_dropped = obj_meta["objectType"]
@@ -771,6 +773,7 @@ class PickupObjects(AI2ThorBaseEnv):
         for obj_name in self.unique_objects:
             self.log_rewards[obj_name] = 0
 
+        print(self.unique_objects)
         self.picked_up_unique_objects = set()
 
         return obs, info
@@ -873,6 +876,7 @@ class PickupObjects(AI2ThorBaseEnv):
             object_interaction_dict["pickup"] = object_interacted_with
         elif action_name == "PutObject":
             assert object_interacted_with is not None
+            assert self.prev_meta is not None
             receptacle = object_interacted_with
             object_placed = None
             for obj_meta in self.prev_meta["objects"]:
@@ -884,6 +888,7 @@ class PickupObjects(AI2ThorBaseEnv):
 
         elif action_name == "DropHandObject" or action_name == "ThrowObject":
             object_dropped = None
+            assert self.prev_meta is not None
             for obj_meta in self.prev_meta["objects"]:
                 if obj_meta["isPickedUp"]:
                     object_dropped = obj_meta["objectType"]
