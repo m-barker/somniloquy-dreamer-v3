@@ -738,6 +738,9 @@ class PickupObjects(AI2ThorBaseEnv):
         # once reset() is called.
         self.log_rewards: Dict[str, int] = {}
 
+        self.sliced_mutables: List[str] = ["Apple", "Bread", "Lettuce", "Potato", "Tomato"]
+        self.cracked_mutables: List[str] = ["Egg"]
+
     def is_terminated(self, event) -> bool:
         # This environment terminates once every object
         # is picked up
@@ -767,8 +770,17 @@ class PickupObjects(AI2ThorBaseEnv):
         self.set_closest_objects(event.metadata)
         obs = self.process_obs(event, info, is_first=True)
 
+        # Need to add objects that only appear once mutated
+        # e.g., AppleSliced
+
         for object_meta in event.metadata["objects"]:
             self.unique_objects.add(object_meta["objectType"])
+            if object_meta["objectType"] in self.sliced_mutables:
+                self.unique_objects.add(f"{object_meta['objectType']}Sliced")
+            if object_meta["objectType"] in self.cracked_mutables:
+                self.unique_objects.add(f"{object_meta['objectType']}Cracked")
+        
+
 
         for obj_name in self.unique_objects:
             self.log_rewards[obj_name] = 0
