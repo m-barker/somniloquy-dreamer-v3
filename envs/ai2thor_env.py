@@ -692,7 +692,7 @@ class PickupObjects(AI2ThorBaseEnv):
         seed: int = 42,
         max_length: int = 10000,
         headless: bool = False,
-        reconstruct_obs = False,
+        reconstruct_obs=False,
     ) -> None:
         ACTION_NAMES = [
             "PickupObject",
@@ -742,20 +742,25 @@ class PickupObjects(AI2ThorBaseEnv):
 
         # Used to add the additional objects that can be picked up once they have
         # been sliced or cracked. E.g., another unique object is "AppleSliced".
-        self.sliced_mutables: List[str] = ["Apple", "Bread", "Lettuce", "Potato", "Tomato"]
+        self.sliced_mutables: List[str] = [
+            "Apple",
+            "Bread",
+            "Lettuce",
+            "Potato",
+            "Tomato",
+        ]
         self.cracked_mutables: List[str] = ["Egg"]
-        
+
         # If true, one-hot encoded object interactions are added to the observation.
         # This is used to construct a translation baseline.
         self.reconstruct_obs: bool = reconstruct_obs
-        
 
     def is_terminated(self, event) -> bool:
         # This environment terminates once every object
         # is picked up
-        return len(self.pickupable_unique_objects) > 0 and len(self.pickupable_unique_objects) == len(
-            self.picked_up_unique_objects
-        )
+        return len(self.pickupable_unique_objects) > 0 and len(
+            self.pickupable_unique_objects
+        ) == len(self.picked_up_unique_objects)
 
     @property
     def observation_space(self) -> spaces.Dict:
@@ -767,6 +772,47 @@ class PickupObjects(AI2ThorBaseEnv):
                 for k in self.log_rewards.keys()
             }
         )
+        if self.reconstruct_obs:
+            my_spaces.update(
+                {
+                    "agent_position": gym.spaces.Box(
+                        -np.inf, np.inf, (3,), dtype=np.float32
+                    ),
+                    "pickup_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "drop_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "open_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "close_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "break_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "slice_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "toggle_on_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "toggle_off_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "throw_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "put_object_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                    "put_receptacle_vec": gym.spaces.Box(
+                        0, 1, (len(self.unique_objects),), dtype=np.uint8
+                    ),
+                }
+            )
         return spaces.Dict(my_spaces)
 
     def reset(self) -> Tuple[Dict, Dict]:
@@ -774,7 +820,7 @@ class PickupObjects(AI2ThorBaseEnv):
         self._step = 0
         self._done = False
         event = self.controller.reset()
-        
+
         # Need to add objects that only appear once mutated
         # e.g., AppleSliced
         for object_meta in event.metadata["objects"]:
@@ -786,43 +832,29 @@ class PickupObjects(AI2ThorBaseEnv):
                 self.pickupable_unique_objects.add(f"{object_meta['objectType']}Sliced")
                 self.unique_objects.add(f"{object_meta['objectType']}Sliced")
             if object_meta["objectType"] in self.cracked_mutables:
-                self.pickupable_unique_objects.add(f"{object_meta['objectType']}Cracked")
+                self.pickupable_unique_objects.add(
+                    f"{object_meta['objectType']}Cracked"
+                )
                 self.unique_objects.add(f"{object_meta['objectType']}Cracked")
-                
+
         self.object_ids = None
         self.inverse_object_ids = None
         if self.reconstruct_obs:
             self.object_ids = {obj: i for i, obj in enumerate(self.unique_objects)}
-            self.inverse_object_ids = {i: obj for i, obj in enumerate(self.unique_objects)}
-            self.observation_space.spaces.update(
-                {
-                    "agent_position": gym.spaces.Box(-np.inf, np.inf, (3,), dtype=np.float32),
-                    "pickup": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "drop": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "open": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "close": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "break": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "slice": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "toggle_on": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "toggle_off": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "throw": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "put_object": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                    "put_receptacle": gym.spaces.Box(0, 1, (len(self.unique_objects),), dtype=np.uint8),
-                }
-            )
-            
+            self.inverse_object_ids = {
+                i: obj for i, obj in enumerate(self.unique_objects)
+            }
 
         for obj_name in self.pickupable_unique_objects:
-            self.log_rewards[f'log_{obj_name}'] = 0
+            self.log_rewards[f"log_{obj_name}"] = 0
 
         print(self.pickupable_unique_objects)
         self.picked_up_unique_objects = set()
-        
+
         info = self.filter_metadata(event.metadata, is_first=True)
         self.update_agent_position(event.metadata)
         self.set_closest_objects(event.metadata)
         obs = self.process_obs(event, info, is_first=True)
-
 
         return obs, info
 
@@ -857,7 +889,6 @@ class PickupObjects(AI2ThorBaseEnv):
         else:
             image = rgb_image  # type: ignore
 
-        
         if self.reconstruct_obs:
             pickup_vec = np.zeros(len(self.unique_objects))
             drop_vec = np.zeros(len(self.unique_objects))
@@ -870,7 +901,7 @@ class PickupObjects(AI2ThorBaseEnv):
             throw_vec = np.zeros(len(self.unique_objects))
             put_object_vec = np.zeros(len(self.unique_objects))
             put_receptacle_vec = np.zeros(len(self.unique_objects))
-            
+
             if not is_first:
                 assert self.object_ids is not None
                 if filtered_meta["pickup"]:
@@ -893,9 +924,9 @@ class PickupObjects(AI2ThorBaseEnv):
                     throw_vec[self.object_ids[filtered_meta["throw"]]] = 1
                 if filtered_meta["put"][0]:
                     put_object_vec[self.object_ids[filtered_meta["put"][0]]] = 1
-                if filtered_meta["put"][1]: 
+                if filtered_meta["put"][1]:
                     put_receptacle_vec[self.object_ids[filtered_meta["put"][1]]] = 1
-            
+
             return {
                 "image": image,
                 "is_terminal": done,
@@ -915,7 +946,7 @@ class PickupObjects(AI2ThorBaseEnv):
                 "put_object_vec": put_object_vec,
                 "put_receptacle_vec": put_receptacle_vec,
             }
-        
+
         return {
             "image": image,
             "is_terminal": done,
@@ -1033,7 +1064,7 @@ if __name__ == "__main__":
     obs, info = env.reset()
     print(f"Observation: {obs}")
     print(f"Info: {info}")
-    
+
     done = False
     while not done:
         action = np.zeros(len(env.action_names))

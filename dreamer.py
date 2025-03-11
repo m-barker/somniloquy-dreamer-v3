@@ -310,7 +310,10 @@ def make_env(config, mode, id):
             )
         elif task == "pickup":
             env = ai2thor_env.PickupObjects(
-                img_size=config.size, seed=config.seed, max_length=config.time_limit
+                img_size=config.size,
+                seed=config.seed,
+                max_length=config.time_limit,
+                reconstruct_obs=config.evaluate_reconstruction_narration,
             )
         else:
             raise ValueError(f"Invalid ai2thor task: {task}")
@@ -580,7 +583,6 @@ def main(config):
                         wandb_run=run,
                         trajectory_length=config.eval_trajectory_length + 1,
                     )
-                
 
             if config.enable_language_to_action:
                 evaluate_language_to_action(

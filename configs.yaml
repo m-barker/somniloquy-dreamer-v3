@@ -637,7 +637,7 @@ ai2thor:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 25000
+  eval_every: 1000
   train_ratio: 64
   prefill: 2500
   encoder: { cnn_keys: "image", cnn_depth: 64 }
@@ -694,6 +694,80 @@ ai2thor:
   eval_trajectory_length: 15
   eval_n_consecutive_trajectories: 1000
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
+
+ai2thor-reconstruction-small:
+  steps: 1e8
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 25000
+  train_ratio: 64
+  prefill: 2500
+  encoder:
+    {
+      mlp_keys: "agent_position|pickup_vec|drop_vec|open_vec|close_vec|toggle_on_vec|toggle_off_vec|break_vec|throw_vec|slice_vec|put_object_vec|put_receptacle_vec",
+      cnn_keys: "image",
+      cnn_depth: 64,
+      mlp_layers: 3,
+      mlp_units: 512,
+    }
+  decoder:
+    {
+      mlp_keys: "agent_position|pickup_vec|drop_vec|open_vec|close_vec|toggle_on_vec|toggle_off_vec|break_vec|throw_vec|slice_vec|put_object_vec|put_receptacle_vec",
+      cnn_keys: "image",
+      cnn_depth: 64,
+      mlp_layers: 3,
+      mlp_units: 512,
+    }
+  dyn_hidden: 512
+  dyn_deter: 1024
+  units: 512
+  actor: { layers: 3, dist: "onehot", std: "none" }
+  value: { layers: 3 }
+  reward_head: { layers: 1 }
+  cont_head: { layers: 1 }
+  imag_gradient: "reinforce"
+  narrator:
+    {
+      narration_key:
+        [
+          "open",
+          "close",
+          "pickup",
+          "put",
+          "slice",
+          "throw",
+          "toggle_off",
+          "toggle_on",
+          "break",
+          "drop",
+        ],
+    }
+  no_convert_list:
+    [
+      "open",
+      "close",
+      "pickup",
+      "put",
+      "slice",
+      "throw",
+      "toggle_off",
+      "toggle_on",
+      "break",
+      "drop",
+    ]
+  enable_language: False
+  evaluate_reconstruction_narration: True
+  vocab_path: vocab/ai2thor.json
+  dec_max_length: 200
+  enc_max_length: 16
+  video_pred_log: true
+  task: "ai2thor_pickup"
+  time_limit: 1000
+  conditional_actions: false
+  n_eval_samples: 3
+  eval_trajectory_length: 15
+  eval_n_consecutive_trajectories: 1000
 
 debug:
   debug: True

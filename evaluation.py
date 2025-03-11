@@ -248,6 +248,7 @@ def sample_rollouts(
     observation_samples: List[List[Dict[str, Any]]] = []
     for sample in range(n_samples):
         obs, info = env.reset()()
+        print(obs)
         initial_state = get_posterior_state(agent, obs, no_convert, ignore)
         initial_obs = {
             "obs": obs,
@@ -382,6 +383,7 @@ def generate_narration(
     agent,
     task_name: str,
     narration_data: Union[Dict[str, List[str]], List[Dict[str, str]]],
+    narrator: Optional[Any] = None,
 ) -> str:
     """Generates the ground truth narration from a sequence of environment
     observations, pre-formatted to the correct information that the narrator
@@ -392,13 +394,17 @@ def generate_narration(
         task_name (str): Name of the task to determine the format of the narration.
         narration_data (Union[Dict[str, List[str]], List[Dict[str, str]]]):
         Data to narrate.
+        narrator (Optional): Narrator object to use for narration. Defaults to None.
 
     Returns:
         str: Ground truth narration.
     """
 
+    if narrator is None:
+        narrator = agent._wm.narrator
+
     if "ai2thor" in task_name:
-        actual_narration = agent._wm.narrator.narrate(
+        actual_narration = narrator.narrate(
             narration_data["agent_position"],  # type: ignore
             {
                 "pickup": narration_data["pickup"],  # type: ignore
@@ -416,7 +422,7 @@ def generate_narration(
     elif type(narration_data) is dict:
         if len(narration_data.keys()) == 1:  # type: ignore
             narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
-        actual_narration = agent._wm.narrator.narrate(narration_data)
+            actual_narration = narrator.narrate(narration_data)
     else:
         raise ValueError(f"Unhandled narration data type: {type(narration_data)}")
     return actual_narration
@@ -703,7 +709,7 @@ def get_posterior_state(
         "toggle_on",
         "break",
         "drop",
-        "agent_position",
+        # "agent_position",
     ]
     if no_convert is not None:
         no_convert_list = no_convert
@@ -1460,26 +1466,73 @@ def ai2thor_narration_using_obs_reconstruction(
                 continue
 
             imagined_agent_positions: List[Tuple[float, float, float]] = []
-            imagined_agent_interactions: Dict[str, List[Any]] = {}
+            imagined_agent_interactions: Dict[str, List[Any]] = {
+                "pickup": [],
+                "drop": [],
+                "open": [],
+                "close": [],
+                "break": [],
+                "slice": [],
+                "toggle_on": [],
+                "toggle_off": [],
+                "throw": [],
+                "put_object": [],
+                "put_receptacle": [],
+                "put": [],
+            }
+
+            reconstructed_agent_interactions: Dict[str, List[Any]] = {
+                "pickup": [],
+                "drop": [],
+                "open": [],
+                "close": [],
+                "break": [],
+                "slice": [],
+                "toggle_on": [],
+                "toggle_off": [],
+                "throw": [],
+                "put_object": [],
+                "put_receptacle": [],
+                "put": [],
+            }
 
             reconstructed_agent_positions: List[Tuple[float, float, float]] = []
-            reconstructed_agent_interactions: Dict[str, List[Any]] = {}
 
             for state in range(len(imagined_states)):
-                imagined_obs = agent._wm.heads["decoder"](state)
-                reconstructed_obs = agent._wm.heads["decoder"](state)
+                imagined_obs = agent._wm.heads["decoder"](imagined_states[state])
+                reconstructed_obs = agent._wm.heads["decoder"](posterior_states[state])
 
-                imagined_agent_positions.append(imagined_obs["agent_position"])
+                # Remove batch dim, convert to numpy, and then to tuple
+                imagined_agent_positions.append(
+                    tuple(imagined_obs["agent_position"].mode().cpu().squeeze().numpy())
+                )
                 reconstructed_agent_positions.append(
-                    reconstructed_obs["agent_position"]
+                    tuple(
+                        reconstructed_obs["agent_position"]
+                        .mode()
+                        .cpu()
+                        .squeeze()
+                        .numpy()
+                    )
                 )
 
                 for interaction_key in interaction_vec_keys:
-                    imagined_interaction = imagined_obs[interaction_key]
-                    reconstructed_interaction = reconstructed_obs[interaction_key]
+                    imagined_interaction = (
+                        imagined_obs[interaction_key].mode().round().clamp(0, 1)
+                    )
+                    reconstructed_interaction = (
+                        reconstructed_obs[interaction_key].mode().round().clamp(0, 1)
+                    )
+
+                    print(
+                        f"Imagined Interaction for key {interaction_key}: {imagined_interaction}"
+                    )
+                    print(
+                        f"Reconstructed Interaction for key {interaction_key}: {reconstructed_interaction}"
+                    )
 
                     # From one-hot encoding to object name
-                    if torch.any(imagined_interaction != 0):
+                    if torch.any(imagined_interaction):
                         object_name = reverse_object_id_dict[
                             imagined_interaction.argmax().item()
                         ]
@@ -1490,7 +1543,7 @@ def ai2thor_narration_using_obs_reconstruction(
                     else:
                         imagined_agent_interactions[interaction_key[:-4]].append("")
 
-                    if torch.any(reconstructed_interaction != 0):
+                    if torch.any(reconstructed_interaction):
                         object_name = reverse_object_id_dict[
                             reconstructed_interaction.argmax().item()
                         ]
@@ -1502,30 +1555,48 @@ def ai2thor_narration_using_obs_reconstruction(
                             ""
                         )
 
-                # Merge two put encodings into one as expected by the narrator
-                imagined_agent_interactions["put"].append(
-                    (
-                        imagined_agent_interactions["put_object"],
-                        imagined_agent_interactions["put_receptacle"],
+                try:
+                    # Merge two put encodings into one as expected by the narrator
+                    imagined_agent_interactions["put"].append(
+                        (
+                            imagined_agent_interactions["put_object"][state],
+                            imagined_agent_interactions["put_receptacle"][state],
+                        )
                     )
-                )
 
-                reconstructed_agent_interactions["put"].append(
-                    (
-                        reconstructed_agent_interactions["put_object"],
-                        reconstructed_agent_interactions["put_receptacle"],
+                    reconstructed_agent_interactions["put"].append(
+                        (
+                            reconstructed_agent_interactions["put_object"][state],
+                            reconstructed_agent_interactions["put_receptacle"][state],
+                        )
                     )
-                )
+                # No put_object or put_receptacle key
+                except IndexError:
+                    pass
 
-                # Remove the individual put_object and put_receptacle keys
-                imagined_agent_interactions.pop("put_object")
-                imagined_agent_interactions.pop("put_receptacle")
-                reconstructed_agent_interactions.pop("put_object")
-                reconstructed_agent_interactions.pop("put_receptacle")
+            # Remove the individual put_object and put_receptacle keys
+            imagined_agent_interactions.pop("put_object")
+            imagined_agent_interactions.pop("put_receptacle")
+            reconstructed_agent_interactions.pop("put_object")
+            reconstructed_agent_interactions.pop("put_receptacle")
 
             narrator = CookEggNarrator()
-            true_narration = narrator.narrate(narration_data)  # type: ignore
+            narration_data = configure_narration_data(
+                narration_keys=list(imagined_agent_interactions.keys())
+                + ["agent_position"],
+                observations=observations,
+                task_name="ai2thor",
+            )
+            true_narration = generate_narration(
+                agent, "ai2thor", narration_data, narrator
+            )
             print(f"True Narration: {true_narration}")
+            print(f"Reconstructed Agent Positions: {reconstructed_agent_positions}")
+            print(f"Imagined Agent Positions: {imagined_agent_positions}")
+            print(
+                f"Reconstructed Agent Interactions: {reconstructed_agent_interactions}"
+            )
+            print(f"Imagined Agent Interactions: {imagined_agent_interactions}")
             try:
                 reconstructed_narration = narrator.narrate(
                     reconstructed_agent_positions, reconstructed_agent_interactions
