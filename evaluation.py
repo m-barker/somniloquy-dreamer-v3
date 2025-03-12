@@ -648,8 +648,16 @@ def evaluate_rollouts(
     if config.enable_language:
         bleu_scores = np.array(bleu_scores)
         posterior_bleu_scores = np.array(posterior_bleu_scores)
-        mean_score = bleu_scores.mean()
-        mean_posterior_score = posterior_bleu_scores.mean()
+
+        if len(bleu_scores) == 0:
+            mean_score = 0.0
+        else:
+            mean_score = bleu_scores.mean()
+        if len(posterior_bleu_scores) == 0:
+            mean_posterior_score = 0.0
+        else:
+            mean_posterior_score = posterior_bleu_scores.mean()
+
         if wandb_run is not None:
             wandb_run.log(
                 {
@@ -1634,10 +1642,18 @@ def ai2thor_narration_using_obs_reconstruction(
 
             reconstructed_bleu_scores.append(reconstructed_bleu_score)
             imagined_bleu_scores.append(imagined_bleu_score)
+
     imagined_bleu_scores = np.array(imagined_bleu_scores)
     reconstructed_bleu_scores = np.array(reconstructed_bleu_scores)
-    mean_imagined_score = imagined_bleu_scores.mean()
-    mean_posterior_score = reconstructed_bleu_scores.mean()
+
+    if len(imagined_bleu_scores) == 0:
+        mean_imagined_score = 0.0
+    else:
+        mean_imagined_score = imagined_bleu_scores.mean()
+    if len(reconstructed_bleu_scores) == 0:
+        mean_posterior_score = 0.0
+    else:
+        mean_posterior_score = reconstructed_bleu_scores.mean()
     wandb_run.log(
         {
             "obs_decoding_mean_imagined_bleu_score": mean_imagined_score,
