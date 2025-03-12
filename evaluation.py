@@ -509,6 +509,10 @@ def evaluate_rollouts(
     posterior_bleu_scores = []
     sample_max_imagined_bleu_score = 0.0
     sample_max_reconstructed_bleu_score = 0.0
+    narrations_to_skip = [
+        "I will start near the fridge and I wont move much I won't interact with any objects",
+        "I will start near the stove and I wont move much I won't interact with any objects",
+    ]
     for sample in range(len(imagined_state_samples)):
         sample_imagined_bleu_scores = []
         sample_reconstructed_bleu_scores = []
@@ -550,6 +554,8 @@ def evaluate_rollouts(
                 actual_narration = generate_narration(
                     agent, config.task, narration_data
                 )
+                if actual_narration in narrations_to_skip:
+                    continue
                 try:
                     bleu_score = bleu_metric_from_strings(
                         planned_intent, actual_narration
@@ -1446,6 +1452,10 @@ def ai2thor_narration_using_obs_reconstruction(
         "put_object_vec",
         "put_receptacle_vec",
     ]
+    narrations_to_skip = [
+        "I will start near the fridge and I wont move much I won't interact with any objects",
+        "I will start near the stove and I wont move much I won't interact with any objects",
+    ]
 
     for sample in range(len(imagined_state_samples)):
         for index, trajectory in enumerate(
@@ -1590,13 +1600,10 @@ def ai2thor_narration_using_obs_reconstruction(
             true_narration = generate_narration(
                 agent, "ai2thor", narration_data, narrator
             )
+            if true_narration in narrations_to_skip:
+                continue
+
             print(f"True Narration: {true_narration}")
-            print(f"Reconstructed Agent Positions: {reconstructed_agent_positions}")
-            print(f"Imagined Agent Positions: {imagined_agent_positions}")
-            print(
-                f"Reconstructed Agent Interactions: {reconstructed_agent_interactions}"
-            )
-            print(f"Imagined Agent Interactions: {imagined_agent_interactions}")
             try:
                 reconstructed_narration = narrator.narrate(
                     reconstructed_agent_positions, reconstructed_agent_interactions
