@@ -512,6 +512,7 @@ def evaluate_rollouts(
     narrations_to_skip = [
         "I will start near the fridge and I wont move much I won't interact with any objects",
         "I will start near the stove and I wont move much I won't interact with any objects",
+        "I will start near the sink and I wont move much I won't interact with any objects",
     ]
     for sample in range(len(imagined_state_samples)):
         sample_imagined_bleu_scores = []
@@ -1463,6 +1464,7 @@ def ai2thor_narration_using_obs_reconstruction(
     narrations_to_skip = [
         "I will start near the fridge and I wont move much I won't interact with any objects",
         "I will start near the stove and I wont move much I won't interact with any objects",
+        "I will start near the sink and I wont move much I won't interact with any objects",
     ]
 
     for sample in range(len(imagined_state_samples)):
@@ -1541,14 +1543,6 @@ def ai2thor_narration_using_obs_reconstruction(
                     reconstructed_interaction = (
                         reconstructed_obs[interaction_key].mode().round().clamp(0, 1)
                     )
-
-                    print(
-                        f"Imagined Interaction for key {interaction_key}: {imagined_interaction}"
-                    )
-                    print(
-                        f"Reconstructed Interaction for key {interaction_key}: {reconstructed_interaction}"
-                    )
-
                     # From one-hot encoding to object name
                     if torch.any(imagined_interaction):
                         object_name = reverse_object_id_dict[
