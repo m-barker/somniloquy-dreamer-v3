@@ -516,6 +516,8 @@ def evaluate_rollouts(
         "I will start near the fridge and I wont move much I won't interact with any objects",
         "I will start near the stove and I wont move much I won't interact with any objects",
         "I will start near the sink and I wont move much I won't interact with any objects",
+        "I will start near the far window and I wont move much I won't interact with any objects",
+        "I will start near the near window and I wont move much I won't interact with any objects",
     ]
     for sample in range(len(imagined_state_samples)):
         sample_imagined_bleu_scores = []
@@ -1490,6 +1492,8 @@ def ai2thor_narration_using_obs_reconstruction(
         "I will start near the fridge and I wont move much I won't interact with any objects",
         "I will start near the stove and I wont move much I won't interact with any objects",
         "I will start near the sink and I wont move much I won't interact with any objects",
+        "I will start near the far window and I wont move much I won't interact with any objects",
+        "I will start near the near window and I wont move much I won't interact with any objects",
     ]
 
     for sample in range(len(imagined_state_samples)):
