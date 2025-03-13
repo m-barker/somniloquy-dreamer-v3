@@ -506,9 +506,12 @@ def evaluate_rollouts(
     """
     config = agent._config
     bleu_scores = []
+    filtered_bleu_scores = []
     posterior_bleu_scores = []
+    filtered_posterior_scores = []
     sample_max_imagined_bleu_score = 0.0
     sample_max_reconstructed_bleu_score = 0.0
+    sample_rewards = []
     narrations_to_skip = [
         "I will start near the fridge and I wont move much I won't interact with any objects",
         "I will start near the stove and I wont move much I won't interact with any objects",
@@ -517,6 +520,7 @@ def evaluate_rollouts(
     for sample in range(len(imagined_state_samples)):
         sample_imagined_bleu_scores = []
         sample_reconstructed_bleu_scores = []
+        sample_reward = 0.0
 
         # print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
         for index, trajectory in enumerate(
@@ -533,15 +537,13 @@ def evaluate_rollouts(
             imagined_states = imagined_state_samples[sample][trajectory:end_index]
             imagined_actions = imagined_action_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
-            # print(f"SAMPLED TRAJECTORY IMAGINED LENGTH: {len(imagined_states)}")
-            # print(f"POSTERIOR TRAJECTORY LENGTH: {len(posterior_states)}")
-            # print(f"OBSERVATION TRAJECTORY LENGTH: {len(observations)}")
 
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
             images = [obs["obs"]["image"] for obs in observations]
             rewards = [obs["reward"] for obs in observations]
+            sample_reward += sum(rewards)
 
             if config.enable_language:
                 narration_data = configure_narration_data(
@@ -555,8 +557,7 @@ def evaluate_rollouts(
                 actual_narration = generate_narration(
                     agent, config.task, narration_data
                 )
-                if actual_narration in narrations_to_skip:
-                    continue
+
                 try:
                     bleu_score = bleu_metric_from_strings(
                         planned_intent, actual_narration
@@ -565,8 +566,6 @@ def evaluate_rollouts(
                 except ValueError:
                     bleu_score = torch.tensor(0.0)
 
-                bleu_scores.append(float(bleu_score))  # convert tensor
-
                 try:
                     posterior_bleu_score = bleu_metric_from_strings(
                         reconstructed_intent, actual_narration
@@ -574,6 +573,11 @@ def evaluate_rollouts(
                 except ValueError:
                     posterior_bleu_score = torch.tensor(0.0)
 
+                if actual_narration not in narrations_to_skip:
+                    filtered_bleu_scores.append(float(bleu_score))
+                    filtered_posterior_scores.append(float(posterior_bleu_score))
+
+                bleu_scores.append(float(bleu_score))  # convert tensor
                 posterior_bleu_scores.append(float(posterior_bleu_score))
 
                 sample_imagined_bleu_scores.append(bleu_score)
@@ -646,18 +650,33 @@ def evaluate_rollouts(
                 )
             if sample_mean_imagined_bleu_score > sample_max_imagined_bleu_score:
                 sample_max_imagined_bleu_score = sample_mean_imagined_bleu_score
+
+        sample_rewards.append(sample_reward)
+
     if config.enable_language:
         bleu_scores = np.array(bleu_scores)
         posterior_bleu_scores = np.array(posterior_bleu_scores)
+        filtered_bleu_scores = np.array(filtered_bleu_scores)
+        filtered_posterior_scores = np.array(filtered_posterior_scores)
+        sample_rewards = np.array(sample_rewards)
+        mean_reward = sample_rewards.mean()
 
         if len(bleu_scores) == 0:
             mean_score = 0.0
         else:
             mean_score = bleu_scores.mean()
+        if len(filtered_bleu_scores) == 0:
+            filtered_mean_score = 0.0
+        else:
+            filtered_mean_score = filtered_bleu_scores.mean()
         if len(posterior_bleu_scores) == 0:
             mean_posterior_score = 0.0
         else:
             mean_posterior_score = posterior_bleu_scores.mean()
+        if len(filtered_posterior_scores) == 0:
+            filtered_mean_posterior_score = 0.0
+        else:
+            filtered_mean_posterior_score = filtered_posterior_scores.mean()
 
         if wandb_run is not None:
             wandb_run.log(
@@ -667,6 +686,9 @@ def evaluate_rollouts(
                     "max_imagined_bleu_score": sample_max_imagined_bleu_score,
                     "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
                     "reconstruction_plot": reconstruction_plot,
+                    "filtered_mean_imagined_bleu_score": filtered_mean_score,
+                    "filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
+                    "mean_reward": mean_reward,
                 },
                 step=logger.step,
             )
@@ -1446,7 +1468,10 @@ def ai2thor_narration_using_obs_reconstruction(
         trajectory_length (int, optional): Length of each trajectory. Defaults to 16.
     """
     reconstructed_bleu_scores = []
+    filtererd_reconstructed_bleu_scores = []
     imagined_bleu_scores = []
+    filtered_imagined_bleu_scores = []
+    sample_rewards = []
     reverse_object_id_dict = env.env.inverse_object_ids
     interaction_vec_keys = [
         "pickup_vec",
@@ -1468,6 +1493,7 @@ def ai2thor_narration_using_obs_reconstruction(
     ]
 
     for sample in range(len(imagined_state_samples)):
+        sample_reward = 0.0
         for index, trajectory in enumerate(
             range(0, len(imagined_state_samples[sample]), trajectory_length)
         ):
@@ -1481,6 +1507,8 @@ def ai2thor_narration_using_obs_reconstruction(
             observations = observation_samples[sample][trajectory:end_index]
             imagined_states = imagined_state_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
+            rewards = [obs["reward"] for obs in observations]
+            sample_reward += sum(rewards)
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
@@ -1602,10 +1630,7 @@ def ai2thor_narration_using_obs_reconstruction(
             true_narration = generate_narration(
                 agent, "ai2thor", narration_data, narrator
             )
-            if true_narration in narrations_to_skip:
-                continue
 
-            print(f"True Narration: {true_narration}")
             try:
                 reconstructed_narration = narrator.narrate(
                     reconstructed_agent_positions, reconstructed_agent_interactions
@@ -1613,7 +1638,6 @@ def ai2thor_narration_using_obs_reconstruction(
                 reconstructed_bleu_score = float(
                     bleu_metric_from_strings(reconstructed_narration, true_narration)
                 )
-                print(f"Reconstruction Narration: {reconstructed_narration}")
 
             except Exception as e:
                 print(f"Failed to generated reconstructed narration: {e}")
@@ -1625,17 +1649,35 @@ def ai2thor_narration_using_obs_reconstruction(
                 imagined_bleu_score = float(
                     bleu_metric_from_strings(imagined_narration, true_narration)
                 )
-                print(f"Imagined Narration: {imagined_narration}")
 
             except Exception as e:
                 print(f"Failed to generated imagined narration: {e}")
                 imagined_bleu_score = 0.0
 
-            print(f"Reconstructed_BLEU_score: {reconstructed_bleu_score}")
-            print(f"Imagined BLEU score: {imagined_bleu_score}")
+            if true_narration not in narrations_to_skip:
+                filtererd_reconstructed_bleu_scores.append(reconstructed_bleu_score)
+                filtered_imagined_bleu_scores.append(imagined_bleu_score)
 
             reconstructed_bleu_scores.append(reconstructed_bleu_score)
             imagined_bleu_scores.append(imagined_bleu_score)
+
+            print(
+                f"Sample {sample} steps {trajectory} : {end_index} Imagined Plan: {imagined_narration}"
+            )
+            print(
+                f"Sample {sample} steps {trajectory} : {end_index} Reconstructed Plan: {reconstructed_narration}"
+            )
+            print(
+                f"Sample {sample} steps {trajectory} : {end_index} Actual Narration: {true_narration}"
+            )
+            print(
+                f"Sample {sample} steps {trajectory} : {end_index} Imagined BLEU Score: {imagined_bleu_score}"
+            )
+            print(
+                f"Sample {sample} steps {trajectory} : {end_index} Reconstructed BLEU Score: {reconstructed_bleu_score}"
+            )
+
+        sample_rewards.append(sample_reward)
 
     imagined_bleu_scores = np.array(imagined_bleu_scores)
     reconstructed_bleu_scores = np.array(reconstructed_bleu_scores)
@@ -1648,10 +1690,26 @@ def ai2thor_narration_using_obs_reconstruction(
         mean_posterior_score = 0.0
     else:
         mean_posterior_score = reconstructed_bleu_scores.mean()
+    if len(filtererd_reconstructed_bleu_scores) == 0:
+        filtered_mean_posterior_score = 0.0
+    else:
+        filtered_mean_posterior_score = np.array(
+            filtererd_reconstructed_bleu_scores
+        ).mean()
+    if len(filtered_imagined_bleu_scores) == 0:
+        filtered_mean_imagined_score = 0.0
+    else:
+        filtered_mean_imagined_score = np.array(filtered_imagined_bleu_scores).mean()
+
+    mean_reward = np.array(sample_rewards).mean()
+
     wandb_run.log(
         {
             "obs_decoding_mean_imagined_bleu_score": mean_imagined_score,
             "obs_decoding_mean_posterior_bleu_score": mean_posterior_score,
+            "obs_decoding_mean_reward": mean_reward,
+            "obs_decoding_filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
+            "obs_decoding_filtered_mean_imagined_bleu_score": filtered_mean_imagined_score,
         },
         step=logger.step,
     )
