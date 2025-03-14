@@ -1648,7 +1648,7 @@ def ai2thor_narration_using_obs_reconstruction(
                 reconstructed_bleu_score = 0.0
             try:
                 imagined_narration = narrator.narrate(
-                    reconstructed_agent_positions, reconstructed_agent_interactions
+                    imagined_agent_positions, imagined_agent_interactions
                 )
                 imagined_bleu_score = float(
                     bleu_metric_from_strings(imagined_narration, true_narration)
