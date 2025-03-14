@@ -701,7 +701,8 @@ ai2thor-reconstruction:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 5000
+  eval_every: 10000
+  dataset_size: 50000
   train_ratio: 64
   prefill: 2500
   encoder:
@@ -768,7 +769,7 @@ ai2thor-reconstruction:
   conditional_actions: false
   n_eval_samples: 3
   eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 1000
+  eval_n_consecutive_trajectories: 60
 
 ai2thor-reconstruction-small:
   steps: 1e8
