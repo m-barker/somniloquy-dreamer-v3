@@ -637,7 +637,8 @@ ai2thor:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 1000
+  eval_every: 10000
+  dataset_size: 50000
   train_ratio: 64
   prefill: 2500
   encoder: { cnn_keys: "image", cnn_depth: 64 }
@@ -692,7 +693,7 @@ ai2thor:
   conditional_actions: false
   n_eval_samples: 3
   eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 1000
+  eval_n_consecutive_trajectories: 60
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
 ai2thor-reconstruction:
