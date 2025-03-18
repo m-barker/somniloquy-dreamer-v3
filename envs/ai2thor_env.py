@@ -49,6 +49,7 @@ class AI2ThorBaseEnv(gym.Env):
         self.closest_graspable_object = None
         self.closest_toggleable_object = None
         self.closest_openable_object = None
+        self.closest_closeable_object = None
         self.closest_sliceable_object = None
         self.closest_breakable_object = None
 
@@ -117,7 +118,7 @@ class AI2ThorBaseEnv(gym.Env):
                     nearest_openable_name = object_meta["objectId"]
                     nearest_openable_dist = object_meta["distance"]
             if object_meta["openable"] and object_meta["isOpen"]:
-                if object_meta["distance"] < nearest_openable_dist:
+                if object_meta["distance"] < nearest_closeable_dist:
                     nearest_closeable_name = object_meta["objectId"]
                     nearest_closeable_dist = object_meta["distance"]
             if object_meta["sliceable"] and not object_meta["isSliced"]:
@@ -167,6 +168,20 @@ class AI2ThorBaseEnv(gym.Env):
         """
         self._step = 0
         self._done = False
+        self.agent_position = 0.0, 0.0, 0.0
+
+        # Prev steps metadata. Used for computing which object was dropped, etc.
+        self.prev_meta = None
+
+        self.closest_object = None
+        self.closest_receptacle = None
+        self.closest_graspable_object = None
+        self.closest_toggleable_object = None
+        self.closest_openable_object = None
+        self.closest_closeable_object = None
+        self.closest_sliceable_object = None
+        self.closest_breakable_object = None
+
         event = self.controller.reset()
         info = self.filter_metadata(event.metadata, is_first=True)
         self.update_agent_position(event.metadata)
@@ -720,7 +735,6 @@ class PickupObjects(AI2ThorBaseEnv):
             "LookDown",
             "ThrowObject",
         ]
-        OBJECT_STR_TO_ID = {"": 0}
         super().__init__(
             action_names=ACTION_NAMES,
             scene="FloorPlan10",
@@ -819,6 +833,13 @@ class PickupObjects(AI2ThorBaseEnv):
 
         self._step = 0
         self._done = False
+        # Contains all unique objects in the scene
+        self.unique_objects = set()
+        self.pickupable_unique_objects = set()
+        # Contains all the unique objects picked up this episode
+        self.picked_up_unique_objects = set()
+
+        self.log_rewards = {}
         event = self.controller.reset()
 
         # Need to add objects that only appear once mutated
@@ -847,9 +868,6 @@ class PickupObjects(AI2ThorBaseEnv):
 
         for obj_name in self.pickupable_unique_objects:
             self.log_rewards[f"log_{obj_name}"] = 0
-
-        print(self.pickupable_unique_objects)
-        self.picked_up_unique_objects = set()
 
         info = self.filter_metadata(event.metadata, is_first=True)
         self.update_agent_position(event.metadata)
