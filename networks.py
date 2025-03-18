@@ -902,7 +902,7 @@ class TransformerEncoderDecoder(nn.Module):
             max_seq_length (int, optional): maximum sequence length in inpu/output. Defaults to 100.
             embedding_layer (bool, optional): whether to use an embedding layer to embed the src input
             to a vector space. Defaults to True.
-            embed_size (int, optional): size of the embedding layer. Defaults to 128.
+            embed_size (int, optional): size of the embedding layer. Defaults to 512.
             bos_token (int, optional): beginning of sentence token. Defaults to 1.
             eos_token (int, optional): end of sentence token. Defaults to 2.
             padding_token (int, optional): padding token. Defaults to 0.
