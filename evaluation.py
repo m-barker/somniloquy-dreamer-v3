@@ -634,6 +634,7 @@ def evaluate_rollouts(
                             title,
                         )
                     )
+                    plt.close()
 
         if config.enable_language:
             sample_mean_reconstructed_bleu_score = np.array(
