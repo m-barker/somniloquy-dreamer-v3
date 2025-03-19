@@ -325,6 +325,7 @@ def convert_images_to_numpy(images: List[torch.Tensor]) -> List[np.ndarray]:
     return [np.clip(255 * img, 0, 255).astype(np.uint8) for img in images]
 
 
+@torch.no_grad()
 def configure_narration_data(
     narration_keys: Union[str, List[str]],
     observations: List[Dict[str, Any]],
@@ -602,28 +603,29 @@ def evaluate_rollouts(
                     f"Sample {sample} steps {trajectory} : {end_index} Reconstructed BLEU Score: {posterior_bleu_score}"
                 )
 
-                imagined_images = [
-                    agent._wm.heads["decoder"](state)["image"].mode()
-                    for state in imagined_states
-                ]
-                reconstructed_images = [
-                    agent._wm.heads["decoder"](state)["image"].mode()
-                    for state in posterior_states
-                ]
-                imagined_images = convert_images_to_numpy(imagined_images)
-                reconstructed_images = convert_images_to_numpy(reconstructed_images)
-
-                reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
-                    [imagined_images, reconstructed_images, images],
-                    3,
-                    len(images),
-                    start_time=trajectory,
-                )
-                reconstruction_plot.suptitle(
-                    f"Sample {sample} steps {trajectory} : {end_index}"
-                )
-
                 if save_plots:
+                    imagined_images = [
+                        agent._wm.heads["decoder"](state)["image"].mode()
+                        for state in imagined_states
+                    ]
+                    reconstructed_images = [
+                        agent._wm.heads["decoder"](state)["image"].mode()
+                        for state in posterior_states
+                    ]
+                    imagined_images = convert_images_to_numpy(imagined_images)
+                    reconstructed_images = convert_images_to_numpy(reconstructed_images)
+
+                    reconstruction_plot: plt.Figure = (
+                        generate_image_reconstruction_plot(
+                            [imagined_images, reconstructed_images, images],
+                            3,
+                            len(images),
+                            start_time=trajectory,
+                        )
+                    )
+                    reconstruction_plot.suptitle(
+                        f"Sample {sample} steps {trajectory} : {end_index}"
+                    )
                     title = (
                         f"{logger.step}-sample-{sample}-steps-{trajectory}-{end_index}-reconstruction-plot"
                         if logger is not None
@@ -689,7 +691,6 @@ def evaluate_rollouts(
                     "mean_posterior_bleu_score": mean_posterior_score,
                     "max_imagined_bleu_score": sample_max_imagined_bleu_score,
                     "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
-                    "reconstruction_plot": reconstruction_plot,
                     "filtered_mean_imagined_bleu_score": filtered_mean_score,
                     "filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
                     "mean_reward": mean_reward,
