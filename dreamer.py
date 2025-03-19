@@ -513,37 +513,38 @@ def main(config):
             # at every __call__ to the agent.
             # eval_policy = functools.partial(agent, training=False)
             agent.training = False
-            tools.simulate(
-                agent,
-                eval_envs,
-                eval_eps,
-                config.evaldir,
-                logger,
-                is_eval=True,
-                episodes=config.eval_episode_num,
-                no_convert_obs=config.narrator["narration_key"],
-                no_save_obs=["rays"],
-                info_keys_to_store=config.narrator["narration_key"],
-                wandb_run=run,
-            )
-            rollout_samples = sample_rollouts(
-                agent,
-                eval_envs[0],
-                config.n_eval_samples,
-                trajectory_length=config.eval_trajectory_length,
-                n_consecutive_trajectories=config.eval_n_consecutive_trajectories,
-            )
-            evaluate_rollouts(
-                agent,
-                rollout_samples["imagined_state_samples"],
-                rollout_samples["imagined_action_samples"],
-                rollout_samples["posterior_state_samples"],
-                rollout_samples["observation_samples"],
-                logger=logger,
-                trajectory_length=config.eval_trajectory_length
-                + 1,  # +1 as we include starting states
-                wandb_run=run,
-            )
+            with torch.no_grad():
+                tools.simulate(
+                    agent,
+                    eval_envs,
+                    eval_eps,
+                    config.evaldir,
+                    logger,
+                    is_eval=True,
+                    episodes=config.eval_episode_num,
+                    no_convert_obs=config.narrator["narration_key"],
+                    no_save_obs=["rays"],
+                    info_keys_to_store=config.narrator["narration_key"],
+                    wandb_run=run,
+                )
+                rollout_samples = sample_rollouts(
+                    agent,
+                    eval_envs[0],
+                    config.n_eval_samples,
+                    trajectory_length=config.eval_trajectory_length,
+                    n_consecutive_trajectories=config.eval_n_consecutive_trajectories,
+                )
+                evaluate_rollouts(
+                    agent,
+                    rollout_samples["imagined_state_samples"],
+                    rollout_samples["imagined_action_samples"],
+                    rollout_samples["posterior_state_samples"],
+                    rollout_samples["observation_samples"],
+                    logger=logger,
+                    trajectory_length=config.eval_trajectory_length
+                    + 1,  # +1 as we include starting states
+                    wandb_run=run,
+                )
             if config.evaluate_reconstruction_narration:
                 if "crafter" in config.task:
                     crafter_narration_using_obs_reconstruction(

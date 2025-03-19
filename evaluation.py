@@ -248,7 +248,6 @@ def sample_rollouts(
     observation_samples: List[List[Dict[str, Any]]] = []
     for sample in range(n_samples):
         obs, info = env.reset()()
-        print(obs)
         initial_state = get_posterior_state(agent, obs, no_convert, ignore)
         initial_obs = {
             "obs": obs,
@@ -379,6 +378,7 @@ def configure_narration_data(
     return narration_data
 
 
+@torch.no_grad()
 def generate_narration(
     agent,
     task_name: str,
@@ -428,6 +428,7 @@ def generate_narration(
     return actual_narration
 
 
+@torch.no_grad()
 def generate_translation(
     agent,
     config,
