@@ -1107,7 +1107,7 @@ class TransformerEncoderDecoder(nn.Module):
             )
 
         # Convert the output tokens to a string
-        translated_input = translated_input.cpu().numpy()
+        translated_input = translated_input.detach().cpu().numpy()
         logits = torch.stack(logits)  # type: ignore
 
         # Anything after the first EOS token is ignored, so convert to padding

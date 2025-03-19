@@ -171,7 +171,7 @@ class WorldModel(nn.Module):
         padding_masks = []
         batch_size, batch_length = data_to_reshape.shape[:2]
         for batch in range(batch_size):
-            is_first_batch = is_first[batch].cpu().numpy()
+            is_first_batch = is_first[batch].detach().cpu().numpy()
             assert is_first_batch[0] == 1
             is_first_indices = np.where(is_first_batch == 1)[0]
             current_index = 0
@@ -261,7 +261,7 @@ class WorldModel(nn.Module):
         padding_masks = []
         starting_states: List[torch.Tensor] = []
         for batch in range(feat.shape[0]):
-            is_first_batch = data["is_first"][batch].cpu().numpy()
+            is_first_batch = data["is_first"][batch].detach().cpu().numpy()
             assert is_first_batch[0] == 1
             is_first_indices = np.where(is_first_batch == 1)[0]
             current_index = 0
