@@ -1013,7 +1013,7 @@ class TransformerEncoderDecoder(nn.Module):
         src_pad_mask = None
 
         if generate_mask:
-            tgt_pad_mask = tgt == self._padding_token
+            tgt_pad_mask = tgt == (self._padding_token or self._eos_token)
 
         if embed_tgt:
             tgt = self.tgt_embedding(tgt)
