@@ -828,12 +828,21 @@ class TokenEmbedding(nn.Module):
     """Class for converting token IDs of a fixed vocabulary size into vectors of a fixed length"""
 
     def __init__(self, vocab_size: int, emb_dim: int, padding_idx: int = 0):
+        """Confugures the nn.embedding layer. The embedding layer has a learnable
+        weight parameter of shape (vocab_size, emb_dim) whihc is initialised
+        as a standard normal distribution, with mean 0 and unit varience.
+        see https://pytorch.org/docs/stable/generated/torch.nn.Embedding.html
+
+        Args:
+            vocab_size (int): Number of unique tokens in the vocabulary.
+            emb_dim (int): Dimensionality of the embedding.
+            padding_idx (int, optional): Token ID to ignore when backpropping.
+            Defaults to 0.
+        """
         # The padding index prevents gradients from being propagated to the
         # embedding parameters for padding tokens
         super(TokenEmbedding, self).__init__()
         self.embedding = nn.Embedding(vocab_size, emb_dim, padding_idx=padding_idx)
-        self._embed_dim = emb_dim
-        self._vocab_size = vocab_size
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         return self.embedding(token_ids)
@@ -878,7 +887,6 @@ class TransformerEncoderDecoder(nn.Module):
         dropout: float = 0.2,
         activation: str = "relu",
         target_vocab_size: int = 22,
-        max_seq_length: int = 25,
         embedding_layer: bool = True,
         embed_size: int = 512,
         bos_token: int = 1,
@@ -891,27 +899,43 @@ class TransformerEncoderDecoder(nn.Module):
 
         Args:
             d_model (int): dimensionality of the embedded tokens.
-            n_head (int): Number of heads for the multi-head attention.
-            num_encoder_layers (int): number of stacked encoder layers to use.
-            num_decoder_layers (int): number of stacked decoder layers to use.
-            dim_feedforward (int, optional): dimension of the feed-forward network. Defaults to 512.
-            dropout (float, optional): frequency of dropout. Defaults to 0.1.
+
+            n_head (int): Number of heads for the multi-head attention. Defaults to 2.
+
+            num_encoder_layers (int): number of stacked encoder layers to use. Defaults to 2.
+
+            num_decoder_layers (int): number of stacked decoder layers to use. Defaults to 2.
+
+            dim_feedforward (int, optional): dimension of the feed-forward network. Defaults to 256.
+
+            dropout (float, optional): frequency of dropout. Defaults to 0.2.
+
             activation (str, optional): activation function of encoder/decoder intermediate layer.
                                         Defaults to "relu".
-            target_vocab_size (int, optional): number of tokens in the target vocabulary. Defaults to 100.
-            max_seq_length (int, optional): maximum sequence length in inpu/output. Defaults to 100.
+
+            target_vocab_size (int, optional): number of tokens in the target vocabulary. Defaults to 22.
+
             embedding_layer (bool, optional): whether to use an embedding layer to embed the src input
             to a vector space. Defaults to True.
+
             embed_size (int, optional): size of the embedding layer. Defaults to 512.
+
             bos_token (int, optional): beginning of sentence token. Defaults to 1.
+
             eos_token (int, optional): end of sentence token. Defaults to 2.
+
             padding_token (int, optional): padding token. Defaults to 0.
+
             src_token_embedding (bool, optional): whether to use a Token embedding layer for the source tokens. Defaults to False.
+
             src_vocab_size (Optional[int], optional): size of the source vocabulary. Defaults to None.
 
         """
         super(TransformerEncoderDecoder, self).__init__()
-        self._initial_embed = None
+        self._initial_embed: Optional[nn.Linear] = None
+
+        # Optionally add a fully connected layer to embed the encoder input
+        # to a vector of length embed_size.
         if embedding_layer:
             self._initial_embed = nn.Linear(d_model, embed_size)
             d_model = embed_size
@@ -925,13 +949,13 @@ class TransformerEncoderDecoder(nn.Module):
             activation=activation,
         )
         self._target_vocab_size = target_vocab_size
-        self._max_seq_length = max_seq_length
+
         self._bos_token = bos_token
         self._eos_token = eos_token
         self._padding_token = padding_token
-        self.final_layer = nn.Linear(d_model, target_vocab_size)
+        self.final_layer = nn.Linear(d_model, self._target_vocab_size)
         self.pe = PositionalEncoding(d_model, dropout)
-        self.tgt_embedding = TokenEmbedding(target_vocab_size, d_model)
+        self.tgt_embedding = TokenEmbedding(self._target_vocab_size, d_model)
         self.src_embedding = None
         if src_token_embedding:
             assert (
@@ -955,16 +979,23 @@ class TransformerEncoderDecoder(nn.Module):
 
         Args:
             src (torch.Tensor): shape (batch_size, seq_length, d)
+
             tgt (torch.Tensor): shape (batch_size, seq_length)
+
             generate_mask (bool, optional): Whether to generate padding and attention masks. Defaults to False.
+
             src_mask: (torch.Tensor, optional): Optional mask for src padding where 1 indicates padding tokens
-            to be ignored.
+            to be ignored. Defaults to None.
+
             tokens_to_append (torch.Tensor, optional): optional tokens to append to the end of the encoder
-            sequence.
+            sequence. Defaults to None.
+
             tokens_to_prepend (torch.Tensor, optional): optional tokens to pre-prend to the beginning of the
-            encoder sequence.
+            encoder sequence. Defaults to None.
+
             embed_tgt (bool, optional). Whether the provided tgt sequence needs to be embedded, i.e.,
             if integer tokens are given. Defalts to True.
+
             generate_src_mask (bool, optional). Whether to auto-generate padding masks for the src input.
             Defaults to False.
 

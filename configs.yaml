@@ -54,6 +54,7 @@ defaults:
   dyn_std_act: "sigmoid2"
   dyn_min_std: 0.1
   grad_heads: ["decoder", "reward", "cont"]
+  language_grads: true
   units: 512
   act: "SiLU"
   norm: True

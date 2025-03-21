@@ -224,6 +224,7 @@ class WorldModel(nn.Module):
         data: Dict[str, np.ndarray],
         post: Dict[str, torch.Tensor],
         narration_data: Union[np.ndarray, Dict],
+        language_grads: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Generates the language model predictions and ground truth narrations
 
@@ -236,6 +237,9 @@ class WorldModel(nn.Module):
             narration_data (np.ndarray): array containin data to be used
             as input to the narrator function to generate the ground-truth
             narrations.
+
+            language_grads (bool, optional): Whether to enable gradients from translation
+            loss to flow into the latent state representation learning. Defaults to True.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: predicted narrations tokens,
@@ -254,6 +258,7 @@ class WorldModel(nn.Module):
         ).reshape(-1, self._narration_max_dec_seq)
         # Shape (batch, seq_len, latent_state_dim)
         feat = self.dynamics.get_feat(post)
+        feat = feat if language_grads else feat.detach()
         # Shape (batch, seq_len, n_categories, n_classes)
         stoch_logits = post["logit"]
         logit_sequences = []
@@ -311,6 +316,7 @@ class WorldModel(nn.Module):
         starting_states = torch.stack(starting_states)
         # Shapes (batch, seq_len, dim)
         feat = torch.stack(latent_sequences)
+        feat = feat if language_grads else feat.detach()
         padding_masks = torch.stack(padding_masks)
         pred = self.heads["language"].forward(
             feat,
@@ -554,7 +560,12 @@ class WorldModel(nn.Module):
                             stoch_logits,
                             padding_masks,
                             starting_states,
-                        ) = self._get_language_prediction(data, post, narration_data)
+                        ) = self._get_language_prediction(
+                            data,
+                            post,
+                            narration_data,
+                            language_grads=self._config.language_grads,
+                        )
 
                         if self._config.enable_language_to_latent:
                             pred_tokens, true_tokens = self._language_to_latent_state(
