@@ -100,7 +100,6 @@ class WorldModel(nn.Module):
             self.heads["language"] = networks.TransformerEncoderDecoder(
                 d_model=feat_size,
                 target_vocab_size=len(self.vocab),
-                max_seq_length=config.dec_max_length,
             )
             self._narration_max_enc_seq = config.enc_max_length
             self._narration_max_dec_seq = config.dec_max_length
@@ -233,10 +232,11 @@ class WorldModel(nn.Module):
             is of shape (batch_size, batch_length, ...)
 
             post (dict[str, torch.Tensor]): posterior sample from the world model.
+            tensors are of shape (batch_size, batch_length, D).
 
             narration_data (np.ndarray): array containin data to be used
             as input to the narrator function to generate the ground-truth
-            narrations.
+            narrations. Array is of shape (batch_size, batch_length, ...)
 
             language_grads (bool, optional): Whether to enable gradients from translation
             loss to flow into the latent state representation learning. Defaults to True.

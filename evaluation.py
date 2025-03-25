@@ -423,7 +423,7 @@ def generate_narration(
     elif type(narration_data) is dict:
         if len(narration_data.keys()) == 1:  # type: ignore
             narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
-            actual_narration = narrator.narrate(narration_data)
+        actual_narration = narrator.narrate(narration_data)
     else:
         raise ValueError(f"Unhandled narration data type: {type(narration_data)}")
     return actual_narration

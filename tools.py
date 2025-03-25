@@ -383,7 +383,7 @@ def add_to_cache(
     """Adds a transition to the cache, in the episode
     specified by a given ID.
 
-    Args:action
+    Args:
         cache (dict): Dictionary of episodes.
         id (str): The unique ID of the episode to which the
         transition pertains.
@@ -982,12 +982,24 @@ def args_type(default):
 
 
 def static_scan(fn, inputs, start):
+    """PyTorch implementation of tf.scan.
+
+    Args:
+        fn (function): Function to apply at each sequence step.
+        inputs (_type_): tuple of tensors, each of shape (batch_length, batch_size, ...)
+        start (_type_): Starting value for the scan.
+
+    Returns:
+        _type_: _description_
+    """
     last = start
     indices = range(inputs[0].shape[0])
     flag = True
     for index in indices:
+        # Get the current sequence element of each input
         inp = lambda x: (_input[x] for _input in inputs)
         last = fn(last, *inp(index))
+        # Create output data structures the first time the function is applied.
         if flag:
             if type(last) == type({}):
                 outputs = {
