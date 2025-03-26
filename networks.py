@@ -984,7 +984,7 @@ class TransformerEncoderDecoder(nn.Module):
 
             generate_mask (bool, optional): Whether to generate padding and attention masks. Defaults to False.
 
-            src_mask: (torch.Tensor, optional): Optional mask for src padding where 1 indicates padding tokens
+            src_mask: (torch.Tensor, optional): Optional mask for src padding where True indicates padding tokens
             to be ignored. Defaults to None.
 
             tokens_to_append (torch.Tensor, optional): optional tokens to append to the end of the encoder

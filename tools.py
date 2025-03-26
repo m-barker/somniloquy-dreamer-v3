@@ -1695,3 +1695,84 @@ def conditional_policy(
     # print(f"Planning conditional policy... imagined sequence: {planned_intent}")
     # print(f"Number of actions: {len(planned_actions)}")
     return planned_actions, log_probs
+
+
+def batchify_translator_input(
+    latent_states: torch.Tensor,
+    is_first_indices: torch.Tensor,
+    seq_length: int,
+    device: torch.device,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Converts a latent state batch into a batch of latent state sequences that
+    can be used as input into the transltor Transformer. This function prevents
+    the crossing of episode boundaries across the latent sequences returned.
+
+    E.g., an is_first, for a given batch, of [1, 0, 0, 0, 1, 0, 0] would result
+    in two sequences:
+        [s0, s1, s2, s3, <PAD>, <PAD>, ...]
+        [s0, s1, s2, <PAD>, <PAD>, <PAD>, ...]
+
+    Args:
+        latent_states (torch.Tensor): Latent states of shape (batch_size, seq_len, latent_dim).
+
+        is_first_indices (torch.Tensor): Binary Tensor that indicates which sequence elements correspond
+        to the start of an episode. Shape (batch_size, seq_len).
+
+        seq_length (int): the sequence length of the latent state sequences to return. Each sequence
+        is padded to this length.
+
+        device (torch.device): Device to store the padding mask Tensor that is returned.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Latent state sequence of shape (new_batch, seq_length, latent_dim)
+        and padding mask of shape (new_batch, seq_length).
+    """
+
+    latent_sequences: List[torch.Tensor] = []
+    padding_masks: List[torch.Tensor] = []
+
+    batch_size, batch_length, _ = latent_states.shape
+
+    for batch_idx in range(batch_size):
+        is_first_batch = is_first_indices[batch_idx].detach().cpu().numpy()
+        assert (
+            is_first_batch[0] == 1
+        )  # First element in each batch should be start of episode.
+
+        batch_is_first_indices = np.where(is_first_batch == 1)[0]
+        start_timestep = 0
+        current_episode = 0
+        while start_timestep < batch_length:
+            # Check if we've crossed into another episode.
+            if start_timestep == batch_is_first_indices[current_episode + 1]:
+                current_episode += 1
+            # If there is another episode in the batch
+            if len(batch_is_first_indices) > current_episode + 1:
+                # Last timestep is either the next episode start
+                # or the end of the sequence length
+                end_timestep = min(
+                    batch_is_first_indices[current_episode + 1],
+                    start_timestep + seq_length,
+                )
+            # Otherwise, the last timestep is the end of the sequence length or
+            # the end of the batch.
+            else:
+                end_timestep = min(start_timestep + seq_length, batch_length)
+
+            latent_sequence = latent_states[batch_idx, start_timestep:end_timestep]
+
+            # Padding mask is True if the timestep is a padding timestep.
+            padding_mask = torch.zeros(seq_length, dtype=torch.bool).to(device)
+            if len(latent_sequence) < seq_length:
+                padding = torch.zeros(
+                    seq_length - len(latent_sequence), latent_sequence.shape[-1]
+                ).to(device)
+                padding_mask[len(latent_sequence) :] = True
+                latent_sequence = torch.cat([latent_sequence, padding], dim=0)
+
+            latent_sequences.append(latent_sequence)
+            padding_masks.append(padding_mask)
+
+            start_timestep = end_timestep
+
+    return torch.stack(latent_sequences), torch.stack(padding_masks)
