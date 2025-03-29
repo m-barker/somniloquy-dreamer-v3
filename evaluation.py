@@ -17,6 +17,7 @@ from tools import (
     convert,
     word_tokenise_text,
     bleu_metric_from_strings,
+    get_task_stopwords,
 )
 from narration.crafter_narrator import CrafterNarrator
 from narration.ai2thor_narrator import CookEggNarrator
@@ -521,6 +522,11 @@ def evaluate_rollouts(
         "I will start near the far window and I wont move much I won't interact with any objects",
         "I will start near the near window and I wont move much I won't interact with any objects",
     ]
+
+    stop_words: List[str] = []
+    if config.use_stopwords:
+        stop_words = get_task_stopwords(config.task)
+
     for sample in range(len(imagined_state_samples)):
         sample_imagined_bleu_scores = []
         sample_reconstructed_bleu_scores = []
@@ -564,7 +570,9 @@ def evaluate_rollouts(
 
                 try:
                     bleu_score = bleu_metric_from_strings(
-                        planned_intent, actual_narration
+                        planned_intent,
+                        actual_narration,
+                        words_to_remove=stop_words,
                     )
                 # When too few tokens generated
                 except ValueError:
@@ -572,7 +580,9 @@ def evaluate_rollouts(
 
                 try:
                     posterior_bleu_score = bleu_metric_from_strings(
-                        reconstructed_intent, actual_narration
+                        reconstructed_intent,
+                        actual_narration,
+                        words_to_remove=stop_words,
                     )
                 except ValueError:
                     posterior_bleu_score = torch.tensor(0.0)
