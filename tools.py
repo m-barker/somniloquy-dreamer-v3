@@ -1265,7 +1265,7 @@ def generate_batch_narrations(
     max_narration_length: int,
     vocab: dict,
     device: torch.device,
-    is_first: Union[np.ndarray, torch.Tensor],
+    is_first_indices: Union[np.ndarray, torch.Tensor],
     config,
 ) -> torch.Tensor:
     """Generates a batch of narrations given a batch
@@ -1286,125 +1286,110 @@ def generate_batch_narrations(
     """
 
     narration_batches: List[np.ndarray] = []
-    if type(is_first) == torch.Tensor:
-        is_first = is_first.detach().cpu().numpy()
-    if isinstance(observations, dict):
-        for batch_idx in range(list(observations.values())[0].shape[0]):
-            batch = {key: value[batch_idx] for key, value in observations.items()}
-            batch_length = list(batch.values())[0].shape[0]
-            narrations: List[str] = []
-            is_first_batch = is_first[batch_idx]
-            assert is_first_batch[0] == 1
-            is_first_indices = np.where(is_first_batch == 1)[0]
-            current_index = 0
-            current_is_first_index = 1
-            while current_index < batch_length:
-                if len(is_first_indices) > current_is_first_index:
-                    # Determine the next index to use
-                    end_index = min(
-                        current_index + obs_per_narration,
-                        batch_length,
-                        is_first_indices[current_is_first_index],
-                    )
-                    if "ai2thor" in config.task:
-                        narration = narrator.narrate(
-                            # batch["visible_objects"][current_index:end_index],
-                            batch["agent_position"][current_index:end_index],
-                            {
-                                "pickup": batch["pickup"][current_index:end_index],
-                                "drop": batch["drop"][current_index:end_index],
-                                "break": batch["break"][current_index:end_index],
-                                "open": batch["open"][current_index:end_index],
-                                "close": batch["close"][current_index:end_index],
-                                "slice": batch["slice"][current_index:end_index],
-                                "toggle_on": batch["toggle_on"][
-                                    current_index:end_index
-                                ],
-                                "toggle_off": batch["toggle_off"][
-                                    current_index:end_index
-                                ],
-                                "throw": batch["throw"][current_index:end_index],
-                                "put": batch["put"][current_index:end_index],
-                            },
-                        )
-                    else:
-                        narration = narrator.narrate(
-                            {
-                                key: value[current_index:end_index]
-                                for key, value in batch.items()
-                            }
-                        )
-                    narrations.append(narration)
-                    current_index = end_index
-                    if current_index == is_first_indices[current_is_first_index]:
-                        current_is_first_index += 1
-                else:
-                    end_index = min(current_index + obs_per_narration, batch_length)
-                    if "ai2thor" in config.task:
-                        narration = narrator.narrate(
-                            # batch["visible_objects"][current_index:end_index],
-                            batch["agent_position"][current_index:end_index],
-                            {
-                                "pickup": batch["pickup"][current_index:end_index],
-                                "drop": batch["drop"][current_index:end_index],
-                                "break": batch["break"][current_index:end_index],
-                                "open": batch["open"][current_index:end_index],
-                                "close": batch["close"][current_index:end_index],
-                                "slice": batch["slice"][current_index:end_index],
-                                "toggle_on": batch["toggle_on"][
-                                    current_index:end_index
-                                ],
-                                "toggle_off": batch["toggle_off"][
-                                    current_index:end_index
-                                ],
-                                "throw": batch["throw"][current_index:end_index],
-                                "put": batch["put"][current_index:end_index],
-                            },
-                        )
-                    else:
-                        narration = narrator.narrate(
-                            {
-                                key: value[current_index:end_index]
-                                for key, value in batch.items()
-                            }
-                        )
-                    narrations.append(narration)
-                    current_index = end_index
-            batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
-            narration_batches.append(batch_arr)
+    batch_size = config.batch_size
+    batch_length = config.batch_length
 
-    else:
-        for idx, batch in enumerate(observations):
-            narrations: List[str] = []  # type: ignore
-            is_first_batch = is_first[idx]
-            assert is_first_batch[0] == 1
-            is_first_indices = np.where(is_first_batch == 1)[0]
-            current_index = 0
-            current_is_first_index = 1
-            while current_index < len(batch):
-                if len(is_first_indices) > current_is_first_index:
-                    # Determine the next index to use
-                    end_index = min(
-                        current_index + obs_per_narration,
-                        len(batch),
-                        is_first_indices[current_is_first_index],
-                    )
-                    narration = narrator.narrate(batch[current_index:end_index])
-                    narrations.append(narration)
-                    current_index = end_index
-                    if current_index == is_first_indices[current_is_first_index]:
-                        current_is_first_index += 1
-                else:
-                    end_index = min(current_index + obs_per_narration, len(batch))
-                    narration = narrator.narrate(batch[current_index:end_index])
-                    narrations.append(narration)
-                    current_index = end_index
-            batch_arr = word_tokenise_text(narrations, vocab, max_narration_length)
-            narration_batches.append(batch_arr)
+    if type(is_first_indices) == torch.Tensor:
+        is_first_indices = is_first_indices.detach().cpu().numpy()
+
+    for batch_idx in range(batch_size):
+        batch_narrations: List[str] = []
+        is_first_batch = is_first_indices[batch_idx].detach().cpu().numpy()
+        assert (
+            is_first_batch[0] == 1
+        )  # First element in each batch should be start of episode.
+
+        batch_is_first_indices = np.where(is_first_batch == 1)[0]
+        start_timestep = 0
+        current_episode = 0
+        while start_timestep < batch_length:
+            # Check if we've crossed into another episode.
+            if start_timestep == batch_is_first_indices[current_episode + 1]:
+                current_episode += 1
+            # If there is another episode in the batch
+            if len(batch_is_first_indices) > current_episode + 1:
+                # Last timestep is either the next episode start
+                # or the end of the sequence length
+                end_timestep = min(
+                    batch_is_first_indices[current_episode + 1],
+                    start_timestep + obs_per_narration,
+                )
+            # Otherwise, the last timestep is the end of the sequence length or
+            # the end of the batch.
+            else:
+                end_timestep = min(start_timestep + obs_per_narration, batch_length)
+
+            narration = process_narration_batch(
+                observations,
+                narrator,
+                batch_idx,
+                start_timestep,
+                end_timestep,
+                config.task,
+                batch_size,
+                batch_length,
+            )
+            batch_narrations.append(narration)
+
+            start_timestep = end_timestep
+        narration_batches.append(
+            word_tokenise_text(batch_narrations, vocab, max_narration_length)
+        )
 
     narration_arr = np.concatenate(narration_batches, axis=0)
     narrations_tens = torch.tensor(narration_arr, dtype=torch.long).to(device)
     return narrations_tens
+
+
+def process_narration_batch(
+    observations: Union[np.ndarray, torch.Tensor, Dict],
+    narrator,
+    batch_idx: int,
+    start_timestep: int,
+    end_timestep: int,
+    task: str,
+    batch_size: int,
+    batch_length: int,
+) -> str:
+
+    if isinstance(observations, dict):
+        test_obs = observations[list(observations.keys())[0]]
+        assert test_obs.shape[0] == batch_size
+        assert test_obs.shape[1] == batch_length
+        batch = {key: value[batch_idx] for key, value in observations.items()}
+        if "ai2thor" in task:
+            narration = narrator.narrate(
+                batch["agent_position"][start_timestep:end_timestep],
+                {
+                    "pickup": batch["pickup"][start_timestep:end_timestep],
+                    "drop": batch["drop"][start_timestep:end_timestep],
+                    "break": batch["break"][start_timestep:end_timestep],
+                    "open": batch["open"][start_timestep:end_timestep],
+                    "close": batch["close"][start_timestep:end_timestep],
+                    "slice": batch["slice"][start_timestep:end_timestep],
+                    "toggle_on": batch["toggle_on"][start_timestep:end_timestep],
+                    "toggle_off": batch["toggle_off"][start_timestep:end_timestep],
+                    "throw": batch["throw"][start_timestep:end_timestep],
+                    "put": batch["put"][start_timestep:end_timestep],
+                },
+            )
+        else:
+            narration = narrator.narrate(
+                {
+                    key: value[start_timestep:end_timestep]
+                    for key, value in batch.items()
+                }
+            )
+    else:
+        assert isinstance(observations, np.ndarray) or isinstance(
+            observations, torch.Tensor
+        )
+        assert observations.shape[0] == batch_size
+        assert observations.shape[1] == batch_length
+        batch_arr = observations[batch_idx]
+        narration = narrator.narrate(batch_arr[start_timestep:end_timestep])
+
+    return narration
 
 
 def narration_loss(

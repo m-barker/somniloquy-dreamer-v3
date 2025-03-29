@@ -274,7 +274,7 @@ class WorldModel(nn.Module):
             src_mask=padding_masks,
         )
 
-        return pred, narrations  # type: ignore
+        return pred, narrations
 
     def _language_to_latent_state(
         self,
