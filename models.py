@@ -268,7 +268,7 @@ class WorldModel(nn.Module):
             latent_sequences if language_grads else latent_sequences.detach()
         )
         pred = self.heads["language"].forward(
-            feat,
+            latent_sequences,
             narrations[:, :-1],
             generate_mask=True,
             src_mask=padding_masks,

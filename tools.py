@@ -1294,7 +1294,7 @@ def generate_batch_narrations(
 
     for batch_idx in range(batch_size):
         batch_narrations: List[str] = []
-        is_first_batch = is_first_indices[batch_idx].detach().cpu().numpy()
+        is_first_batch = is_first_indices[batch_idx]
         assert (
             is_first_batch[0] == 1
         )  # First element in each batch should be start of episode.
@@ -1304,7 +1304,10 @@ def generate_batch_narrations(
         current_episode = 0
         while start_timestep < batch_length:
             # Check if we've crossed into another episode.
-            if start_timestep == batch_is_first_indices[current_episode + 1]:
+            if (
+                len(batch_is_first_indices) > current_episode + 1
+                and start_timestep == batch_is_first_indices[current_episode + 1]
+            ):
                 current_episode += 1
             # If there is another episode in the batch
             if len(batch_is_first_indices) > current_episode + 1:
@@ -1530,17 +1533,25 @@ def bleu_metric_from_strings(
     n_gram: int = 4,
     convert_case: bool = True,
     remove_punctuation: bool = True,
+    words_to_remove: Optional[List[str]] = None,
 ) -> torch.Tensor:
     """Computes the bleu score between a translated and true string.
 
     Args:
         predicted_sequence (str): Machine translated string
+
         true_sequence (str): Ground truth string
+
         n_gram (int, optional): Number of n-grams to consider. Defaults to 4.
+
         convert_case (bool, optional): Whether to convert the strings to lower
         case (BLEU is not case insensitive). Defaults to True.
+
         remove_punctuation (bool, optional): Whether to remove punctuation from
         the strings. Defaults to True.
+
+        words_to_remove (List[str], optional): List of words to remove from both
+        strings. Defaults to None.
 
     Returns:
         torch.Tensor: BLEU score in range [0,1]
@@ -1558,11 +1569,71 @@ def bleu_metric_from_strings(
             str.maketrans("", "", string.punctuation)
         )
 
+    if words_to_remove is not None:
+        for word in words_to_remove:
+            predicted_sequence = predicted_sequence.replace(word, "")
+            true_sequence = true_sequence.replace(word, "")
+
     metric = BLEUScore(n_gram=n_gram)
     metric.update(
         predicted_sequence, [true_sequence]
     )  # there can be multiple referenence strings
     return metric.compute()
+
+
+def get_task_stopwords(task_name: str) -> List[str]:
+    """Returns a list of stopwords for a given task.
+    I.e., the words that should be ignored by the BLEU score
+    calculation.
+
+    Args:
+        task_name (str): Name of the task.
+
+    Returns:
+        List[str]: List of stopwords.
+    """
+
+    stop_words: List[str] = []
+    if "ai2thor" in task_name:
+        stop_words.extend(
+            [
+                "i",
+                "will",
+                "start",
+                "near",
+                "the",
+                "and",
+            ]
+        )
+    elif "crafter" in task_name:
+        stop_words.extend(
+            [
+                "i",
+                "will",
+                "see",
+                "harvest",
+                "craft",
+                "and",
+                "health",
+                "hunger",
+                "thirst",
+            ]
+        )
+    elif "minigrid" in task_name:
+        stop_words.extend(
+            [
+                "i",
+                "will",
+                "and",
+                "start",
+                "in",
+                "the",
+                "then",
+            ]
+        )
+    else:
+        raise ValueError(f"Task {task_name} not supported.")
+    return stop_words
 
 
 @torch.no_grad()
@@ -1729,7 +1800,10 @@ def batchify_translator_input(
         current_episode = 0
         while start_timestep < batch_length:
             # Check if we've crossed into another episode.
-            if start_timestep == batch_is_first_indices[current_episode + 1]:
+            if (
+                len(batch_is_first_indices) > current_episode + 1
+                and start_timestep == batch_is_first_indices[current_episode + 1]
+            ):
                 current_episode += 1
             # If there is another episode in the batch
             if len(batch_is_first_indices) > current_episode + 1:
