@@ -22,7 +22,7 @@ defaults:
   eval_trajectory_length: 15
   eval_n_consecutive_trajectories: 10
   token_sampling_method: "nucleus"
-  use_stopwords: False
+  use_stopwords: false
   ignore_list: []
   no_convert_list: []
   narrator: { narration_key: [] }
