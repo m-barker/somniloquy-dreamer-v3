@@ -121,3 +121,17 @@ def test_task_stopwords():
     assert (
         stopwords == expected_stopwords
     ), f"Expected {expected_stopwords}, got {stopwords}"
+
+
+def test_every():
+    """Tests the original implemention of the Every function which
+    is used for defining how often to train the model.
+    """
+
+    every = tools.Every(5)
+    ratio = tools.Ratio(0.2)
+
+    for i in range(20):
+        if i % 5 == 0:
+            assert every(i) == True
+            assert ratio(i) == True

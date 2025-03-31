@@ -1056,6 +1056,26 @@ class Every:
         return count
 
 
+class Ratio:
+    def __init__(self, ratio):
+        """From https://github.com/danijar/elements"""
+        self._ratio = ratio
+        self._prev = None
+
+    def __call__(self, step):
+        step = int(step)
+        if self._ratio == 0:
+            return 0
+        if self._ratio < 0:
+            return 1
+        if self._prev is None:
+            self._prev = step
+            return 1
+        repeats = int((step - self._prev) * self._ratio)
+        self._prev += repeats / self._ratio
+        return repeats
+
+
 class Once:
     def __init__(self):
         self._once = True
