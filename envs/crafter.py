@@ -48,6 +48,36 @@ class Crafter:
         action_space.discrete = True
         return action_space
 
+    def _trim_occupancy_grid(self, occupancy_grid: np.ndarray) -> np.ndarray:
+        """Trims the occupancy grid given by the Crafter environment to be
+        what the agent sees, it its observation was an RGB image of the state.
+
+        Args:
+            occupancy_grid (np.ndarray): The occupancy grid given by the Crafter
+            environment of shape ()
+
+        Returns:
+            np.ndarray: Trimmed occupancy grid of shape (7, 9)
+        """
+
+        player_x, player_y = np.where(occupancy_grid == 13)
+        player_x, player_y = player_x[0], player_y[0]
+        local_grid = occupancy_grid[
+            player_x - 4 : player_x + 5, player_y - 3 : player_y + 4
+        ].T
+
+        # Add padding to the local grid if it is smaller than the expected shape
+        # Object ID zero corresponds to special "None" object.
+        if local_grid.shape != self._local_grid_shape:
+            pad_width = (
+                (0, self._local_grid_shape[0] - local_grid.shape[0]),
+                (0, self._local_grid_shape[1] - local_grid.shape[1]),
+            )
+            local_grid = np.pad(
+                local_grid, pad_width=pad_width, mode="constant", constant_values=0
+            )
+        return local_grid
+
     def step(self, action):
         image, reward, terminated, truncated, info = self._env.step(action)
         reward = np.float32(reward)
@@ -59,21 +89,7 @@ class Crafter:
         # Want to focus the occupancy grid to only be what the agent actually
         # sees
         occupancy_grid = info["semantic"]
-        player_x, player_y = np.where(occupancy_grid == 13)
-        player_x, player_y = player_x[0], player_y[0]
-        local_grid = occupancy_grid[
-            player_x - 4 : player_x + 5, player_y - 3 : player_y + 4
-        ].T
-
-        # Add padding to the local grid if it is smaller than the expected shape
-        if local_grid.shape != self._local_grid_shape:
-            pad_width = (
-                (0, self._local_grid_shape[0] - local_grid.shape[0]),
-                (0, self._local_grid_shape[1] - local_grid.shape[1]),
-            )
-            local_grid = np.pad(
-                local_grid, pad_width=pad_width, mode="constant", constant_values=0
-            )
+        local_grid = self._trim_occupancy_grid(occupancy_grid)
 
         info["semantic"] = local_grid
 
@@ -108,24 +124,9 @@ class Crafter:
         # Want to focus the occupancy grid to only be what the agent actually
         # sees
         occupancy_grid = info["semantic"]
-        player_x, player_y = np.where(occupancy_grid == 13)
-        player_x, player_y = player_x[0], player_y[0]
-        local_grid = occupancy_grid[
-            player_x - 4 : player_x + 5, player_y - 3 : player_y + 4
-        ].T
-
-        # Add padding to the local grid if it is smaller than the expected shape
-        if local_grid.shape != self._local_grid_shape:
-            pad_width = (
-                (0, self._local_grid_shape[0] - local_grid.shape[0]),
-                (0, self._local_grid_shape[1] - local_grid.shape[1]),
-            )
-            local_grid = np.pad(
-                local_grid, pad_width=pad_width, mode="constant", constant_values=0
-            )
+        local_grid = self._trim_occupancy_grid(occupancy_grid)
 
         info["semantic"] = local_grid
-
         # Max entity ID is 18
         flattened_grid = local_grid.flatten() / 18
         # For now, assuming there won't be more than 10 items or achievements

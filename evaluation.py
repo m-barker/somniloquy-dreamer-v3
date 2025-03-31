@@ -524,6 +524,8 @@ def evaluate_rollouts(
     stop_words: List[str] = []
     if config.use_stopwords:
         stop_words = get_task_stopwords(config.task)
+        stop_word_bleu_scores = []
+        stop_word_posterior_bleu_scores = []
 
     for sample in range(len(imagined_state_samples)):
         sample_imagined_bleu_scores = []
@@ -543,7 +545,6 @@ def evaluate_rollouts(
                     break
             observations = observation_samples[sample][trajectory:end_index]
             imagined_states = imagined_state_samples[sample][trajectory:end_index]
-            imagined_actions = imagined_action_samples[sample][trajectory:end_index]
             posterior_states = posterior_state_samples[sample][trajectory:end_index]
 
             # Happens when environment (or imagined trajectory) terminates early.
@@ -570,7 +571,6 @@ def evaluate_rollouts(
                     bleu_score = bleu_metric_from_strings(
                         planned_intent,
                         actual_narration,
-                        words_to_remove=stop_words,
                     )
                 # When too few tokens generated
                 except ValueError:
@@ -580,7 +580,6 @@ def evaluate_rollouts(
                     posterior_bleu_score = bleu_metric_from_strings(
                         reconstructed_intent,
                         actual_narration,
-                        words_to_remove=stop_words,
                     )
                 except ValueError:
                     posterior_bleu_score = torch.tensor(0.0)
@@ -591,6 +590,29 @@ def evaluate_rollouts(
 
                 bleu_scores.append(float(bleu_score))  # convert tensor
                 posterior_bleu_scores.append(float(posterior_bleu_score))
+
+                if config.use_stopwords:
+                    try:
+                        stop_word_bleu_score = bleu_metric_from_strings(
+                            planned_intent,
+                            actual_narration,
+                            words_to_remove=stop_words,
+                        )
+                    except ValueError:
+                        stop_word_bleu_score = torch.tensor(0.0)
+
+                    try:
+                        stop_word_posterior_bleu_score = bleu_metric_from_strings(
+                            reconstructed_intent,
+                            actual_narration,
+                            words_to_remove=stop_words,
+                        )
+                    except ValueError:
+                        stop_word_posterior_bleu_score = torch.tensor(0.0)
+                    stop_word_bleu_scores.append(float(stop_word_bleu_score))
+                    stop_word_posterior_bleu_scores.append(
+                        float(stop_word_posterior_bleu_score)
+                    )
 
                 sample_imagined_bleu_scores.append(bleu_score)
                 sample_reconstructed_bleu_scores.append(posterior_bleu_score)
@@ -692,19 +714,30 @@ def evaluate_rollouts(
         else:
             filtered_mean_posterior_score = filtered_posterior_scores.mean()
 
-        if wandb_run is not None:
-            wandb_run.log(
+        wandb_log = {
+            "mean_imagined_bleu_score": mean_score,
+            "mean_posterior_bleu_score": mean_posterior_score,
+            "max_imagined_bleu_score": sample_max_imagined_bleu_score,
+            "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
+            "filtered_mean_imagined_bleu_score": filtered_mean_score,
+            "filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
+            "mean_reward": mean_reward,
+        }
+
+        if config.use_stopwords:
+            stop_word_bleu_scores = np.array(stop_word_bleu_scores)
+            stop_word_posterior_bleu_scores = np.array(stop_word_posterior_bleu_scores)
+            mean_stop_word_score = stop_word_bleu_scores.mean()
+            mean_stop_word_posterior_score = stop_word_posterior_bleu_scores.mean()
+            wandb_log.update(
                 {
-                    "mean_imagined_bleu_score": mean_score,
-                    "mean_posterior_bleu_score": mean_posterior_score,
-                    "max_imagined_bleu_score": sample_max_imagined_bleu_score,
-                    "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
-                    "filtered_mean_imagined_bleu_score": filtered_mean_score,
-                    "filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
-                    "mean_reward": mean_reward,
-                },
-                step=logger.step,
+                    "mean_stop_word_bleu_score": mean_stop_word_score,
+                    "mean_stop_word_posterior_bleu_score": mean_stop_word_posterior_score,
+                }
             )
+
+        if wandb_run is not None:
+            wandb_run.log(wandb_log, step=logger.step)
 
 
 def get_action_translation_dict(n_actions: int):
