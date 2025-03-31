@@ -122,7 +122,9 @@ def rollout_trajectory(
     done = False
     env_done = False
     for t in range(trajectory_length):
-        if done or env_done:
+        action = actions[t]
+        # if actions are all zeros, imagined trajectory is done
+        if done or env_done or torch.all(action == 0):
             posterior_states.append(torch.zeros_like(latent_state))
             observations.append(
                 {
@@ -132,10 +134,6 @@ def rollout_trajectory(
                     "info": None,
                 }
             )
-            continue
-        action = actions[t]
-        # if actions are all zeros, imagined trajectory is done
-        if torch.all(action == 0):
             done = True
             continue
         obs, reward, env_done, info = env.step(

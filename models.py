@@ -454,14 +454,8 @@ class WorldModel(nn.Module):
         """
 
         narration_keys = []
-        # if self._config.enable_language:
         narration_keys = self._config.narrator["narration_key"]
 
-        if "ai2thor" in self._config.task:
-            narration_data = {}
-            for narration_key in narration_keys:
-                narration_data[narration_key] = data[narration_key]
-            return narration_data
         if type(narration_keys) is list:
             narration_data = {k: deepcopy(data[k]) for k in narration_keys}
         else:
@@ -587,6 +581,7 @@ class WorldModel(nn.Module):
         assert "is_terminal" in obs
         obs["cont"] = torch.Tensor(1.0 - obs["is_terminal"]).unsqueeze(-1)
         try:
+            # torch.Tensor is an alias of torch.FloatTensor
             obs = {
                 k: torch.Tensor(v).to(self._config.device)
                 for k, v in obs.items()

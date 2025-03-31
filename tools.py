@@ -1570,9 +1570,15 @@ def bleu_metric_from_strings(
         )
 
     if words_to_remove is not None:
-        for word in words_to_remove:
-            predicted_sequence = predicted_sequence.replace(word, "")
-            true_sequence = true_sequence.replace(word, "")
+        # From https://stackoverflow.com/questions/25346058/removing-list-of-words-from-a-string
+        tmp_pred = [
+            word for word in predicted_sequence.split() if word not in words_to_remove
+        ]
+        tmp_true = [
+            word for word in true_sequence.split() if word not in words_to_remove
+        ]
+        predicted_sequence = " ".join(tmp_pred)
+        true_sequence = " ".join(tmp_true)
 
     metric = BLEUScore(n_gram=n_gram)
     metric.update(
