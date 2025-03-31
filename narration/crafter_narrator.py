@@ -68,7 +68,7 @@ class CrafterNarrator:
         object_str = "I will see "
         for i, obj in enumerate(objects_seen):
 
-            if i == len(objects_seen) - 1:
+            if i == len(objects_seen) - 1 and len(objects_seen) > 1:
                 object_str += f"and {obj}."
             else:
                 object_str += f"{obj}, "
