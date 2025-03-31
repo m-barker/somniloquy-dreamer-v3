@@ -46,17 +46,17 @@ defaults:
   enable_language_to_action: false
   evaluate_reconstruction_narration: false
   action_prediction: false
-  dyn_hidden: 512
-  dyn_deter: 512
-  dyn_stoch: 32
-  dyn_discrete: 32
+  dyn_hidden: 1024
+  dyn_deter: 8192
+  dyn_stoch: 64
+  dyn_discrete: 64
   dyn_rec_depth: 1
   dyn_mean_act: "none"
   dyn_std_act: "sigmoid2"
   dyn_min_std: 0.1
   grad_heads: ["decoder", "reward", "cont"]
   language_grads: true
-  units: 512
+  units: 1024
   act: "SiLU"
   norm: True
   encoder:
@@ -65,10 +65,10 @@ defaults:
       cnn_keys: "image",
       act: "SiLU",
       norm: True,
-      cnn_depth: 32,
+      cnn_depth: 64,
       kernel_size: 4,
       minres: 4,
-      mlp_layers: 5,
+      mlp_layers: 3,
       mlp_units: 1024,
       symlog_inputs: True,
     }
@@ -78,10 +78,10 @@ defaults:
       cnn_keys: "image",
       act: "SiLU",
       norm: True,
-      cnn_depth: 32,
+      cnn_depth: 64,
       kernel_size: 4,
       minres: 4,
-      mlp_layers: 5,
+      mlp_layers: 3,
       mlp_units: 1024,
       cnn_sigmoid: False,
       image_dist: mse,
@@ -90,7 +90,7 @@ defaults:
     }
   actor:
     {
-      layers: 2,
+      layers: 3,
       dist: "normal",
       entropy: 3e-4,
       unimix_ratio: 0.01,
@@ -98,28 +98,28 @@ defaults:
       min_std: 0.1,
       max_std: 1.0,
       temp: 0.1,
-      lr: 3e-5,
+      lr: 4e-5,
       eps: 1e-5,
       grad_clip: 100.0,
       outscale: 0.01,
     }
   critic:
     {
-      layers: 2,
+      layers: 3,
       dist: "symlog_disc",
       slow_target: True,
       slow_target_update: 1,
       slow_target_fraction: 0.02,
-      lr: 3e-5,
+      lr: 4e-5,
       eps: 1e-5,
       grad_clip: 100.0,
       outscale: 0.0,
     }
   reward_head:
-    { layers: 2, dist: "symlog_disc", loss_scale: 1.0, outscale: 0.0 }
+    { layers: 1, dist: "symlog_disc", loss_scale: 1.0, outscale: 0.0 }
   action_prediction_head:
-    { layers: 2, dist: "onehot", loss_scale: 1.0, outscale: 0.0 }
-  cont_head: { layers: 2, loss_scale: 1.0, outscale: 1.0 }
+    { layers: 1, dist: "onehot", loss_scale: 1.0, outscale: 0.0 }
+  cont_head: { layers: 1, loss_scale: 1.0, outscale: 1.0 }
   dyn_scale: 1.0
   rep_scale: 0.1
   kl_free: 1.0
@@ -132,7 +132,7 @@ defaults:
   batch_length: 64
   # The ratio of model update steps: environment steps
   train_ratio: 512
-  pretrain: 100
+  pretrain: 0
   model_lr: 4e-5
   opt_eps: 1e-8
   grad_clip: 1000
@@ -189,15 +189,7 @@ crafter:
   video_pred_log: true
   log_every: 500
   no_convert_list: ["semantic", "inventory", "achievements"]
-  encoder: { cnn_keys: "image", cnn_depth: 64 }
-  decoder: { cnn_keys: "image", cnn_depth: 64 }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
 
 crafter-language:
@@ -216,15 +208,7 @@ crafter-language:
   vocab_path: vocab/crafter.json
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
-  encoder: { cnn_keys: "image", cnn_depth: 64 }
-  decoder: { cnn_keys: "image", cnn_depth: 64 }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
 
 crafter-language-small:
@@ -267,28 +251,13 @@ crafter-reconstruction:
   log_every: 500
   no_convert_list: ["semantic", "inventory", "achievements"]
   encoder:
-    {
-      mlp_keys: "flattened_grid|flattened_inventory|flattened_achievements",
-      cnn_keys: "image",
-      cnn_depth: 64,
-      mlp_layers: 3,
-      mlp_units: 1024,
-    }
+    { mlp_keys: "flattened_grid|flattened_inventory|flattened_achievements" }
   decoder:
     {
       mlp_keys: "flattened_grid|flattened_inventory|flattened_achievements",
       cnn_keys: "image",
-      cnn_depth: 64,
-      mlp_layers: 3,
-      mlp_units: 1024,
     }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
 
 crafter-reconstruction-small:
@@ -397,15 +366,7 @@ minigrid:
   eval_n_consecutive_trajectories: 2
   eval_every: 1000
   log_every: 500
-  encoder: { cnn_keys: "image", cnn_depth: 64 }
-  decoder: { cnn_keys: "image", cnn_depth: 64 }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   actions: needed
   video_pred_log: true
@@ -420,16 +381,8 @@ minigrid-language:
   eval_n_consecutive_trajectories: 2
   eval_every: 1000
   log_every: 500
-  encoder: { cnn_keys: "image", cnn_depth: 64 }
-  decoder: { cnn_keys: "image", cnn_depth: 64 }
   narrator: { narration_key: ["occupancy_grid"] }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   actions: needed
   enable_language: true
@@ -447,29 +400,9 @@ minigrid-reconstruction:
   eval_episode_num: 1
   eval_every: 1000
   log_every: 500
-  encoder:
-    {
-      mlp_keys: "flattened_occupancy_grid",
-      cnn_keys: "image",
-      cnn_depth: 64,
-      mlp_layers: 3,
-      mlp_units: 1024,
-    }
-  decoder:
-    {
-      mlp_keys: "flattened_occupancy_grid",
-      cnn_keys: "image",
-      cnn_depth: 64,
-      mlp_layers: 3,
-      mlp_units: 1024,
-    }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  encoder: { mlp_keys: "flattened_occupancy_grid" }
+  decoder: { mlp_keys: "flattened_occupancy_grid" }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   actions: needed
   evaluate_reconstruction_narration: true
@@ -643,15 +576,7 @@ ai2thor:
   dataset_size: 50000
   train_ratio: 64
   prefill: 2500
-  encoder: { cnn_keys: "image", cnn_depth: 64 }
-  decoder: { cnn_keys: "image", cnn_depth: 64 }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   narrator:
     {
@@ -710,26 +635,12 @@ ai2thor-reconstruction:
   encoder:
     {
       mlp_keys: "agent_position|pickup_vec|drop_vec|open_vec|close_vec|toggle_on_vec|toggle_off_vec|break_vec|throw_vec|slice_vec|put_object_vec|put_receptacle_vec",
-      cnn_keys: "image",
-      cnn_depth: 64,
-      mlp_layers: 3,
-      mlp_units: 1024,
     }
   decoder:
     {
       mlp_keys: "agent_position|pickup_vec|drop_vec|open_vec|close_vec|toggle_on_vec|toggle_off_vec|break_vec|throw_vec|slice_vec|put_object_vec|put_receptacle_vec",
-      cnn_keys: "image",
-      cnn_depth: 64,
-      mlp_layers: 3,
-      mlp_units: 1024,
     }
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   narrator:
     {
