@@ -913,6 +913,37 @@ def compute_ter(predicted_sequence: str, true_sequence: str) -> torch.Tensor:
     return result
 
 
+def compute_chrf(
+    predicted_sequence: str, true_sequence: str, n_gram: int = 6, beta: int = 2
+) -> torch.Tensor:
+    """Computes the CHaRacter n-gram F-score++ (chrF++) between a translated and true string.
+    by default, computes the 6-gram chr++F2 score, as this was shown to be the best performant
+    in the original paper.
+
+
+    Args:
+        predicted_sequence (str): Translated string
+
+        true_sequence (str): Ground truth string
+
+        n_gram (int, optional): Number of charactern-grams to consider.
+        Defaults to 6.
+
+        beta (int, optional): Beta parameter for chrF. Defaults to 3.
+        A higher beta value gives more weight to recall.
+
+
+    Returns:
+        torch.Tensor: chrF++ score
+    """
+
+    score = chrf_score(
+        predicted_sequence, [true_sequence], n_char_order=n_gram, beta=beta
+    )
+    assert isinstance(score, torch.Tensor)
+    return score
+
+
 def compute_translation_metrics(
     generated_translation: str,
     true_translation: str,
@@ -989,7 +1020,6 @@ def compute_translation_metrics(
         )
     except ValueError:
         translation_metrics["bleu_score_no_stopwords"] = 0.0
-
     # ----- METEOR SCORE --------
 
     # ----- ROUGE SCORE --------
@@ -1003,7 +1033,6 @@ def compute_translation_metrics(
 
     translation_metrics.update(rouge_scores)
     translation_metrics.update(rouge_scores_no_stopwords)
-
     # ----- Word Error Rate --------
     translation_metrics["wer"] = float(
         calculate_wer(generated_translation, true_translation)
@@ -1019,6 +1048,12 @@ def compute_translation_metrics(
         compute_ter(generated_translation_no_stopwords, true_translation_no_stopwords)
     )
     # ----- chrF SCORE --------
+    translation_metrics["chrf"] = float(
+        compute_chrf(generated_translation, true_translation)
+    )
+    translation_metrics["chrf_no_stopwords"] = float(
+        compute_chrf(generated_translation_no_stopwords, true_translation_no_stopwords)
+    )
 
     return translation_metrics
 

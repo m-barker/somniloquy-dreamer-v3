@@ -121,3 +121,13 @@ def test_ter():
     assert round(ter_score, 2) == round(
         (3 / 6), 2
     ), f"Expected TER of 2/6, got {ter_score}"
+
+
+def test_chrf():
+    """Tests the calculation of the chrf++ metrics"""
+
+    predicted_str = "the cat sat on the mat"
+    target_str = "the cat sat on the mat"
+
+    chrf_score = evaluation.compute_chrf(predicted_str, target_str)
+    assert chrf_score == 1.0, f"Expected chrF++ score of 1.0, got {chrf_score}"
