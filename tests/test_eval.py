@@ -131,3 +131,15 @@ def test_chrf():
 
     chrf_score = evaluation.compute_chrf(predicted_str, target_str)
     assert chrf_score == 1.0, f"Expected chrF++ score of 1.0, got {chrf_score}"
+
+
+def test_meteor_score():
+    """Tests the calculation of the METEOR score, which uses
+    the nltk library.
+    """
+
+    predicted_str = "the cat sat on the mat"
+    target_str = "the cat sat on the mat"
+
+    meteor_score = evaluation.compute_meteor_score(predicted_str, target_str)
+    assert meteor_score == 1.0, f"Expected METEOR score of 1.0, got {meteor_score}"

@@ -13,6 +13,7 @@ from torchmetrics.text.rouge import ROUGEScore
 from torchmetrics.functional.text import chrf_score, translation_edit_rate
 from torcheval.metrics.text import Perplexity, BLEUScore
 from torcheval.metrics.functional import word_error_rate
+from nltk.translate.meteor_score import single_meteor_score
 from tqdm import tqdm
 
 
@@ -942,6 +943,36 @@ def compute_chrf(
     )
     assert isinstance(score, torch.Tensor)
     return score
+
+
+def compute_meteor_score(
+    predicted_sequence: str, true_sequence: str, _gamma: float = 0.5
+) -> float:
+    """Computes the METEOR score between a translated and true string,
+    using nltk's implementation.
+
+    Args:
+        predicted_sequence (str): Translated string
+
+        true_sequence (str): Ground truth string
+
+        gamma (float, optional): The gamma parameter for METEOR. Defaults to 0.5.
+
+    Returns:
+        float: METEOR score in range [0, 1].
+    """
+    # This is needed due to the chunking penalty always being non-zero,
+    # see https://stackoverflow.com/questions/66944085/why-is-both-identical-sentences-meteor-score-used-in-machine-translation-not-eq
+    if predicted_sequence == true_sequence:
+        return 1.0
+
+    # NLTK expects tokenized input
+    hypothesis = predicted_sequence.split()
+    reference = true_sequence.split()
+    meteor_score = single_meteor_score(
+        reference=reference, hypothesis=hypothesis, gamma=_gamma
+    )
+    return meteor_score
 
 
 def compute_translation_metrics(
