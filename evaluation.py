@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
+from torchmetrics.text.rouge import ROUGEScore
+from torchmetrics.functional.text import chrf_score, translation_edit_rate
 from torcheval.metrics.text import Perplexity, BLEUScore
 from torcheval.metrics.functional import word_error_rate
 from tqdm import tqdm
@@ -874,6 +876,43 @@ def calculate_wer(
     return word_error_rate(predicted_sequence, true_sequence)
 
 
+def compute_rouge_score(
+    predicted_sequence: str, true_sequence: str
+) -> Dict[str, float]:
+    """Computes the ROUGE score between a translated and true string.
+
+    Args:
+        predicted_sequence (str): Translated string
+
+        true_sequence (str): Ground truth string
+
+    Returns:
+        Dict[str, float]: Dictionary of Rouge scores for different rouge types.
+        Each one contains (f1, precision, and recall)
+    """
+
+    rouge = ROUGEScore()
+    scores = rouge(predicted_sequence, true_sequence)
+    # By default, the scores are float tensors
+    return {k: float(v) for k, v in scores.items()}
+
+
+def compute_ter(predicted_sequence: str, true_sequence: str) -> torch.Tensor:
+    """Computes the Translation Edit Rate (TER) between a translated and true string.
+
+    Args:
+        predicted_sequence (str): translated string by the model.
+        true_sequence (str): Ground truth translation string.
+
+    Returns:
+        torch.Tensor: Translation Edit Rate
+    """
+
+    result = translation_edit_rate(predicted_sequence, [true_sequence])
+    assert isinstance(result, torch.Tensor)
+    return result
+
+
 def compute_translation_metrics(
     generated_translation: str,
     true_translation: str,
@@ -954,6 +993,16 @@ def compute_translation_metrics(
     # ----- METEOR SCORE --------
 
     # ----- ROUGE SCORE --------
+    rouge_scores = compute_rouge_score(generated_translation, true_translation)
+    rouge_scores_no_stopwords = compute_rouge_score(
+        generated_translation_no_stopwords, true_translation_no_stopwords
+    )
+    rouge_scores_no_stopwords = {
+        f"{k}_no_stopwords": v for k, v in rouge_scores_no_stopwords.items()
+    }
+
+    translation_metrics.update(rouge_scores)
+    translation_metrics.update(rouge_scores_no_stopwords)
 
     # ----- Word Error Rate --------
     translation_metrics["wer"] = float(
@@ -963,7 +1012,12 @@ def compute_translation_metrics(
         calculate_wer(generated_translation_no_stopwords, true_translation_no_stopwords)
     )
     # ----- Translation Edit Rate --------
-
+    translation_metrics["ter"] = float(
+        compute_ter(generated_translation, true_translation)
+    )
+    translation_metrics["ter_no_stopwords"] = float(
+        compute_ter(generated_translation_no_stopwords, true_translation_no_stopwords)
+    )
     # ----- chrF SCORE --------
 
     return translation_metrics
