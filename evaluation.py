@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
+from torcheval.metrics.text import Perplexity, BLEUScore
+from torcheval.metrics.functional import word_error_rate
 from tqdm import tqdm
 
 
@@ -16,8 +18,8 @@ from tools import (
     add_batch_to_obs,
     convert,
     word_tokenise_text,
-    bleu_metric_from_strings,
     get_task_stopwords,
+    remove_punctuation,
 )
 from narration.crafter_narrator import CrafterNarrator
 from narration.ai2thor_narrator import CookEggNarrator
@@ -738,6 +740,233 @@ def evaluate_rollouts(
 
         if wandb_run is not None:
             wandb_run.log(wandb_log, step=logger.step)
+
+
+def perplexity_metric(
+    predicted_logits: torch.Tensor, true_tokens: torch.Tensor, padding_index: int = 0
+) -> torch.Tensor:
+    """Calculates the perplexity of a sequence of logits.
+
+    Args:
+        predicted_logits (torch.Tensor): Logits of shape ()
+        true_tokens (torch.Tensor): True tokens of shape ()
+        padding_index (int, optional): The token ID used for padding. Defaults to 0.
+
+    Returns:
+        torch.Tensor: Perplexity metric
+    """
+
+    perplexity = Perplexity(ignore_index=padding_index, device=predicted_logits.device)
+    perplexity_score = perplexity.update(predicted_logits, true_tokens).compute()
+    return perplexity_score
+
+
+def bleu_metric_from_tokens(
+    predicted_tokens: torch.Tensor,
+    true_tokens: torch.Tensor,
+    translation_dict: Dict[str, int],
+    n_gram: int = 4,
+) -> torch.Tensor:
+    """Computes the BLEU score between a batch of predicted tokens and a batch of true tokens
+
+    Args:
+        predicted_tokens (torch.Tensor): shape (batch_length, max_seq_length)
+        true_tokens (torch.Tensor): shape (batch_length, max_seq_length)
+        translation_dict (Dict[str, int]): dictionary that translates from words to token IDs.
+        n_gram (int, optional): the number of n-grams to consider. Defaults to 4.
+
+    Returns:
+        torch.Tensor: BLEU score that ranges from [0,1]
+    """
+    candidates: List[str] = []
+    references: List[List[str]] = []
+    token_to_str = {v: k for k, v in translation_dict.items()}
+    tokens_to_remove = [0, 1, 2]  # BOS, EOS, PAD
+    for cand_tokens, ref_tokens in zip(predicted_tokens, true_tokens):
+        cand_str = "".join(
+            [token_to_str[s] for s in cand_tokens if s not in tokens_to_remove]
+        )
+        ref_str = "".join(
+            [token_to_str[s] for s in ref_tokens if s not in tokens_to_remove]
+        )
+        candidates.append(cand_str)
+        references.append(
+            [ref_str]
+        )  # need to make nested list as in theory there can be multiple reference translations per string
+
+    metric = BLEUScore(n_gram=n_gram)
+    metric.update(candidates, references)
+    return metric.compute()
+
+
+def bleu_metric_from_strings(
+    predicted_sequence: str,
+    true_sequence: str,
+    n_gram: int = 4,
+    convert_case: bool = True,
+    remove_punc: bool = True,
+    words_to_remove: Optional[List[str]] = None,
+) -> torch.Tensor:
+    """Computes the bleu score between a translated and true string.
+
+    Args:
+        predicted_sequence (str): Machine translated string
+
+        true_sequence (str): Ground truth string
+
+        n_gram (int, optional): Number of n-grams to consider. Defaults to 4.
+
+        convert_case (bool, optional): Whether to convert the strings to lower
+        case (BLEU is not case insensitive). Defaults to True.
+
+        remove_punc (bool, optional): Whether to remove punctuation from
+        the strings. Defaults to True.
+
+        words_to_remove (List[str], optional): List of words to remove from both
+        strings. Defaults to None.
+
+    Returns:
+        torch.Tensor: BLEU score in range [0,1]
+    """
+
+    if convert_case:
+        predicted_sequence = predicted_sequence.lower()
+        true_sequence = true_sequence.lower()
+    if remove_punc:
+        predicted_sequence = remove_punctuation(predicted_sequence)
+        true_sequence = remove_punctuation(true_sequence)
+
+    if words_to_remove is not None:
+        # From https://stackoverflow.com/questions/25346058/removing-list-of-words-from-a-string
+        tmp_pred = [
+            word for word in predicted_sequence.split() if word not in words_to_remove
+        ]
+        tmp_true = [
+            word for word in true_sequence.split() if word not in words_to_remove
+        ]
+        predicted_sequence = " ".join(tmp_pred)
+        true_sequence = " ".join(tmp_true)
+
+    metric = BLEUScore(n_gram=n_gram)
+    metric.update(
+        predicted_sequence, [true_sequence]
+    )  # there can be multiple referenence strings
+    return metric.compute()
+
+
+def calculate_wer(
+    predicted_sequence: str,
+    true_sequence: str,
+) -> torch.Tensor:
+    """Computes the word error rate (WER) between a translated and true string.
+
+    Args:
+        predicted_sequence (str): Translated string
+
+        true_sequence (str): Ground truth string
+
+    Returns:
+        torch.Tensor: WER in range [0, 1+]
+        + as can be larger than 1 if the predicted sequence
+        is longer (and thus has more errors) than the true sequence.
+    """
+
+    return word_error_rate(predicted_sequence, true_sequence)
+
+
+def compute_translation_metrics(
+    generated_translation: str,
+    true_translation: str,
+    task_name: str,
+    remove_punc: bool = True,
+    lower_case: bool = True,
+) -> Dict[str, float]:
+    """Computes a multitude of evaluation metrics between the generated translation
+    and the ground-truth translation. The following metrics are computed:
+        - BLEU score
+        - METEOR score
+        - ROUGE score
+        - Word Error Rate (WER)
+        - Translation Edit Rate (TER)
+        - chrF score
+
+    Args:
+        generated_translation (str): Latent state translation generated by the model.
+
+        true_translation (str): 'Ground truth' translation computed by the rule-based
+        translator.
+
+        task_name (str): Name of the task (used to get the stopwords for the env).
+
+        remove_punc (bool, optional): Whether to remove punctuation from both
+        the source and target. Defaults to True.
+
+        lower_case (bool, optional): Whether to convert the source and target to
+        lower case. Defaults to True.
+
+    Returns:
+        Dict[str, float]: Dictionary of metric_name: metric_value pairs.
+    """
+
+    translation_metrics: Dict[str, float] = {}
+
+    # ----- Pre-Processing --------
+
+    if remove_punc:
+        generated_translation = remove_punctuation(generated_translation)
+        true_translation = remove_punctuation(true_translation)
+    if lower_case:
+        generated_translation = generated_translation.lower()
+        true_translation = true_translation.lower()
+
+    stop_words = get_task_stopwords(task_name)
+
+    # From https://stackoverflow.com/questions/25346058/removing-list-of-words-from-a-string
+    generated_translation_no_stopwords = [
+        word for word in generated_translation.split() if word not in stop_words
+    ]
+    true_translation_no_stopwords = [
+        word for word in true_translation.split() if word not in stop_words
+    ]
+    generated_translation_no_stopwords = " ".join(generated_translation_no_stopwords)
+    true_translation_no_stopwords = " ".join(true_translation_no_stopwords)
+
+    # ----- BLEU SCORE --------
+    try:
+        translation_metrics["bleu_score"] = float(
+            bleu_metric_from_strings(
+                generated_translation,
+                true_translation,
+            )
+        )
+    except ValueError:
+        translation_metrics["bleu_score"] = 0.0
+    try:
+        translation_metrics["bleu_score_no_stopwords"] = float(
+            bleu_metric_from_strings(
+                generated_translation_no_stopwords,
+                true_translation_no_stopwords,
+            )
+        )
+    except ValueError:
+        translation_metrics["bleu_score_no_stopwords"] = 0.0
+
+    # ----- METEOR SCORE --------
+
+    # ----- ROUGE SCORE --------
+
+    # ----- Word Error Rate --------
+    translation_metrics["wer"] = float(
+        calculate_wer(generated_translation, true_translation)
+    )
+    translation_metrics["wer_no_stopwords"] = float(
+        calculate_wer(generated_translation_no_stopwords, true_translation_no_stopwords)
+    )
+    # ----- Translation Edit Rate --------
+
+    # ----- chrF SCORE --------
+
+    return translation_metrics
 
 
 def get_action_translation_dict(n_actions: int):

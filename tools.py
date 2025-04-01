@@ -16,7 +16,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch import distributions as torchd
 from torch.utils.tensorboard import SummaryWriter
-from torcheval.metrics.text import Perplexity, BLEUScore
+
 
 import wandb
 
@@ -1490,121 +1490,18 @@ def ctc_loss(
     return loss(input_seq_logits, target_seq, input_seq_lengths, target_seq_lengths)
 
 
-def perplexity_metric(
-    predicted_logits: torch.Tensor, true_tokens: torch.Tensor, padding_index: int = 0
-) -> torch.Tensor:
-    """Calculates the perplexity of a sequence of logits.
+
+def remove_punctuation(text: str) -> str:
+    """Removes punctuation from a string.
 
     Args:
-        predicted_logits (torch.Tensor): Logits of shape ()
-        true_tokens (torch.Tensor): True tokens of shape ()
-        padding_index (int, optional): The token ID used for padding. Defaults to 0.
+        text (str): String to remove punctuation from.
 
     Returns:
-        torch.Tensor: Perplexity metric
+        str: String with punctuation removed.
     """
-
-    perplexity = Perplexity(ignore_index=padding_index, device=predicted_logits.device)
-    perplexity_score = perplexity.update(predicted_logits, true_tokens).compute()
-    return perplexity_score
-
-
-def bleu_metric_from_tokens(
-    predicted_tokens: torch.Tensor,
-    true_tokens: torch.Tensor,
-    translation_dict: Dict[str, int],
-    n_gram: int = 4,
-) -> torch.Tensor:
-    """Computes the BLEU score between a batch of predicted tokens and a batch of true tokens
-
-    Args:
-        predicted_tokens (torch.Tensor): shape (batch_length, max_seq_length)
-        true_tokens (torch.Tensor): shape (batch_length, max_seq_length)
-        translation_dict (Dict[str, int]): dictionary that translates from words to token IDs.
-        n_gram (int, optional): the number of n-grams to consider. Defaults to 4.
-
-    Returns:
-        torch.Tensor: BLEU score that ranges from [0,1]
-    """
-    candidates: List[str] = []
-    references: List[List[str]] = []
-    token_to_str = {v: k for k, v in translation_dict.items()}
-    tokens_to_remove = [0, 1, 2]  # BOS, EOS, PAD
-    for cand_tokens, ref_tokens in zip(predicted_tokens, true_tokens):
-        cand_str = "".join(
-            [token_to_str[s] for s in cand_tokens if s not in tokens_to_remove]
-        )
-        ref_str = "".join(
-            [token_to_str[s] for s in ref_tokens if s not in tokens_to_remove]
-        )
-        candidates.append(cand_str)
-        references.append(
-            [ref_str]
-        )  # need to make nested list as in theory there can be multiple reference translations per string
-
-    metric = BLEUScore(n_gram=n_gram)
-    metric.update(candidates, references)
-    return metric.compute()
-
-
-def bleu_metric_from_strings(
-    predicted_sequence: str,
-    true_sequence: str,
-    n_gram: int = 4,
-    convert_case: bool = True,
-    remove_punctuation: bool = True,
-    words_to_remove: Optional[List[str]] = None,
-) -> torch.Tensor:
-    """Computes the bleu score between a translated and true string.
-
-    Args:
-        predicted_sequence (str): Machine translated string
-
-        true_sequence (str): Ground truth string
-
-        n_gram (int, optional): Number of n-grams to consider. Defaults to 4.
-
-        convert_case (bool, optional): Whether to convert the strings to lower
-        case (BLEU is not case insensitive). Defaults to True.
-
-        remove_punctuation (bool, optional): Whether to remove punctuation from
-        the strings. Defaults to True.
-
-        words_to_remove (List[str], optional): List of words to remove from both
-        strings. Defaults to None.
-
-    Returns:
-        torch.Tensor: BLEU score in range [0,1]
-    """
-
-    if convert_case:
-        predicted_sequence = predicted_sequence.lower()
-        true_sequence = true_sequence.lower()
-    if remove_punctuation:
-        # From https://stackoverflow.com/questions/265960/best-way-to-strip-punctuation-from-a-string
-        predicted_sequence = predicted_sequence.translate(
-            str.maketrans("", "", string.punctuation)
-        )
-        true_sequence = true_sequence.translate(
-            str.maketrans("", "", string.punctuation)
-        )
-
-    if words_to_remove is not None:
-        # From https://stackoverflow.com/questions/25346058/removing-list-of-words-from-a-string
-        tmp_pred = [
-            word for word in predicted_sequence.split() if word not in words_to_remove
-        ]
-        tmp_true = [
-            word for word in true_sequence.split() if word not in words_to_remove
-        ]
-        predicted_sequence = " ".join(tmp_pred)
-        true_sequence = " ".join(tmp_true)
-
-    metric = BLEUScore(n_gram=n_gram)
-    metric.update(
-        predicted_sequence, [true_sequence]
-    )  # there can be multiple referenence strings
-    return metric.compute()
+    # From https://stackoverflow.com/questions/265960/best-way-to-strip-punctuation-from-a-string
+    return text.translate(str.maketrans("", "", string.punctuation))
 
 
 def get_task_stopwords(task_name: str) -> List[str]:

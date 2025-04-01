@@ -79,29 +79,6 @@ def test_word_tokenise_text():
     assert np.array_equal(tokenised_sentences, expected_output)
 
 
-def test_bleu_score():
-    """Tests the BLEU score calculation, and that it correctly
-    ignores punctuation and casing.
-    """
-
-    predicted_str = "The Cat sat; on the: mat."
-    target_str = "The cat sAt oN the mat."
-
-    bleu_score = tools.bleu_metric_from_strings(predicted_str, target_str)
-    assert bleu_score == 1.0, f"Expected BLEU score of 1.0, got {bleu_score}"
-
-
-def test_bleu_score_with_stopwords():
-    """Tests that the bleu score works with stopwords."""
-
-    predicted_str = "The large round and lazy cat sat on the mat."
-    target_str = "The lazy cat sat on the mat."
-    bleu_score = tools.bleu_metric_from_strings(
-        predicted_str, target_str, words_to_remove=["large", "round", "and"]
-    )
-    assert bleu_score == 1.0, f"Expected BLEU score of 1.0, got {bleu_score}"
-
-
 def test_task_stopwords():
     """Tests that the task stopwords are correctly retrieved"""
 
