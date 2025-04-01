@@ -11,6 +11,7 @@ import cv2
 
 from torchmetrics.text.rouge import ROUGEScore
 from torchmetrics.functional.text import chrf_score, translation_edit_rate
+from torchmetrics.functional.text.bert import bert_score
 from torcheval.metrics.text import Perplexity, BLEUScore
 from torcheval.metrics.functional import word_error_rate
 from nltk.translate.meteor_score import single_meteor_score
@@ -973,6 +974,33 @@ def compute_meteor_score(
         reference=reference, hypothesis=hypothesis, gamma=_gamma
     )
     return meteor_score
+
+
+def compute_bert_score(
+    predicted_sequence: str, true_sequence: str, model_name: str = "bert-base-uncased"
+) -> Dict[str, float]:
+    """Computes the BERT score between a translated and true string.
+
+    Args:
+        predicted_sequence (str): Translated string
+
+        true_sequence (str): Ground truth string
+
+        model_name (str, optional): Name of the BERT model to use. Defaults to "bert-base-uncased".
+
+    Returns:
+        Dict[str, float]: Dictionary containing precision, recall, and F1 scores.
+    """
+    result = bert_score(predicted_sequence, true_sequence, model_name)
+    assert isinstance(result, dict)
+    assert isinstance(result["precision"], torch.Tensor)
+    assert isinstance(result["recall"], torch.Tensor)
+    assert isinstance(result["f1"], torch.Tensor)
+    return {
+        "bert_precision": float(result["precision"]),
+        "bert_recall": float(result["recall"]),
+        "bert_f1": float(result["f1"]),
+    }
 
 
 def compute_translation_metrics(
