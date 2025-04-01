@@ -4,7 +4,7 @@ defaults:
   evaldir: null
   offline_traindir: ""
   offline_evaldir: ""
-  seed: 420
+  seed: 0
   deterministic_run: False
   steps: 1e6
   parallel: False
@@ -40,7 +40,7 @@ defaults:
   prefill: 2500
   reward_EMA: True
 
-  # Model
+  # Model - DreamerV3 200M Version.
   enable_language: false
   enable_language_to_latent: false
   enable_language_to_action: false
@@ -48,7 +48,7 @@ defaults:
   action_prediction: false
   dyn_hidden: 1024
   dyn_deter: 8192
-  dyn_stoch: 64
+  dyn_stoch: 32
   dyn_discrete: 64
   dyn_rec_depth: 1
   dyn_mean_act: "none"
