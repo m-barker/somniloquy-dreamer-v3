@@ -888,7 +888,7 @@ class TransformerEncoderDecoder(nn.Module):
         activation: str = "relu",
         target_vocab_size: int = 22,
         embedding_layer: bool = True,
-        embed_size: int = 512,
+        embed_size: int = 256,
         bos_token: int = 1,
         eos_token: int = 2,
         padding_token: int = 0,
