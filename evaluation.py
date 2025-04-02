@@ -965,6 +965,7 @@ def compute_evaluation_statistics(
 
     return {**mean_metrics, **var_metrics, **std_metrics, **min_metrics, **max_metrics}
 
+
 def save_translations_json(
     imagined_plan_translation: str,
     reconstructed_plan_translation: str,
@@ -983,35 +984,41 @@ def save_translations_json(
 
     Args:
         imagined_plan_translation (str): Imagined latent plan translation
-        
+
         reconstructed_plan_translation (str): Reconstructed latent plan
         translation
-        
+
         actual_narration (str): Ground truth latent plan description.
-        
-        imagined_metrics (Dict[str, float]): Dictionary containing 
+
+        imagined_metrics (Dict[str, float]): Dictionary containing
         the imagined translation's evaluation metrics
-        
+
         reconstructed_metrics (Dict[str, float]): Dictionary containing
         the reconstructed translation's evaluation metrics
-        
+
         episode_number (int): Episode number in the current evaluation
         epoch.
-        
+
         plan_start_t (int): Start timestep in the evaluation episode of
         the plans
-        
-        plan_end_t (int): Last timestep in the evaluation episode of the 
+
+        plan_end_t (int): Last timestep in the evaluation episode of the
         plans
-        
+
         logdir (str): Directory to store the create JSON file.
-        
+
         current_training_step (int): Current training step of the agent.
     """
-    
-    output_folder = os.path.join(logdir, "evaluation", "latent_translations", f"step_{current_training_step}", f"eval_episode_{episode_number}")
+
+    output_folder = os.path.join(
+        logdir,
+        "evaluation",
+        "latent_translations",
+        f"step_{current_training_step}",
+        f"eval_episode_{episode_number}",
+    )
     os.makedirs(output_folder, exist_ok=True)
-    
+
     output_file_path = os.path.join(
         output_folder,
         f"eval_episode_{episode_number}_plan_{plan_start_t}_{plan_end_t}.json",
@@ -1028,7 +1035,86 @@ def save_translations_json(
             f,
             indent=4,
         )
-    
+
+
+@torch.no_grad()
+def save_decoded_plan_plot(
+    imagined_latent_states: List[torch.Tensor],
+    reconstructed_latent_states: List[torch.Tensor],
+    ground_truth_images: List[np.ndarray],
+    episode_number: int,
+    plan_start_t: int,
+    plan_end_t: int,
+    logdir: str,
+    current_training_step: int,
+) -> None:
+    """Saves a plot of the decoded imagined and reconstructed latent
+    state images, along with the corresponding ground-truth images
+    that come from rolling out the plan.
+
+    Args:
+        imagined_latent_states (List[torch.Tensor]): The imagined
+        latent state plan.
+
+        reconstructed_latent_states (List[torch.Tensor]): The
+        posterior latent state plan.
+
+        ground_truth_images (List[np.ndarray]): The ground truth
+        images obtained from rolling out the plan in the
+        environment.
+
+        episode_number (int): The current evaluation episode
+        in the current evaluation epoch.
+
+        plan_start_t (int): The start timestep in the evaluation
+        episode of the plans.
+
+        plan_end_t (int): The last timestep in the evaluation
+        episode of the plans.
+
+        logdir (str): Directory to store the created plot.
+
+        current_training_step (int): The current training step
+        of the agent.
+    """
+
+    output_folder = os.path.join(
+        logdir,
+        "evaluation",
+        "latent_plan_plots",
+        f"step_{current_training_step}",
+        f"eval_episode_{episode_number}",
+    )
+    os.makedirs(output_folder, exist_ok=True)
+
+    output_file_path = os.path.join(
+        output_folder,
+        f"eval_episode_{episode_number}_plan_{plan_start_t}_{plan_end_t}.png",
+    )
+
+    imagined_images = [
+        agent._wm.heads["decoder"](state)["image"].mode().detach().clone()
+        for state in imagined_latent_states
+    ]
+    reconstructed_images = [
+        agent._wm.heads["decoder"](state)["image"].mode().detach().clone()
+        for state in reconstructed_latent_states
+    ]
+    imagined_images = convert_images_to_numpy(imagined_images)
+    reconstructed_images = convert_images_to_numpy(reconstructed_images)
+
+    reconstruction_plot: plt.Figure = generate_image_reconstruction_plot(
+        [imagined_images, reconstructed_images, ground_truth_images],
+        3,
+        len(ground_truth_images),
+        start_time=plan_start_t,
+    )
+    reconstruction_plot.suptitle(
+        f"Eval Episode {episode_number} steps {plan_start_t} : {plan_end_t}"
+    )
+    reconstruction_plot.savefig(output_file_path)
+    plt.close(reconstruction_plot)
+
 
 @torch.no_grad()
 def evaluate_rollouts(
@@ -1148,7 +1234,7 @@ def evaluate_rollouts(
                     config.eval_n_consecutive_trajectories,
                     index,
                 )
-                
+
                 if save_translations:
                     save_translations_json(
                         imagined_plan_translation,
@@ -1164,40 +1250,16 @@ def evaluate_rollouts(
                     )
 
                 if save_plots:
-                    imagined_images = [
-                        agent._wm.heads["decoder"](state)["image"].mode()
-                        for state in imagined_states
-                    ]
-                    reconstructed_images = [
-                        agent._wm.heads["decoder"](state)["image"].mode()
-                        for state in posterior_states
-                    ]
-                    imagined_images = convert_images_to_numpy(imagined_images)
-                    reconstructed_images = convert_images_to_numpy(reconstructed_images)
-
-                    reconstruction_plot: plt.Figure = (
-                        generate_image_reconstruction_plot(
-                            [imagined_images, reconstructed_images, images],
-                            3,
-                            len(images),
-                            start_time=trajectory,
-                        )
+                    save_decoded_plan_plot(
+                        imagined_states,
+                        posterior_states,
+                        images,
+                        episode + 1,
+                        trajectory,
+                        end_index,
+                        config.logdir,
+                        logger.step,
                     )
-                    reconstruction_plot.suptitle(
-                        f"Episode {episode} steps {trajectory} : {end_index}"
-                    )
-                    title = (
-                        f"{logger.step}-episode-{episode}-steps-{trajectory}-{end_index}-reconstruction-plot"
-                        if logger is not None
-                        else f"episode-{episode}-reconstruction-plot"
-                    )
-                    reconstruction_plot.savefig(
-                        os.path.join(
-                            config.logdir,
-                            title,
-                        )
-                    )
-                    plt.close()
 
         episode_rewards.append(episode_reward)
 
