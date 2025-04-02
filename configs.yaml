@@ -40,23 +40,23 @@ defaults:
   prefill: 2500
   reward_EMA: True
 
-  # Model - DreamerV3 200M Version.
+  # Model - DreamerV3 100M Version.
   enable_language: false
   enable_language_to_latent: false
   enable_language_to_action: false
   evaluate_reconstruction_narration: false
   action_prediction: false
-  dyn_hidden: 1024
-  dyn_deter: 8192
+  dyn_hidden: 768
+  dyn_deter: 6144
   dyn_stoch: 32
-  dyn_discrete: 64
+  dyn_discrete: 48
   dyn_rec_depth: 1
   dyn_mean_act: "none"
   dyn_std_act: "sigmoid2"
   dyn_min_std: 0.1
   grad_heads: ["decoder", "reward", "cont"]
   language_grads: true
-  units: 1024
+  units: 768
   act: "SiLU"
   norm: True
   encoder:
@@ -69,7 +69,7 @@ defaults:
       kernel_size: 4,
       minres: 4,
       mlp_layers: 3,
-      mlp_units: 1024,
+      mlp_units: 768,
       symlog_inputs: True,
     }
   decoder:
@@ -82,7 +82,7 @@ defaults:
       kernel_size: 4,
       minres: 4,
       mlp_layers: 3,
-      mlp_units: 1024,
+      mlp_units: 768,
       cnn_sigmoid: False,
       image_dist: mse,
       vector_dist: symlog_mse,

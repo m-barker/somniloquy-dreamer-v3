@@ -57,7 +57,7 @@ def imagine_trajectory(
     prev_state = initial_state
     done = False
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
-    imagained_states: List[torch.Tensor] = [latent_state]
+    imagained_states: List[torch.Tensor] = [latent_state.detach().clone()]
     for t in range(trajectory_length):
         # If world model thinks the episode terminates, pad the states/actions
         # with zeros.
@@ -74,7 +74,7 @@ def imagine_trajectory(
         # No actions provided; sample the learned policy.
         if actions is None:
             action = agent._task_behavior.actor(latent_state).sample().squeeze(0)
-            imagined_actions.append(action)
+            imagined_actions.append(action.detach().clone())
         else:
             action = actions[t]
         prior = agent._wm.dynamics.img_step(
@@ -83,7 +83,7 @@ def imagine_trajectory(
         )
         prev_state = prior
         latent_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
-        imagained_states.append(latent_state)
+        imagained_states.append(latent_state.detach().clone())
         predicted_continue = agent._wm.heads["cont"](latent_state).mode()
         # Less than 50% predicted chance that the episode continues according to world model.
         if predicted_continue[0, 0].detach().cpu().numpy() < 0.5:
@@ -712,9 +712,17 @@ def compute_meteor_score(
     # NLTK expects tokenized input
     hypothesis = predicted_sequence.split()
     reference = true_sequence.split()
-    meteor_score = single_meteor_score(
-        reference=reference, hypothesis=hypothesis, gamma=_gamma
-    )
+    try:
+        meteor_score = single_meteor_score(
+            reference=reference, hypothesis=hypothesis, gamma=_gamma
+        )
+    except LookupError:
+        import nltk
+
+        nltk.download("wordnet")
+        meteor_score = single_meteor_score(
+            reference=reference, hypothesis=hypothesis, gamma=_gamma
+        )
     return meteor_score
 
 
@@ -745,6 +753,7 @@ def compute_bert_score(
     }
 
 
+@torch.no_grad()
 def compute_translation_metrics(
     generated_translation: str,
     true_translation: str,
@@ -966,18 +975,48 @@ def evaluate_rollouts(
     logger,
     trajectory_length: int = 16,
     wandb_run=None,
-    save_plots: bool = True,
-):
-    """Evalues a set of sampled rollouts.
+    save_plots: bool = False,
+    save_translations: bool = False,
+) -> None:
+    """Evaluates a set of prior (imagined) and posterior latent state
+    plans.
 
     Args:
-        agent (Dreamer): _description_
-        imagined_state_samples (List[List[torch.Tensor]]): _description_
-        imagined_action_samples (List[List[torch.Tensor]]): _description_
-        posterior_state_samples (List[List[torch.Tensor]]): _description_
-        observation_samples (List[List[Dict[str, Any]]]): _description_
-        trajectory_length (int, optional): _description_. Defaults to 16.
+        agent (_type_): Dreamer agent that includes the world model and
+        actor-critic.
 
+        imagined_state_samples (List[List[torch.Tensor]]): List of
+        imagined latent state plans. The outer list is for each eval
+        episode, and the inner list is for each latent state in the
+        episode.
+
+        imagined_action_samples (List[List[torch.Tensor]]): List of
+        actions chosen in the imagined latent state plans.
+
+        posterior_state_samples (List[List[torch.Tensor]]): List of
+        posterior latent states, obtained when acting out the agent's
+        plan in the environment.
+
+        observation_samples (List[List[Dict[str, Any]]]): List of
+        observations from the environment, obtained by rolling out the
+        imagined latent plan.
+
+        logger (_type_): Logger object created by the original Dreamer
+        implemention. Used  get the current training step number.
+
+        trajectory_length (int, optional): Number of steps in each. Latent
+        plan (including the starting state) Defaults to 16.
+
+        wandb_run (_type_, optional): WandB run object used to log the evaluation
+        metrics to the WandB cloud. Defaults to None.
+
+        save_plots (bool, optional): Whether to save a plot showing the decoded and
+        ground truth images for each latent plan. Defaults to False. If True, the
+        images are saved to the logdir of the agent.
+
+        save_translations (bool, optional): Whether to save the ground-truth and
+        translated latent plans to a json file. Defaults to False. If True, the
+        translations are saved to the logdir of the agent.
     """
     config = agent._config
 
