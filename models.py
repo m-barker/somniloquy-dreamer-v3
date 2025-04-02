@@ -142,7 +142,11 @@ class WorldModel(nn.Module):
             use_amp=self._use_amp,
         )
         print(
-            f"Optimizer model_opt has {sum(param.numel() for param in self.parameters())} variables."
+            f"World model has {sum(param.numel() for param in self.parameters())} variables."
+        )
+
+        print(
+            f"Language Component has {sum(param.numel() for param in self.heads['language'].parameters())} variables."
         )
         # other losses are scaled by 1.0.
         self._scales = dict(
