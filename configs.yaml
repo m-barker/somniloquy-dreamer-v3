@@ -30,6 +30,8 @@ defaults:
   conditional_actions: False
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
+  save_plots: True
+  save_translations: True
 
   # Environment
   task: "dmc_walker_walk"

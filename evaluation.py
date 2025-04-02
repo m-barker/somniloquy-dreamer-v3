@@ -1039,6 +1039,7 @@ def save_translations_json(
 
 @torch.no_grad()
 def save_decoded_plan_plot(
+    agent,
     imagined_latent_states: List[torch.Tensor],
     reconstructed_latent_states: List[torch.Tensor],
     ground_truth_images: List[np.ndarray],
@@ -1053,6 +1054,8 @@ def save_decoded_plan_plot(
     that come from rolling out the plan.
 
     Args:
+        agent: Trained World Model.
+
         imagined_latent_states (List[torch.Tensor]): The imagined
         latent state plan.
 
@@ -1328,6 +1331,7 @@ def evaluate_rollouts(
 
                 if save_plots:
                     save_decoded_plan_plot(
+                        agent,
                         imagined_states,
                         posterior_states,
                         images,

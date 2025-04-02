@@ -544,7 +544,8 @@ def main(config):
                     trajectory_length=config.eval_trajectory_length
                     + 1,  # +1 as we include starting states
                     wandb_run=run,
-                    save_plots=False,
+                    save_plots=config.save_plots,
+                    save_translations=config.save_translations,
                 )
             if config.evaluate_reconstruction_narration:
                 if "crafter" in config.task:
