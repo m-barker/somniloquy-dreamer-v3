@@ -1,5 +1,6 @@
 import random
 import os
+import json
 from typing import List, Tuple, Union, Dict, Any, Optional
 from copy import deepcopy
 
@@ -964,6 +965,70 @@ def compute_evaluation_statistics(
 
     return {**mean_metrics, **var_metrics, **std_metrics, **min_metrics, **max_metrics}
 
+def save_translations_json(
+    imagined_plan_translation: str,
+    reconstructed_plan_translation: str,
+    actual_narration: str,
+    imagined_metrics: Dict[str, float],
+    reconstructed_metrics: Dict[str, float],
+    episode_number: int,
+    plan_start_t: int,
+    plan_end_t: int,
+    logdir: str,
+    current_training_step: int,
+) -> None:
+    """Saves a JSON file in the provided logdir containing the imagined
+    latent plan translation, reconstructed latent translation, and ground
+    truth translation, along with the corresponding evaluation metrics.
+
+    Args:
+        imagined_plan_translation (str): Imagined latent plan translation
+        
+        reconstructed_plan_translation (str): Reconstructed latent plan
+        translation
+        
+        actual_narration (str): Ground truth latent plan description.
+        
+        imagined_metrics (Dict[str, float]): Dictionary containing 
+        the imagined translation's evaluation metrics
+        
+        reconstructed_metrics (Dict[str, float]): Dictionary containing
+        the reconstructed translation's evaluation metrics
+        
+        episode_number (int): Episode number in the current evaluation
+        epoch.
+        
+        plan_start_t (int): Start timestep in the evaluation episode of
+        the plans
+        
+        plan_end_t (int): Last timestep in the evaluation episode of the 
+        plans
+        
+        logdir (str): Directory to store the create JSON file.
+        
+        current_training_step (int): Current training step of the agent.
+    """
+    
+    output_folder = os.path.join(logdir, "evaluation", "latent_translations", f"step_{current_training_step}", f"eval_episode_{episode_number}")
+    os.makedirs(output_folder, exist_ok=True)
+    
+    output_file_path = os.path.join(
+        output_folder,
+        f"eval_episode_{episode_number}_plan_{plan_start_t}_{plan_end_t}.json",
+    )
+    with open(output_file_path, "w") as f:
+        json.dump(
+            {
+                "imagined_plan_translation": imagined_plan_translation,
+                "reconstructed_plan_translation": reconstructed_plan_translation,
+                "actual_narration": actual_narration,
+                "imagined_metrics": imagined_metrics,
+                "reconstructed_metrics": reconstructed_metrics,
+            },
+            f,
+            indent=4,
+        )
+    
 
 @torch.no_grad()
 def evaluate_rollouts(
@@ -988,7 +1053,7 @@ def evaluate_rollouts(
         imagined_state_samples (List[List[torch.Tensor]]): List of
         imagined latent state plans. The outer list is for each eval
         episode, and the inner list is for each latent state in the
-        episode.
+        episode.64
 
         imagined_action_samples (List[List[torch.Tensor]]): List of
         actions chosen in the imagined latent state plans.
@@ -1083,6 +1148,20 @@ def evaluate_rollouts(
                     config.eval_n_consecutive_trajectories,
                     index,
                 )
+                
+                if save_translations:
+                    save_translations_json(
+                        imagined_plan_translation,
+                        reconstructed_plan_translation,
+                        actual_narration,
+                        imagined_translation_metrics,
+                        reconstructed_translation_metrics,
+                        episode + 1,
+                        trajectory,
+                        end_index,
+                        config.logdir,
+                        logger.step,
+                    )
 
                 if save_plots:
                     imagined_images = [
