@@ -1,3 +1,4 @@
+from typing import Dict
 import numpy as np
 
 import evaluation
@@ -147,85 +148,55 @@ def test_meteor_score():
     assert meteor_score == 1.0, f"Expected METEOR score of 1.0, got {meteor_score}"
 
 
+def create_mock_metrics() -> Dict[str, float]:
+    """Creates a mock dictionary of translation evlauation metrics
+    used for testing"""
+    return {
+        "bleu_score": 0.0,
+        "bleu_score_no_stopwords": 0.0,
+        "wer": 0.0,
+        "wer_no_stopwords": 0.0,
+        "ter": 0.0,
+        "ter_no_stopwords": 0.0,
+        "chrf": 0.0,
+        "chrf_no_stopwords": 0.0,
+        "meteor": 0.0,
+        "meteor_no_stopwords": 0.0,
+        "rouge1_fmeasure": 0.0,
+        "rouge1_precision": 0.0,
+        "rouge1_recall": 0.0,
+        "rouge2_fmeasure": 0.0,
+        "rouge2_precision": 0.0,
+        "rouge2_recall": 0.0,
+        "rougeL_fmeasure": 0.0,
+        "rougeL_precision": 0.0,
+        "rougeL_recall": 0.0,
+        "rougeLsum_fmeasure": 0.0,
+        "rougeLsum_precision": 0.0,
+        "rougeLsum_recall": 0.0,
+        "rouge1_fmeasure_no_stopwords": 0.0,
+        "rouge1_precision_no_stopwords": 0.0,
+        "rouge1_recall_no_stopwords": 0.0,
+        "rouge2_fmeasure_no_stopwords": 0.0,
+        "rouge2_precision_no_stopwords": 0.0,
+        "rouge2_recall_no_stopwords": 0.0,
+        "rougeL_fmeasure_no_stopwords": 0.0,
+        "rougeL_precision_no_stopwords": 0.0,
+        "rougeL_recall_no_stopwords": 0.0,
+        "rougeLsum_fmeasure_no_stopwords": 0.0,
+        "rougeLsum_precision_no_stopwords": 0.0,
+        "rougeLsum_recall_no_stopwords": 0.0,
+    }
+
+
 def test_update_running_metrics():
     """Tests the function that is used to update the dictionary storing
     the translation evaluation metrics for all evaluation episodes
     and plan translations
     """
 
-    mock_imagined_metrics = {
-        "bleu_score": 0.0,
-        "bleu_score_no_stopwords": 0.0,
-        "wer": 0.0,
-        "wer_no_stopwords": 0.0,
-        "ter": 0.0,
-        "ter_no_stopwords": 0.0,
-        "chrf": 0.0,
-        "chrf_no_stopwords": 0.0,
-        "meteor": 0.0,
-        "meteor_no_stopwords": 0.0,
-        "rouge1_fmeasure": 0.0,
-        "rouge1_precision": 0.0,
-        "rouge1_recall": 0.0,
-        "rouge2_fmeasure": 0.0,
-        "rouge2_precision": 0.0,
-        "rouge2_recall": 0.0,
-        "rougeL_fmeasure": 0.0,
-        "rougeL_precision": 0.0,
-        "rougeL_recall": 0.0,
-        "rougeLsum_fmeasure": 0.0,
-        "rougeLsum_precision": 0.0,
-        "rougeLsum_recall": 0.0,
-        "rouge1_fmeasure_no_stopwords": 0.0,
-        "rouge1_precision_no_stopwords": 0.0,
-        "rouge1_recall_no_stopwords": 0.0,
-        "rouge2_fmeasure_no_stopwords": 0.0,
-        "rouge2_precision_no_stopwords": 0.0,
-        "rouge2_recall_no_stopwords": 0.0,
-        "rougeL_fmeasure_no_stopwords": 0.0,
-        "rougeL_precision_no_stopwords": 0.0,
-        "rougeL_recall_no_stopwords": 0.0,
-        "rougeLsum_fmeasure_no_stopwords": 0.0,
-        "rougeLsum_precision_no_stopwords": 0.0,
-        "rougeLsum_recall_no_stopwords": 0.0,
-    }
-
-    mock_reconstruction_metrics = {
-        "bleu_score": 0.0,
-        "bleu_score_no_stopwords": 0.0,
-        "wer": 0.0,
-        "wer_no_stopwords": 0.0,
-        "ter": 0.0,
-        "ter_no_stopwords": 0.0,
-        "chrf": 0.0,
-        "chrf_no_stopwords": 0.0,
-        "meteor": 0.0,
-        "meteor_no_stopwords": 0.0,
-        "rouge1_fmeasure": 0.0,
-        "rouge1_precision": 0.0,
-        "rouge1_recall": 0.0,
-        "rouge2_fmeasure": 0.0,
-        "rouge2_precision": 0.0,
-        "rouge2_recall": 0.0,
-        "rougeL_fmeasure": 0.0,
-        "rougeL_precision": 0.0,
-        "rougeL_recall": 0.0,
-        "rougeLsum_fmeasure": 0.0,
-        "rougeLsum_precision": 0.0,
-        "rougeLsum_recall": 0.0,
-        "rouge1_fmeasure_no_stopwords": 0.0,
-        "rouge1_precision_no_stopwords": 0.0,
-        "rouge1_recall_no_stopwords": 0.0,
-        "rouge2_fmeasure_no_stopwords": 0.0,
-        "rouge2_precision_no_stopwords": 0.0,
-        "rouge2_recall_no_stopwords": 0.0,
-        "rougeL_fmeasure_no_stopwords": 0.0,
-        "rougeL_precision_no_stopwords": 0.0,
-        "rougeL_recall_no_stopwords": 0.0,
-        "rougeLsum_fmeasure_no_stopwords": 0.0,
-        "rougeLsum_precision_no_stopwords": 0.0,
-        "rougeLsum_recall_no_stopwords": 0.0,
-    }
+    mock_imagined_metrics = create_mock_metrics()
+    mock_reconstruction_metrics = create_mock_metrics()
 
     running_eval_metrics = {}
     evaluation.update_running_metrics(
@@ -280,3 +251,95 @@ def test_update_running_metrics():
 
     for k, v in running_eval_metrics.items():
         assert v[5, 5] == 0.5, f"Expected value of 1.0, got {v[0, 1]}"
+
+
+def test_metric_statistics():
+    """Tests the function that is use compute the statistics of the evalution
+    metrics for all evaluation episodes and plan translations
+    """
+
+    mock_imagined_metrics = create_mock_metrics()
+    mock_reconstruction_metrics = create_mock_metrics()
+
+    running_eval_metrics = {}
+    evaluation.update_running_metrics(
+        mock_imagined_metrics,
+        mock_reconstruction_metrics,
+        running_eval_metrics,
+        episode_number=0,
+        total_episodes=10,
+        max_plans_per_episode=20,
+        current_plan_index=0,
+    )
+
+    for k, v in mock_imagined_metrics.items():
+        mock_imagined_metrics[k] = 1.0
+    for k, v in mock_reconstruction_metrics.items():
+        mock_reconstruction_metrics[k] = 2.0
+    evaluation.update_running_metrics(
+        mock_imagined_metrics,
+        mock_reconstruction_metrics,
+        running_eval_metrics,
+        episode_number=0,
+        total_episodes=10,
+        max_plans_per_episode=20,
+        current_plan_index=1,
+    )
+
+    imagined_metrics = {
+        k: v for k, v in running_eval_metrics.items() if "imagined" in k
+    }
+    print(imagined_metrics["imagined_bleu_score"])
+    reconstruction_metrics = {
+        k: v for k, v in running_eval_metrics.items() if "reconstructed_" in k
+    }
+    imagined_metrics = evaluation.compute_evaluation_statistics(imagined_metrics)
+    reconstruction_metrics = evaluation.compute_evaluation_statistics(
+        reconstruction_metrics
+    )
+    print(imagined_metrics)
+    assert (
+        imagined_metrics["mean_imagined_bleu_score"] == 0.5
+    ), f"Expected mean bleu score of 0.5, got {imagined_metrics['mean_imagined_bleu_score']}"
+    assert (
+        imagined_metrics["var_imagined_bleu_score"] == 0.25
+    ), f"Expected var bleu score of 0.25, got {imagined_metrics['var_imagined_bleu_score']}"
+    assert (
+        imagined_metrics["max_imagined_bleu_score"] == 1.0
+    ), f"Expected max bleu score of 1.0, got {imagined_metrics['max_imagined_bleu_score']}"
+    assert (
+        imagined_metrics["min_imagined_bleu_score"] == 0.0
+    ), f"Expected min bleu score of 0.0, got {imagined_metrics['min_imagined_bleu_score']}"
+
+    for k, v in mock_imagined_metrics.items():
+        mock_imagined_metrics[k] = 10.0
+    for k, v in mock_reconstruction_metrics.items():
+        mock_reconstruction_metrics[k] = 20.0
+    evaluation.update_running_metrics(
+        mock_imagined_metrics,
+        mock_reconstruction_metrics,
+        running_eval_metrics,
+        episode_number=1,
+        total_episodes=10,
+        max_plans_per_episode=20,
+        current_plan_index=1,
+    )
+
+    imagined_metrics = {
+        k: v for k, v in running_eval_metrics.items() if "imagined" in k
+    }
+    print(imagined_metrics["imagined_bleu_score"])
+    reconstruction_metrics = {
+        k: v for k, v in running_eval_metrics.items() if "reconstructed_" in k
+    }
+    imagined_metrics = evaluation.compute_evaluation_statistics(imagined_metrics)
+    reconstruction_metrics = evaluation.compute_evaluation_statistics(
+        reconstruction_metrics
+    )
+    print(reconstruction_metrics)
+    assert imagined_metrics["mean_imagined_bleu_score"] == (
+        11 / 3
+    ), f"Expected mean bleu score of 11/3, got {imagined_metrics['mean_imagined_bleu_score']}"
+    assert reconstruction_metrics["mean_reconstructed_ter"] == (
+        22 / 3
+    ), f"Expected mean ter score of 22/3, got {reconstruction_metrics['mean_reconstructed_ter']}"

@@ -915,6 +915,47 @@ def update_running_metrics(
         ] = reconstructed_translation_metrics[key]
 
 
+def compute_evaluation_statistics(
+    running_translation_eval_metrics: Dict[str, np.ndarray],
+    nan_value: int = -1,
+) -> Dict[str, float]:
+    """Computes the mean and max of the running metrics.
+
+    Args:
+        running_translation_eval_metrics (Dict[str, np.ndarray]): Dictionary of
+        running metrics for the imagined and reconstructed plans.
+
+        nan_value (int, optional): Value to use for NaN values. Defaults to -1.
+
+    Returns:
+        Dict[str, float]: Dictionary of mean and max metrics.
+    """
+    mean_metrics = {}
+    var_metrics = {}
+    std_metrics = {}
+    min_metrics = {}
+    max_metrics = {}
+
+    for key in running_translation_eval_metrics.keys():
+        mean_metrics[f"mean_{key}"] = running_translation_eval_metrics[key][
+            running_translation_eval_metrics[key] != nan_value
+        ].mean()
+        var_metrics[f"var_{key}"] = running_translation_eval_metrics[key][
+            running_translation_eval_metrics[key] != nan_value
+        ].var()
+        std_metrics[f"std_{key}"] = running_translation_eval_metrics[key][
+            running_translation_eval_metrics[key] != nan_value
+        ].std()
+        min_metrics[f"min_{key}"] = running_translation_eval_metrics[key][
+            running_translation_eval_metrics[key] != nan_value
+        ].min()
+        max_metrics[f"max_{key}"] = running_translation_eval_metrics[key][
+            running_translation_eval_metrics[key] != nan_value
+        ].max()
+
+    return {**mean_metrics, **var_metrics, **std_metrics, **min_metrics, **max_metrics}
+
+
 @torch.no_grad()
 def evaluate_rollouts(
     agent,
