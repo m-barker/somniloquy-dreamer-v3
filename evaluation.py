@@ -1116,6 +1116,83 @@ def save_decoded_plan_plot(
     plt.close(reconstruction_plot)
 
 
+def get_eval_summary_string(
+    imagined_metrics: Dict[str, float],
+    reconstructed_metrics: Dict[str, float],
+    training_step: int,
+) -> str:
+    """Generates a string summarising this epoch's evaluation
+    results.
+
+    Args:
+        imagined_metrics (Dict[str, float]): Evaluation metrics
+        for the imagined latent plans
+
+        reconstructed_metrics (Dict[str, float]): Evaluation
+        metrics for the reconstructed latent plans.
+
+        training_step (int): Current global training step.
+
+    Returns:
+        str: String summarising the evaluation results.
+    """
+
+    summary_string = f"Evaluation results at step {training_step}:\n"
+    summary_string += "-" * 50 + "\n"
+
+    summary_string += "Imagined Plan Metrics with Stopwords:\n"
+    summary_string += "-" * 50 + "\n"
+    summary_string += (
+        f"\t  Mean Imagined BLEU: {imagined_metrics['mean_imagined_bleu_score']:.2f}\n"
+    )
+    summary_string += (
+        f"\t  Mean Imagined METEOR: {imagined_metrics['mean_imagined_meteor']:.2f}\n"
+    )
+    summary_string += f"\t  Mean Imagined ROUGE 1 F: {imagined_metrics['mean_imagined_rouge1_fmeasure']:.2f}\n"
+    summary_string += (
+        f"\t  Mean Imagined WER: {imagined_metrics['mean_imagined_wer']:.2f}\n"
+    )
+    summary_string += (
+        f"\t  Mean Imagined TER: {imagined_metrics['mean_imagined_ter']:.2f}\n"
+    )
+    summary_string += (
+        f"\t  Mean Imagined chrF++: {imagined_metrics['mean_imagined_chrf']:.2f}\n"
+    )
+    summary_string += "-" * 50 + "\n"
+
+    summary_string += "Reconstructed Plan Metrics with Stopwords:\n"
+    summary_string += "-" * 50 + "\n"
+    summary_string += f"\t  Mean Reconstructed BLEU: {reconstructed_metrics['mean_reconstructed_bleu_score']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed METEOR: {reconstructed_metrics['mean_reconstructed_meteor']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed ROUGE 1 F: {reconstructed_metrics['mean_reconstructed_rouge1_fmeasure']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed WER: {reconstructed_metrics['mean_reconstructed_wer']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed TER: {reconstructed_metrics['mean_reconstructed_ter']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed chrF++: {reconstructed_metrics['mean_reconstructed_chrf']:.2f}\n"
+    summary_string += "-" * 50 + "\n"
+
+    summary_string += "Imagined Plan Metrics without Stopwords:\n"
+    summary_string += "-" * 50 + "\n"
+    summary_string += f"\t  Mean Imagined BLEU: {imagined_metrics['mean_imagined_bleu_score_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Imagined METEOR: {imagined_metrics['mean_imagined_meteor_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Imagined ROUGE 1 F: {imagined_metrics['mean_imagined_rouge1_fmeasure_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Imagined WER: {imagined_metrics['mean_imagined_wer_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Imagined TER: {imagined_metrics['mean_imagined_ter_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Imagined chrF++: {imagined_metrics['mean_imagined_chrf_no_stopwords']:.2f}\n"
+    summary_string += "-" * 50 + "\n"
+
+    summary_string += "Reconstructed Plan Metrics without Stopwords:\n"
+    summary_string += "-" * 50 + "\n"
+    summary_string += f"\t  Mean Reconstructed BLEU: {reconstructed_metrics['mean_reconstructed_bleu_score_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed METEOR: {reconstructed_metrics['mean_reconstructed_meteor_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed ROUGE 1 F: {reconstructed_metrics['mean_reconstructed_rouge1_fmeasure_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed WER: {reconstructed_metrics['mean_reconstructed_wer_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed TER: {reconstructed_metrics['mean_reconstructed_ter_no_stopwords']:.2f}\n"
+    summary_string += f"\t  Mean Reconstructed chrF++: {reconstructed_metrics['mean_reconstructed_chrf_no_stopwords']:.2f}\n"
+    summary_string += "-" * 50 + "\n"
+
+    return summary_string
+
+
 @torch.no_grad()
 def evaluate_rollouts(
     agent,
@@ -1274,6 +1351,13 @@ def evaluate_rollouts(
         }
         imagined_metrics = compute_evaluation_statistics(imagined_metrics)
         reconstructed_metrics = compute_evaluation_statistics(reconstructed_metrics)
+
+        if config.log_translation_eval:
+            summary_string = get_eval_summary_string(
+                imagined_metrics, reconstructed_metrics, logger.step
+            )
+            summary_string += f"Mean eval episode return: {np.mean(episode_rewards)}"
+            print(summary_string)
 
         wandb_log = {
             **imagined_metrics,

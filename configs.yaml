@@ -5,6 +5,7 @@ defaults:
   offline_traindir: ""
   offline_evaldir: ""
   seed: 0
+  log_translation_eval: True
   deterministic_run: False
   steps: 1e6
   parallel: False
@@ -22,11 +23,11 @@ defaults:
   eval_trajectory_length: 15
   eval_n_consecutive_trajectories: 10
   token_sampling_method: "nucleus"
-  use_stopwords: false
+  use_stopwords: False
   ignore_list: []
   no_convert_list: []
   narrator: { narration_key: [] }
-  conditional_actions: false
+  conditional_actions: False
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
 
