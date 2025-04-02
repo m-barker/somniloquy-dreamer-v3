@@ -1,3 +1,5 @@
+import numpy as np
+
 import evaluation
 
 
@@ -143,3 +145,138 @@ def test_meteor_score():
 
     meteor_score = evaluation.compute_meteor_score(predicted_str, target_str)
     assert meteor_score == 1.0, f"Expected METEOR score of 1.0, got {meteor_score}"
+
+
+def test_update_running_metrics():
+    """Tests the function that is used to update the dictionary storing
+    the translation evaluation metrics for all evaluation episodes
+    and plan translations
+    """
+
+    mock_imagined_metrics = {
+        "bleu_score": 0.0,
+        "bleu_score_no_stopwords": 0.0,
+        "wer": 0.0,
+        "wer_no_stopwords": 0.0,
+        "ter": 0.0,
+        "ter_no_stopwords": 0.0,
+        "chrf": 0.0,
+        "chrf_no_stopwords": 0.0,
+        "meteor": 0.0,
+        "meteor_no_stopwords": 0.0,
+        "rouge1_fmeasure": 0.0,
+        "rouge1_precision": 0.0,
+        "rouge1_recall": 0.0,
+        "rouge2_fmeasure": 0.0,
+        "rouge2_precision": 0.0,
+        "rouge2_recall": 0.0,
+        "rougeL_fmeasure": 0.0,
+        "rougeL_precision": 0.0,
+        "rougeL_recall": 0.0,
+        "rougeLsum_fmeasure": 0.0,
+        "rougeLsum_precision": 0.0,
+        "rougeLsum_recall": 0.0,
+        "rouge1_fmeasure_no_stopwords": 0.0,
+        "rouge1_precision_no_stopwords": 0.0,
+        "rouge1_recall_no_stopwords": 0.0,
+        "rouge2_fmeasure_no_stopwords": 0.0,
+        "rouge2_precision_no_stopwords": 0.0,
+        "rouge2_recall_no_stopwords": 0.0,
+        "rougeL_fmeasure_no_stopwords": 0.0,
+        "rougeL_precision_no_stopwords": 0.0,
+        "rougeL_recall_no_stopwords": 0.0,
+        "rougeLsum_fmeasure_no_stopwords": 0.0,
+        "rougeLsum_precision_no_stopwords": 0.0,
+        "rougeLsum_recall_no_stopwords": 0.0,
+    }
+
+    mock_reconstruction_metrics = {
+        "bleu_score": 0.0,
+        "bleu_score_no_stopwords": 0.0,
+        "wer": 0.0,
+        "wer_no_stopwords": 0.0,
+        "ter": 0.0,
+        "ter_no_stopwords": 0.0,
+        "chrf": 0.0,
+        "chrf_no_stopwords": 0.0,
+        "meteor": 0.0,
+        "meteor_no_stopwords": 0.0,
+        "rouge1_fmeasure": 0.0,
+        "rouge1_precision": 0.0,
+        "rouge1_recall": 0.0,
+        "rouge2_fmeasure": 0.0,
+        "rouge2_precision": 0.0,
+        "rouge2_recall": 0.0,
+        "rougeL_fmeasure": 0.0,
+        "rougeL_precision": 0.0,
+        "rougeL_recall": 0.0,
+        "rougeLsum_fmeasure": 0.0,
+        "rougeLsum_precision": 0.0,
+        "rougeLsum_recall": 0.0,
+        "rouge1_fmeasure_no_stopwords": 0.0,
+        "rouge1_precision_no_stopwords": 0.0,
+        "rouge1_recall_no_stopwords": 0.0,
+        "rouge2_fmeasure_no_stopwords": 0.0,
+        "rouge2_precision_no_stopwords": 0.0,
+        "rouge2_recall_no_stopwords": 0.0,
+        "rougeL_fmeasure_no_stopwords": 0.0,
+        "rougeL_precision_no_stopwords": 0.0,
+        "rougeL_recall_no_stopwords": 0.0,
+        "rougeLsum_fmeasure_no_stopwords": 0.0,
+        "rougeLsum_precision_no_stopwords": 0.0,
+        "rougeLsum_recall_no_stopwords": 0.0,
+    }
+
+    running_eval_metrics = {}
+    evaluation.update_running_metrics(
+        mock_imagined_metrics,
+        mock_reconstruction_metrics,
+        running_eval_metrics,
+        episode_number=0,
+        total_episodes=10,
+        max_plans_per_episode=20,
+        current_plan_index=0,
+    )
+
+    for k, v in running_eval_metrics.items():
+        assert v.shape == (10, 20), f"Expected shape of (10, 20), got {v.shape}"
+        assert v[0, 0] == 0.0, f"Expected value of 0.0, got {v[0, 0]}"
+        # Check all other values are set to -1.0.
+        assert np.all(
+            np.delete(v, (0, 0)) == -1.0
+        ), f"Expected all values to be -1.0, got {np.delete(v, (0, 0))}"
+
+    for k, v in mock_imagined_metrics.items():
+        mock_imagined_metrics[k] = 1.0
+    for k, v in mock_reconstruction_metrics.items():
+        mock_reconstruction_metrics[k] = 1.0
+    evaluation.update_running_metrics(
+        mock_imagined_metrics,
+        mock_reconstruction_metrics,
+        running_eval_metrics,
+        episode_number=0,
+        total_episodes=10,
+        max_plans_per_episode=20,
+        current_plan_index=1,
+    )
+
+    for k, v in running_eval_metrics.items():
+        assert v[0, 1] == 1.0, f"Expected value of 1.0, got {v[0, 1]}"
+
+    for k, v in mock_imagined_metrics.items():
+        mock_imagined_metrics[k] = 0.5
+    for k, v in mock_reconstruction_metrics.items():
+        mock_reconstruction_metrics[k] = 0.5
+
+    evaluation.update_running_metrics(
+        mock_imagined_metrics,
+        mock_reconstruction_metrics,
+        running_eval_metrics,
+        episode_number=5,
+        total_episodes=10,
+        max_plans_per_episode=20,
+        current_plan_index=5,
+    )
+
+    for k, v in running_eval_metrics.items():
+        assert v[5, 5] == 0.5, f"Expected value of 1.0, got {v[0, 1]}"

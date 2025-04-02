@@ -488,264 +488,6 @@ def get_narration_baseline_str(task_name: str) -> str:
         raise ValueError(f"Unhandled task name: {task_name}")
 
 
-@torch.no_grad()
-def evaluate_rollouts(
-    agent,
-    imagined_state_samples: List[List[torch.Tensor]],
-    imagined_action_samples: List[List[torch.Tensor]],
-    posterior_state_samples: List[List[torch.Tensor]],
-    observation_samples: List[List[Dict[str, Any]]],
-    logger,
-    trajectory_length: int = 16,
-    wandb_run=None,
-    save_plots: bool = True,
-):
-    """Evalues a set of sampled rollouts.
-
-    Args:
-        agent (Dreamer): _description_
-        imagined_state_samples (List[List[torch.Tensor]]): _description_
-        imagined_action_samples (List[List[torch.Tensor]]): _description_
-        posterior_state_samples (List[List[torch.Tensor]]): _description_
-        observation_samples (List[List[Dict[str, Any]]]): _description_
-        trajectory_length (int, optional): _description_. Defaults to 16.
-
-    """
-    config = agent._config
-    bleu_scores = []
-    filtered_bleu_scores = []
-    posterior_bleu_scores = []
-    filtered_posterior_scores = []
-    sample_max_imagined_bleu_score = 0.0
-    sample_max_reconstructed_bleu_score = 0.0
-    sample_rewards = []
-    narrations_to_skip = [
-        "I will start near the fridge and I wont move much I won't interact with any objects",
-        "I will start near the stove and I wont move much I won't interact with any objects",
-        "I will start near the sink and I wont move much I won't interact with any objects",
-        "I will start near the far window and I wont move much I won't interact with any objects",
-        "I will start near the near window and I wont move much I won't interact with any objects",
-    ]
-
-    stop_words: List[str] = []
-    if config.use_stopwords:
-        stop_words = get_task_stopwords(config.task)
-        stop_word_bleu_scores = []
-        stop_word_posterior_bleu_scores = []
-
-    for sample in range(len(imagined_state_samples)):
-        sample_imagined_bleu_scores = []
-        sample_reconstructed_bleu_scores = []
-        sample_reward = 0.0
-
-        # print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
-        for index, trajectory in enumerate(
-            range(0, len(imagined_state_samples[sample]), trajectory_length)
-        ):
-            end_index = trajectory + trajectory_length
-            observations = observation_samples[sample][trajectory:end_index]
-            # Adjust the end index if the environment terminated early
-            for i, obs in enumerate(observations):
-                if obs["obs"] is None:
-                    end_index = i
-                    break
-            observations = observation_samples[sample][trajectory:end_index]
-            imagined_states = imagined_state_samples[sample][trajectory:end_index]
-            posterior_states = posterior_state_samples[sample][trajectory:end_index]
-
-            # Happens when environment (or imagined trajectory) terminates early.
-            if len(imagined_states) == 0 or len(observations) == 0:
-                continue
-            images = [obs["obs"]["image"] for obs in observations]
-            rewards = [obs["reward"] for obs in observations]
-            sample_reward += sum(rewards)
-
-            if config.enable_language:
-                narration_data = configure_narration_data(
-                    config.narrator["narration_key"], observations, config.task
-                )
-
-                planned_intent = generate_translation(agent, config, imagined_states)
-                reconstructed_intent = generate_translation(
-                    agent, config, posterior_states
-                )
-                actual_narration = generate_narration(
-                    agent, config.task, narration_data
-                )
-
-                try:
-                    bleu_score = bleu_metric_from_strings(
-                        planned_intent,
-                        actual_narration,
-                    )
-                # When too few tokens generated
-                except ValueError:
-                    bleu_score = torch.tensor(0.0)
-
-                try:
-                    posterior_bleu_score = bleu_metric_from_strings(
-                        reconstructed_intent,
-                        actual_narration,
-                    )
-                except ValueError:
-                    posterior_bleu_score = torch.tensor(0.0)
-
-                if actual_narration not in narrations_to_skip:
-                    filtered_bleu_scores.append(float(bleu_score))
-                    filtered_posterior_scores.append(float(posterior_bleu_score))
-
-                bleu_scores.append(float(bleu_score))  # convert tensor
-                posterior_bleu_scores.append(float(posterior_bleu_score))
-
-                if config.use_stopwords:
-                    try:
-                        stop_word_bleu_score = bleu_metric_from_strings(
-                            planned_intent,
-                            actual_narration,
-                            words_to_remove=stop_words,
-                        )
-                    except ValueError:
-                        stop_word_bleu_score = torch.tensor(0.0)
-
-                    try:
-                        stop_word_posterior_bleu_score = bleu_metric_from_strings(
-                            reconstructed_intent,
-                            actual_narration,
-                            words_to_remove=stop_words,
-                        )
-                    except ValueError:
-                        stop_word_posterior_bleu_score = torch.tensor(0.0)
-                    stop_word_bleu_scores.append(float(stop_word_bleu_score))
-                    stop_word_posterior_bleu_scores.append(
-                        float(stop_word_posterior_bleu_score)
-                    )
-
-                sample_imagined_bleu_scores.append(bleu_score)
-                sample_reconstructed_bleu_scores.append(posterior_bleu_score)
-
-                print(
-                    f"Sample {sample} steps {trajectory} : {end_index} Planned Intent: {planned_intent}"
-                )
-                print(
-                    f"Sample {sample} steps {trajectory} : {end_index} Reconstructed Intent: {reconstructed_intent}"
-                )
-                print(
-                    f"Sample {sample} steps {trajectory} : {end_index} Actual Narration: {actual_narration}"
-                )
-                print(
-                    f"Sample {sample} steps {trajectory} : {end_index} Imagined BLEU Score: {bleu_score}"
-                )
-                print(
-                    f"Sample {sample} steps {trajectory} : {end_index} Reconstructed BLEU Score: {posterior_bleu_score}"
-                )
-
-                if save_plots:
-                    imagined_images = [
-                        agent._wm.heads["decoder"](state)["image"].mode()
-                        for state in imagined_states
-                    ]
-                    reconstructed_images = [
-                        agent._wm.heads["decoder"](state)["image"].mode()
-                        for state in posterior_states
-                    ]
-                    imagined_images = convert_images_to_numpy(imagined_images)
-                    reconstructed_images = convert_images_to_numpy(reconstructed_images)
-
-                    reconstruction_plot: plt.Figure = (
-                        generate_image_reconstruction_plot(
-                            [imagined_images, reconstructed_images, images],
-                            3,
-                            len(images),
-                            start_time=trajectory,
-                        )
-                    )
-                    reconstruction_plot.suptitle(
-                        f"Sample {sample} steps {trajectory} : {end_index}"
-                    )
-                    title = (
-                        f"{logger.step}-sample-{sample}-steps-{trajectory}-{end_index}-reconstruction-plot"
-                        if logger is not None
-                        else f"sample-{sample}-reconstruction-plot"
-                    )
-                    reconstruction_plot.savefig(
-                        os.path.join(
-                            config.logdir,
-                            title,
-                        )
-                    )
-                    plt.close()
-
-        if config.enable_language:
-            sample_mean_reconstructed_bleu_score = np.array(
-                sample_reconstructed_bleu_scores
-            ).mean()
-            sample_mean_imagined_bleu_score = np.array(
-                sample_imagined_bleu_scores
-            ).mean()
-
-            if (
-                sample_mean_reconstructed_bleu_score
-                > sample_max_reconstructed_bleu_score
-            ):
-                sample_max_reconstructed_bleu_score = (
-                    sample_mean_reconstructed_bleu_score
-                )
-            if sample_mean_imagined_bleu_score > sample_max_imagined_bleu_score:
-                sample_max_imagined_bleu_score = sample_mean_imagined_bleu_score
-
-        sample_rewards.append(sample_reward)
-
-    if config.enable_language:
-        bleu_scores = np.array(bleu_scores)
-        posterior_bleu_scores = np.array(posterior_bleu_scores)
-        filtered_bleu_scores = np.array(filtered_bleu_scores)
-        filtered_posterior_scores = np.array(filtered_posterior_scores)
-        sample_rewards = np.array(sample_rewards)
-        mean_reward = sample_rewards.mean()
-
-        if len(bleu_scores) == 0:
-            mean_score = 0.0
-        else:
-            mean_score = bleu_scores.mean()
-        if len(filtered_bleu_scores) == 0:
-            filtered_mean_score = 0.0
-        else:
-            filtered_mean_score = filtered_bleu_scores.mean()
-        if len(posterior_bleu_scores) == 0:
-            mean_posterior_score = 0.0
-        else:
-            mean_posterior_score = posterior_bleu_scores.mean()
-        if len(filtered_posterior_scores) == 0:
-            filtered_mean_posterior_score = 0.0
-        else:
-            filtered_mean_posterior_score = filtered_posterior_scores.mean()
-
-        wandb_log = {
-            "mean_imagined_bleu_score": mean_score,
-            "mean_posterior_bleu_score": mean_posterior_score,
-            "max_imagined_bleu_score": sample_max_imagined_bleu_score,
-            "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
-            "filtered_mean_imagined_bleu_score": filtered_mean_score,
-            "filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
-            "mean_reward": mean_reward,
-        }
-
-        if config.use_stopwords:
-            stop_word_bleu_scores = np.array(stop_word_bleu_scores)
-            stop_word_posterior_bleu_scores = np.array(stop_word_posterior_bleu_scores)
-            mean_stop_word_score = stop_word_bleu_scores.mean()
-            mean_stop_word_posterior_score = stop_word_posterior_bleu_scores.mean()
-            wandb_log.update(
-                {
-                    "mean_stop_word_bleu_score": mean_stop_word_score,
-                    "mean_stop_word_posterior_bleu_score": mean_stop_word_posterior_score,
-                }
-            )
-
-        if wandb_run is not None:
-            wandb_run.log(wandb_log, step=logger.step)
-
-
 def perplexity_metric(
     predicted_logits: torch.Tensor, true_tokens: torch.Tensor, padding_index: int = 0
 ) -> torch.Tensor:
@@ -1080,7 +822,12 @@ def compute_translation_metrics(
     except ValueError:
         translation_metrics["bleu_score_no_stopwords"] = 0.0
     # ----- METEOR SCORE --------
-
+    translation_metrics["meteor"] = compute_meteor_score(
+        generated_translation, true_translation
+    )
+    translation_metrics["meteor_no_stopwords"] = compute_meteor_score(
+        generated_translation_no_stopwords, true_translation_no_stopwords
+    )
     # ----- ROUGE SCORE --------
     rouge_scores = compute_rouge_score(generated_translation, true_translation)
     rouge_scores_no_stopwords = compute_rouge_score(
@@ -1115,6 +862,199 @@ def compute_translation_metrics(
     )
 
     return translation_metrics
+
+
+def update_running_metrics(
+    imagined_translation_metrics: Dict[str, float],
+    reconstructed_translation_metrics: Dict[str, float],
+    running_translation_eval_metrics: Dict[str, np.ndarray],
+    episode_number: int,
+    total_episodes: int,
+    max_plans_per_episode: int,
+    current_plan_index: int,
+) -> None:
+    """Updates the running metrics each time a new plan is translated
+    during a given evaluation episode.
+
+    Args:
+        imagined_translation_metrics (Dict[str, float]): Dictionary of
+        plan translation metrics for the imagined (prior) latent states.
+
+        reconstructed_translation_metrics (Dict[str, float]): Dictionary of
+        plan translation metrics for the reconstructed (posterior) latent states.
+
+        running_translation_eval_metrics (Dict[str, np.ndarray]): Dictionary of
+        running metrics for the imagined and reconstructed plans.
+
+        episode_number (int): Current evalution episode number
+
+        total_episodes (int): Total number of evaluation episodes.
+
+        max_plans_per_episode (int): Maximum number of plans per episode.
+
+        current_plan_index (int): Current plan index in the episode.
+    """
+
+    # Add the metrics the first time a plan is evaluated
+    if len(running_translation_eval_metrics) == 0:
+        for key in imagined_translation_metrics.keys():
+            running_translation_eval_metrics[f"imagined_{key}"] = (
+                np.zeros((total_episodes, max_plans_per_episode)) - 1
+            )
+            running_translation_eval_metrics[f"reconstructed_{key}"] = (
+                np.zeros((total_episodes, max_plans_per_episode)) - 1
+            )
+
+    # Add the metrics to the running metrics
+    for key in imagined_translation_metrics.keys():
+        running_translation_eval_metrics[f"imagined_{key}"][
+            episode_number, current_plan_index
+        ] = imagined_translation_metrics[key]
+        running_translation_eval_metrics[f"reconstructed_{key}"][
+            episode_number, current_plan_index
+        ] = reconstructed_translation_metrics[key]
+
+
+@torch.no_grad()
+def evaluate_rollouts(
+    agent,
+    imagined_state_samples: List[List[torch.Tensor]],
+    imagined_action_samples: List[List[torch.Tensor]],
+    posterior_state_samples: List[List[torch.Tensor]],
+    observation_samples: List[List[Dict[str, Any]]],
+    logger,
+    trajectory_length: int = 16,
+    wandb_run=None,
+    save_plots: bool = True,
+):
+    """Evalues a set of sampled rollouts.
+
+    Args:
+        agent (Dreamer): _description_
+        imagined_state_samples (List[List[torch.Tensor]]): _description_
+        imagined_action_samples (List[List[torch.Tensor]]): _description_
+        posterior_state_samples (List[List[torch.Tensor]]): _description_
+        observation_samples (List[List[Dict[str, Any]]]): _description_
+        trajectory_length (int, optional): _description_. Defaults to 16.
+
+    """
+    config = agent._config
+    sample_rewards = []
+    running_translation_eval_metrics: Dict[str, np.ndarray] = {}
+
+    for episode in range(len(imagined_state_samples)):
+        sample_reward = 0.0
+
+        # print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
+        for index, trajectory in enumerate(
+            range(0, len(imagined_state_samples[episode]), trajectory_length)
+        ):
+            end_index = trajectory + trajectory_length
+            observations = observation_samples[episode][trajectory:end_index]
+            # Adjust the end index if the environment terminated early
+            for i, obs in enumerate(observations):
+                if obs["obs"] is None:
+                    end_index = i
+                    break
+            observations = observation_samples[episode][trajectory:end_index]
+            imagined_states = imagined_state_samples[episode][trajectory:end_index]
+            posterior_states = posterior_state_samples[episode][trajectory:end_index]
+
+            # Happens when environment (or imagined trajectory) terminates early.
+            if len(imagined_states) == 0 or len(observations) == 0:
+                continue
+            images = [obs["obs"]["image"] for obs in observations]
+            rewards = [obs["reward"] for obs in observations]
+            sample_reward += sum(rewards)
+
+            if config.enable_language:
+                narration_data = configure_narration_data(
+                    config.narrator["narration_key"], observations, config.task
+                )
+
+                imagined_plan_translation = generate_translation(
+                    agent, config, imagined_states
+                )
+                reconstructed_plan_translation = generate_translation(
+                    agent, config, posterior_states
+                )
+                actual_narration = generate_narration(
+                    agent, config.task, narration_data
+                )
+
+                imagined_translation_metrics = compute_translation_metrics(
+                    imagined_plan_translation,
+                    actual_narration,
+                    config.task,
+                )
+                reconstructed_translation_metrics = compute_translation_metrics(
+                    reconstructed_plan_translation,
+                    actual_narration,
+                    config.task,
+                )
+
+                update_running_metrics(
+                    imagined_translation_metrics,
+                    reconstructed_translation_metrics,
+                    running_translation_eval_metrics,
+                    episode,
+                    config.n_eval_samples,
+                    config.eval_n_consecutive_trajectories,
+                    index,
+                )
+
+                if save_plots:
+                    imagined_images = [
+                        agent._wm.heads["decoder"](state)["image"].mode()
+                        for state in imagined_states
+                    ]
+                    reconstructed_images = [
+                        agent._wm.heads["decoder"](state)["image"].mode()
+                        for state in posterior_states
+                    ]
+                    imagined_images = convert_images_to_numpy(imagined_images)
+                    reconstructed_images = convert_images_to_numpy(reconstructed_images)
+
+                    reconstruction_plot: plt.Figure = (
+                        generate_image_reconstruction_plot(
+                            [imagined_images, reconstructed_images, images],
+                            3,
+                            len(images),
+                            start_time=trajectory,
+                        )
+                    )
+                    reconstruction_plot.suptitle(
+                        f"Episode {episode} steps {trajectory} : {end_index}"
+                    )
+                    title = (
+                        f"{logger.step}-episode-{episode}-steps-{trajectory}-{end_index}-reconstruction-plot"
+                        if logger is not None
+                        else f"episode-{episode}-reconstruction-plot"
+                    )
+                    reconstruction_plot.savefig(
+                        os.path.join(
+                            config.logdir,
+                            title,
+                        )
+                    )
+                    plt.close()
+
+        sample_rewards.append(sample_reward)
+
+    if config.enable_language:
+
+        wandb_log = {
+            "mean_imagined_bleu_score": mean_score,
+            "mean_posterior_bleu_score": mean_posterior_score,
+            "max_imagined_bleu_score": sample_max_imagined_bleu_score,
+            "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
+            "filtered_mean_imagined_bleu_score": filtered_mean_score,
+            "filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
+            "mean_reward": mean_reward,
+        }
+
+        if wandb_run is not None:
+            wandb_run.log(wandb_log, step=logger.step)
 
 
 def get_action_translation_dict(n_actions: int):
