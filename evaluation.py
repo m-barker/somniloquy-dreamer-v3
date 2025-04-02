@@ -980,11 +980,12 @@ def evaluate_rollouts(
 
     """
     config = agent._config
-    sample_rewards = []
+
+    episode_rewards: List[float] = []
     running_translation_eval_metrics: Dict[str, np.ndarray] = {}
 
     for episode in range(len(imagined_state_samples)):
-        sample_reward = 0.0
+        episode_reward = 0.0
 
         # print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
         for index, trajectory in enumerate(
@@ -1006,7 +1007,7 @@ def evaluate_rollouts(
                 continue
             images = [obs["obs"]["image"] for obs in observations]
             rewards = [obs["reward"] for obs in observations]
-            sample_reward += sum(rewards)
+            episode_reward += sum(rewards)
 
             if config.enable_language:
                 narration_data = configure_narration_data(
@@ -1080,18 +1081,24 @@ def evaluate_rollouts(
                     )
                     plt.close()
 
-        sample_rewards.append(sample_reward)
+        episode_rewards.append(episode_reward)
 
     if config.enable_language:
+        imagined_metrics = {
+            k: v for k, v in running_translation_eval_metrics.items() if "imagined" in k
+        }
+        reconstructed_metrics = {
+            k: v
+            for k, v in running_translation_eval_metrics.items()
+            if "reconstructed" in k
+        }
+        imagined_metrics = compute_evaluation_statistics(imagined_metrics)
+        reconstructed_metrics = compute_evaluation_statistics(reconstructed_metrics)
 
         wandb_log = {
-            "mean_imagined_bleu_score": mean_score,
-            "mean_posterior_bleu_score": mean_posterior_score,
-            "max_imagined_bleu_score": sample_max_imagined_bleu_score,
-            "max_posterior_bleu_score": sample_max_reconstructed_bleu_score,
-            "filtered_mean_imagined_bleu_score": filtered_mean_score,
-            "filtered_mean_posterior_bleu_score": filtered_mean_posterior_score,
-            "mean_reward": mean_reward,
+            **imagined_metrics,
+            **reconstructed_metrics,
+            "mean_episode_reward": np.mean(episode_rewards),
         }
 
         if wandb_run is not None:
