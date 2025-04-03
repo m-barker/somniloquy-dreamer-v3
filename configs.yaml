@@ -123,17 +123,17 @@ defaults:
   action_prediction_head:
     { layers: 1, dist: "onehot", loss_scale: 1.0, outscale: 0.0 }
   cont_head: { layers: 1, loss_scale: 1.0, outscale: 1.0 }
-  translator_head: 
-  {
-    attention_heads: 2,
-    encoder_blocks: 2,
-    decoder_blocks: 2,
-    dropout: 0.1,
-    use_bottleneck: True,
-    token_embed_size: 256,
-    out_head_dim: 256,
-    activation: "relu"
-  }
+  translator_head:
+    {
+      attention_heads: 2,
+      encoder_blocks: 2,
+      decoder_blocks: 2,
+      dropout: 0.1,
+      use_bottleneck: True,
+      token_embed_size: 256,
+      out_head_dim: 256,
+      activation: "relu",
+    }
   dyn_scale: 1.0
   rep_scale: 0.1
   kl_free: 1.0

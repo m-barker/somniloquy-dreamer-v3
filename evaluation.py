@@ -1023,6 +1023,9 @@ def save_translations_json(
     )
     os.makedirs(output_folder, exist_ok=True)
 
+    actual_narration = remove_punctuation(actual_narration)
+    actual_narration = actual_narration.lower()
+
     stop_words = get_task_stopwords(task_name)
     imagined_no_stopwords = [
         word for word in imagined_plan_translation.split() if word not in stop_words

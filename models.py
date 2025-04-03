@@ -107,6 +107,7 @@ class WorldModel(nn.Module):
                 dropout=config.translator_head["dropout"],
                 activation=config.translator_head["activation"],
                 target_vocab_size=len(self.vocab),
+                bottleneck_input_size=feat_size,
             )
             self._narration_max_enc_seq = config.enc_max_length
             self._narration_max_dec_seq = config.dec_max_length
