@@ -977,6 +977,7 @@ def save_translations_json(
     plan_end_t: int,
     logdir: str,
     current_training_step: int,
+    task_name: str,
 ) -> None:
     """Saves a JSON file in the provided logdir containing the imagined
     latent plan translation, reconstructed latent translation, and ground
@@ -1008,6 +1009,9 @@ def save_translations_json(
         logdir (str): Directory to store the create JSON file.
 
         current_training_step (int): Current training step of the agent.
+
+        task_name (str): name of the task, used to get task specific
+        stopwords
     """
 
     output_folder = os.path.join(
@@ -1019,6 +1023,22 @@ def save_translations_json(
     )
     os.makedirs(output_folder, exist_ok=True)
 
+    stop_words = get_task_stopwords(task_name)
+    imagined_no_stopwords = [
+        word for word in imagined_plan_translation.split() if word not in stop_words
+    ]
+    imagined_no_stopwords = " ".join(imagined_no_stopwords)
+    reconstructed_no_stopwords = [
+        word
+        for word in reconstructed_plan_translation.split()
+        if word not in stop_words
+    ]
+    reconstructed_no_stopwords = " ".join(reconstructed_no_stopwords)
+    actual_no_stopwords = [
+        word for word in actual_narration.split() if word not in stop_words
+    ]
+    actual_no_stopwords = " ".join(actual_no_stopwords)
+
     output_file_path = os.path.join(
         output_folder,
         f"eval_episode_{episode_number}_plan_{plan_start_t}_{plan_end_t}.json",
@@ -1029,6 +1049,9 @@ def save_translations_json(
                 "imagined_plan_translation": imagined_plan_translation,
                 "reconstructed_plan_translation": reconstructed_plan_translation,
                 "actual_narration": actual_narration,
+                "imagined_plan_translation_no_stopwords": imagined_no_stopwords,
+                "reconstructed_plan_translation_no_stopwords": reconstructed_no_stopwords,
+                "actual_narration_no_stopwords": actual_no_stopwords,
                 "imagined_metrics": imagined_metrics,
                 "reconstructed_metrics": reconstructed_metrics,
             },
@@ -1327,6 +1350,7 @@ def evaluate_rollouts(
                         end_index,
                         config.logdir,
                         logger.step,
+                        config.task,
                     )
 
                 if save_plots:
