@@ -194,7 +194,7 @@ dmc_vision:
 
 crafter:
   task: crafter_reward
-  step: 1e6
+  steps: 1e7
   action_repeat: 1
   envs: 1
   eval_episode_num: 1
@@ -227,7 +227,7 @@ crafter-language:
 
 crafter-language-small:
   task: crafter_reward
-  step: 1e6
+  steps: 1e7
   action_repeat: 1
   envs: 1
   eval_episode_num: 1
@@ -254,7 +254,7 @@ crafter-language-small:
 
 crafter-reconstruction:
   task: crafter_reward
-  step: 1e6
+  steps: 1e7
   evaluate_reconstruction_narration: true
   action_repeat: 1
   envs: 1
@@ -276,7 +276,7 @@ crafter-reconstruction:
 
 crafter-reconstruction-small:
   task: crafter_reward
-  step: 1e6
+  steps: 1e7
   evaluate_reconstruction_narration: true
   action_repeat: 1
   envs: 1
