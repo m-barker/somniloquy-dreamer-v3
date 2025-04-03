@@ -104,31 +104,6 @@ class WorldModel(nn.Module):
             self._narration_max_enc_seq = config.enc_max_length
             self._narration_max_dec_seq = config.dec_max_length
 
-        if config.enable_language_to_action:
-            self.heads["language_to_action"] = networks.TransformerEncoderDecoder(
-                d_model=512,
-                target_vocab_size=config.num_actions + 3,  # +3 for BOS, EOS, PAD tokens
-                max_seq_length=config.enc_max_length,
-                embedding_layer=False,
-                src_token_embedding=True,
-                src_vocab_size=len(self.vocab),
-            )
-
-        if config.action_prediction:
-            stochastic_size = config.dyn_stoch * config.dyn_discrete
-            self.heads["action_prediction"] = networks.MLP(
-                stochastic_size * 2,  # prev and next stochastic state as input
-                config.num_actions,
-                config.action_prediction_head["layers"],
-                config.units,
-                config.act,
-                config.norm,
-                dist=config.action_prediction_head["dist"],
-                outscale=config.action_prediction_head["outscale"],
-                device=config.device,
-                name="action_prediction",
-            )
-
         for name in config.grad_heads:
             assert name in self.heads, name
         self._model_opt = tools.Optimizer(
@@ -141,10 +116,17 @@ class WorldModel(nn.Module):
             opt=config.opt,
             use_amp=self._use_amp,
         )
+        print(f"Latent state size: {feat_size}")
+        # print(
+        #     f"World model has {sum(param.numel() for param in self.parameters() if param.requires_grad)} variables."
+        # )
+        # From https://stackoverflow.com/questions/49201236/check-the-total-number-of-parameters-in-a-pytorch-model
         print(
-            f"World model has {sum(param.numel() for param in self.parameters())} variables."
+            f"World model has {sum(dict((p.data_ptr(), p.numel()) for p in self.parameters()).values())}"
         )
-
+        print(
+            f"RSSM has {sum(param.numel() for param in self.dynamics.parameters())} variables."
+        )
         print(
             f"Language Component has {sum(param.numel() for param in self.heads['language'].parameters())} variables."
         )

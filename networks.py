@@ -97,6 +97,10 @@ class RSSM(nn.Module):
                 requires_grad=True,
             )
 
+        print(
+            f"Number of GRU Parameters: {sum(p.numel() for p in self._cell.parameters())}"
+        )
+
     def initial(self, batch_size):
         deter = torch.zeros(batch_size, self._deter).to(self._device)
         if self._discrete:
