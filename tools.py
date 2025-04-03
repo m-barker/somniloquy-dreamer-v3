@@ -86,7 +86,7 @@ class Timer:
 
 
 class Logger:
-    def __init__(self, logdir, step):
+    def __init__(self, logdir, step, wandb_run=None):
         self._logdir = logdir
         self._writer = SummaryWriter(log_dir=str(logdir), max_queue=1000)
         self._last_step = None
@@ -95,6 +95,7 @@ class Logger:
         self._images = {}
         self._videos = {}
         self.step = step
+        self._wandb_run = wandb_run
 
     def scalar(self, name, value):
         self._scalars[name] = float(value)
@@ -114,11 +115,14 @@ class Logger:
         print(f"[{step}]", " / ".join(f"{k} {v:.1f}" for k, v in scalars))
         with (self._logdir / "metrics.jsonl").open("a") as f:
             f.write(json.dumps({"step": step, **dict(scalars)}) + "\n")
+        wandb_logs = {}
         for name, value in scalars:
             if "/" not in name:
                 self._writer.add_scalar("scalars/" + name, value, step)
+                wandb_logs[f"scalars/{name}"] = value
             else:
                 self._writer.add_scalar(name, value, step)
+                wandb_logs[name] = value
         for name, value in self._images.items():
             self._writer.add_image(name, value, step)
         for name, value in self._videos.items():
@@ -128,6 +132,8 @@ class Logger:
             B, T, H, W, C = value.shape
             value = value.transpose(1, 4, 2, 0, 3).reshape((1, T, C, H, B * W))
             self._writer.add_video(name, value, step, 16)
+        if self._wandb_run is not None:
+            self._wandb_run.log(wandb_logs, step=step)
 
         self._writer.flush()
         self._scalars = {}
@@ -1488,7 +1494,6 @@ def ctc_loss(
     print(f"Target lengths shape: {target_seq_lengths.shape}")
 
     return loss(input_seq_logits, target_seq, input_seq_lengths, target_seq_lengths)
-
 
 
 def remove_punctuation(text: str) -> str:

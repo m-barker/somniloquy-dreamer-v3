@@ -463,12 +463,12 @@ def main(config):
     config, logdir = setup(config)
     step = count_steps(config.traindir)
     # step in logger is environmental step
-    logger = tools.Logger(logdir, config.action_repeat * step)
     run = wandb.init(
         project="somniloquy",
         notes="language-metrics-test",
         config=config,
     )
+    logger = tools.Logger(logdir, config.action_repeat * step, wandb_run=run)
 
     print("Create envs.")
     train_envs, eval_envs = create_environments(config)
