@@ -208,11 +208,11 @@ crafter:
 
 crafter-language:
   task: crafter_reward
-  step: 1e6
+  step: 1e7
   action_repeat: 1
   envs: 1
   eval_episode_num: 1
-  eval_every: 500
+  eval_every: 5000
   train_ratio: 512
   video_pred_log: true
   log_every: 500
