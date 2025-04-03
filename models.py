@@ -98,7 +98,14 @@ class WorldModel(nn.Module):
             self.narrator = narrator
             self.vocab = tools.load_json_vocab(config.vocab_path)
             self.heads["language"] = networks.TransformerEncoderDecoder(
-                d_model=feat_size,
+                config.translator_head["token_embed_size"],
+                n_head=config.translator_head["attention_heads"],
+                num_encoder_layers=config.translator_head["encoder_blocks"],
+                num_decoder_layers=config.translator_head["decoder_blocks"],
+                encoder_bottleneck=config.translator_head["use_bottleneck"],
+                dim_feedforward=config.translator_head["out_head_dim"],
+                dropout=config.translator_head["dropout"],
+                activation=config.translator_head["activation"],
                 target_vocab_size=len(self.vocab),
             )
             self._narration_max_enc_seq = config.enc_max_length

@@ -888,11 +888,11 @@ class TransformerEncoderDecoder(nn.Module):
         num_encoder_layers: int = 2,
         num_decoder_layers: int = 2,
         dim_feedforward: int = 256,
-        dropout: float = 0.2,
+        dropout: float = 0.1,
         activation: str = "relu",
         target_vocab_size: int = 22,
-        embedding_layer: bool = True,
-        embed_size: int = 256,
+        encoder_bottleneck: bool = True,
+        bottleneck_input_size: int = 1024,
         bos_token: int = 1,
         eos_token: int = 2,
         padding_token: int = 0,
@@ -902,7 +902,8 @@ class TransformerEncoderDecoder(nn.Module):
         """Transformer encoder-decoder model used for translation.
 
         Args:
-            d_model (int): dimensionality of the embedded tokens.
+            d_model (int): dimensionality of the embedded tokens, for both the encoder
+            and the decoder.
 
             n_head (int): Number of heads for the multi-head attention. Defaults to 2.
 
@@ -912,17 +913,17 @@ class TransformerEncoderDecoder(nn.Module):
 
             dim_feedforward (int, optional): dimension of the feed-forward network. Defaults to 256.
 
-            dropout (float, optional): frequency of dropout. Defaults to 0.2.
+            dropout (float, optional): frequency of dropout. Defaults to 0.1.
 
             activation (str, optional): activation function of encoder/decoder intermediate layer.
                                         Defaults to "relu".
 
             target_vocab_size (int, optional): number of tokens in the target vocabulary. Defaults to 22.
 
-            embedding_layer (bool, optional): whether to use an embedding layer to embed the src input
-            to a vector space. Defaults to True.
+            encoder_bottleneck (bool, optional): whether to use an linear layer to embed the src input
+            to a compressed space. Defaults to True.
 
-            embed_size (int, optional): size of the embedding layer. Defaults to 512.
+            bottleneck_input_size (int, optional): size of the input to the encoder bottleneck. Defaults to 1024.
 
             bos_token (int, optional): beginning of sentence token. Defaults to 1.
 
@@ -940,9 +941,9 @@ class TransformerEncoderDecoder(nn.Module):
 
         # Optionally add a fully connected layer to embed the encoder input
         # to a vector of length embed_size.
-        if embedding_layer:
-            self._initial_embed = nn.Linear(d_model, embed_size)
-            d_model = embed_size
+        if encoder_bottleneck:
+            self._initial_embed = nn.Linear(bottleneck_input_size, d_model)
+
         self.transformer = nn.Transformer(
             d_model=d_model,
             nhead=n_head,
@@ -967,6 +968,19 @@ class TransformerEncoderDecoder(nn.Module):
             ), "src_vocab_size must be provided if using src token embeddings."
             self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        print(f"Transformer Initialised with the following parameters:\n")
+        print(f"  d_model: {d_model}")
+        print(f"  n_head: {n_head}")
+        print(f"  num_encoder_layers: {num_encoder_layers}")
+        print(f"  num_decoder_layers: {num_decoder_layers}")
+        print(f"  dim_feedforward: {dim_feedforward}")
+        print(f"  dropout: {dropout}")
+        print(f"  activation: {activation}")
+        print(f"  target_vocab_size: {target_vocab_size}")
+        print(f"  encoder_bottleneck: {encoder_bottleneck}")
+        print(f"  bottleneck_input_size: {bottleneck_input_size}")
+        print("-" * 80)
 
     def forward(
         self,
