@@ -51,8 +51,8 @@ defaults:
   action_prediction: false
   dyn_hidden: 768
   dyn_deter: 6144
-  dyn_stoch: 48
-  dyn_discrete: 32
+  dyn_stoch: 32
+  dyn_discrete: 48
   dyn_rec_depth: 1
   dyn_mean_act: "none"
   dyn_std_act: "sigmoid2"
@@ -212,7 +212,7 @@ crafter-language:
   action_repeat: 1
   envs: 1
   eval_episode_num: 1
-  eval_every: 5000
+  eval_every: 2000
   train_ratio: 512
   video_pred_log: true
   log_every: 500
