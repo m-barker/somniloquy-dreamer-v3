@@ -226,6 +226,37 @@ crafter-language:
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
 
+crafter-language-baseline:
+  task: crafter_reward
+  steps: 1e7
+  action_repeat: 1
+  envs: 1
+  eval_episode_num: 1
+  eval_every: 2000
+  train_ratio: 512
+  translation_baseline: true
+  translator_head:
+    {
+      attention_heads: 2,
+      encoder_blocks: 2,
+      decoder_blocks: 2,
+      dropout: 0.1,
+      use_bottleneck: True,
+      token_embed_size: 256,
+      out_head_dim: 256,
+      activation: "relu",
+    }
+  video_pred_log: true
+  log_every: 500
+  enable_language: true
+  enc_max_length: 16
+  dec_max_length: 150
+  vocab_path: vocab/crafter.json
+  narrator: { narration_key: ["semantic", "inventory", "achievements"] }
+  no_convert_list: ["semantic", "inventory", "achievements"]
+  actor: { dist: "onehot", std: "none" }
+  imag_gradient: "reinforce"
+
 crafter-language-small:
   task: crafter_reward
   steps: 1e7
