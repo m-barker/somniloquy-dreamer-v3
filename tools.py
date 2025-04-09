@@ -1686,7 +1686,10 @@ def batchify_translator_input(
     is_first_indices: torch.Tensor,
     seq_length: int,
     device: torch.device,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    actions: Optional[torch.Tensor] = None,
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+]:
     """Converts a latent state batch into a batch of latent state sequences that
     can be used as input into the transltor Transformer. This function prevents
     the crossing of episode boundaries across the latent sequences returned.
@@ -1707,6 +1710,9 @@ def batchify_translator_input(
 
         device (torch.device): Device to store the padding mask Tensor that is returned.
 
+        actions (torch.Tensor, optional): Actions taken in the environment. Defaults to None.
+        If provided, the function will return the batchified actions as well.
+
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: Latent state sequence of shape (new_batch, seq_length, latent_dim)
         and padding mask of shape (new_batch, seq_length).
@@ -1714,6 +1720,12 @@ def batchify_translator_input(
 
     latent_sequences: List[torch.Tensor] = []
     padding_masks: List[torch.Tensor] = []
+
+    if actions is not None:
+        # Actions contain the previous timesteps action
+        # so we need to shift the action sequence by one
+        actions = actions[:, 1:]
+        action_sequences: List[torch.Tensor] = []
 
     batch_size, batch_length, _ = latent_states.shape
 
@@ -1748,6 +1760,10 @@ def batchify_translator_input(
 
             latent_sequence = latent_states[batch_idx, start_timestep:end_timestep]
 
+            # Padding and is_first etc. are the same for actions
+            if actions is not None:
+                action_sequence = actions[batch_idx, start_timestep:end_timestep]
+
             # Padding mask is True if the timestep is a padding timestep.
             padding_mask = torch.zeros(seq_length, dtype=torch.bool).to(device)
             if len(latent_sequence) < seq_length:
@@ -1760,6 +1776,23 @@ def batchify_translator_input(
             latent_sequences.append(latent_sequence)
             padding_masks.append(padding_mask)
 
+            if actions is not None:
+                if len(action_sequence) < seq_length:
+                    action_padding = torch.zeros(
+                        seq_length - len(action_sequence), action_sequence.shape[-1]
+                    ).to(device)
+                    action_sequence = torch.cat(
+                        [action_sequence, action_padding], dim=0
+                    )
+                action_sequences.append(action_sequence)
+
             start_timestep = end_timestep
+
+    if actions is not None:
+        return (
+            torch.stack(latent_sequences),
+            torch.stack(padding_masks),
+            torch.stack(action_sequences),
+        )
 
     return torch.stack(latent_sequences), torch.stack(padding_masks)

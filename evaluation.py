@@ -280,6 +280,8 @@ def sample_rollouts(
             env=env,
         )
         imagined_state_samples.append(imagined_states)
+        # Insert action of zeros to the last timestep
+        imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
         imagined_action_samples.append(imagined_actions)
         posterior_state_samples.append(posterior_states)
         observations.insert(0, initial_obs)
@@ -304,6 +306,8 @@ def sample_rollouts(
                     )
                 )
                 imagined_state_samples[-1].extend(imagined_states)
+                # Insert action of zeros to the last timestep
+                imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
                 imagined_action_samples[-1].extend(imagined_actions)
                 posterior_state_samples[-1].extend(posterior_states)
                 # Last trajectory's obs is first obs in current trajectory.
@@ -440,8 +444,9 @@ def generate_translation(
     agent,
     config,
     latent_states: List[torch.Tensor],
+    actions: List[torch.Tensor],
 ) -> str:
-    """Returns a string containing the translated latent state plan._
+    """Returns a string containing the translated latent state plan.
 
     Args:
         agent: Trained World Model.
@@ -449,19 +454,42 @@ def generate_translation(
         latent_states (List[torch.Tensor]): List containing each
         latent state plan step.
 
+        actions (List[torch.Tensor]): List containing each action
+        taken in the plan. Used for the translation baseline.
+
     Returns:
         str: Latent state plan translation.
     """
 
     # (T, N, C) -> (N, T, C)
     latent_state_tensor = torch.cat(latent_states, dim=0).permute(1, 0, 2)
-    # our batch size is 1 so take first item in list
-    plan_translation = agent._wm.heads["language"].generate(
-        latent_state_tensor,
-        agent._wm.vocab,
-        config.dec_max_length,
-        sampling_method=config.token_sampling_method,
-    )[0]
+    action_tensor = torch.cat(actions, dim=0).unsqueeze(1).permute(1, 0, 2)
+
+    if config.translation_baseline:
+        reconstructed_images = (
+            agent._wm.heads["decoder"](latent_state_tensor)["image"]
+            .mode()
+            .detach()
+            .clone()
+        )
+        reconstructed_images = torch.clip(255 * reconstructed_images, 0, 255).to(
+            torch.uint8
+        )
+        plan_translation = agent._wm.heads["language"].generate(
+            reconstructed_images,
+            action_tensor,
+            agent._wm.vocab,
+            config.dec_max_length,
+            sampling_method=config.token_sampling_method,
+        )
+    else:
+        # our batch size is 1 so take first item in list
+        plan_translation = agent._wm.heads["language"].generate(
+            latent_state_tensor,
+            agent._wm.vocab,
+            config.dec_max_length,
+            sampling_method=config.token_sampling_method,
+        )[0]
     plan_translation = " ".join(
         [
             word
@@ -1297,7 +1325,10 @@ def evaluate_rollouts(
             observations = observation_samples[episode][trajectory:end_index]
             imagined_states = imagined_state_samples[episode][trajectory:end_index]
             posterior_states = posterior_state_samples[episode][trajectory:end_index]
-
+            actions = imagined_action_samples[episode][trajectory:end_index]
+            assert len(actions) == len(
+                imagined_states
+            ), "Actions and states must be the same length"
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
@@ -1311,10 +1342,16 @@ def evaluate_rollouts(
                 )
 
                 imagined_plan_translation = generate_translation(
-                    agent, config, imagined_states
+                    agent,
+                    config,
+                    imagined_states,
+                    actions,
                 )
                 reconstructed_plan_translation = generate_translation(
-                    agent, config, posterior_states
+                    agent,
+                    config,
+                    posterior_states,
+                    actions,
                 )
                 actual_narration = generate_narration(
                     agent, config.task, narration_data

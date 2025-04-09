@@ -97,18 +97,39 @@ class WorldModel(nn.Module):
             assert narrator is not None
             self.narrator = narrator
             self.vocab = tools.load_json_vocab(config.vocab_path)
-            self.heads["language"] = networks.TransformerEncoderDecoder(
-                config.translator_head["token_embed_size"],
-                n_head=config.translator_head["attention_heads"],
-                num_encoder_layers=config.translator_head["encoder_blocks"],
-                num_decoder_layers=config.translator_head["decoder_blocks"],
-                encoder_bottleneck=config.translator_head["use_bottleneck"],
-                dim_feedforward=config.translator_head["out_head_dim"],
-                dropout=config.translator_head["dropout"],
-                activation=config.translator_head["activation"],
-                target_vocab_size=len(self.vocab),
-                bottleneck_input_size=feat_size,
-            )
+            transformer_params = {
+                "d_model": config.translator_head["token_embed_size"],
+                "n_head": config.translator_head["attention_heads"],
+                "num_encoder_layers": config.translator_head["encoder_blocks"],
+                "num_decoder_layers": config.translator_head["decoder_blocks"],
+                "dim_feedforward": config.translator_head["out_head_dim"],
+                "encoder_bottleneck": config.translator_head["use_bottleneck"],
+                "dropout": config.translator_head["dropout"],
+                "activation": config.translator_head["activation"],
+                "target_vocab_size": len(self.vocab),
+                "bottleneck_input_size": feat_size,
+            }
+            if config.translation_baseline:
+                cnn_encoder_params = {
+                    "input_shape": (64, 64, 3),
+                    "depth": config.encoder["cnn_depth"],
+                    "act": config.encoder["act"],
+                    "norm": config.encoder["norm"],
+                    "kernel_size": config.encoder["kernel_size"],
+                    "minres": config.encoder["minres"],
+                }
+
+                self.heads["language"] = networks.BaselineTranslator(
+                    cnn_encoder_params,
+                    transformer_params,
+                    config.num_actions,
+                    config.device,
+                )
+
+            else:
+                self.heads["language"] = networks.TransformerEncoderDecoder(
+                    **transformer_params
+                )
             self._narration_max_enc_seq = config.enc_max_length
             self._narration_max_dec_seq = config.dec_max_length
 
@@ -218,6 +239,7 @@ class WorldModel(nn.Module):
         post: Dict[str, torch.Tensor],
         narration_data: Union[np.ndarray, Dict],
         language_grads: bool = True,
+        baseline: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Generates the language model predictions and ground truth narrations
 
@@ -234,6 +256,9 @@ class WorldModel(nn.Module):
 
             language_grads (bool, optional): Whether to enable gradients from translation
             loss to flow into the latent state representation learning. Defaults to True.
+
+            baseline (bool, optional): Whether to use the RGB Reconstruction baseline as
+            the language model. Defaults to False.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: predicted narrations tokens,
@@ -254,19 +279,43 @@ class WorldModel(nn.Module):
         feat = self.dynamics.get_feat(post)
         feat = feat if language_grads else feat.detach()
 
-        latent_sequences, padding_masks = tools.batchify_translator_input(
-            feat, data["is_first"], self._narration_max_enc_seq, self.device
-        )
+        if not baseline:
+            latent_sequences, padding_masks = tools.batchify_translator_input(
+                feat, data["is_first"], self._narration_max_enc_seq, self.device
+            )  # type: ignore
 
-        latent_sequences = (
-            latent_sequences if language_grads else latent_sequences.detach()
-        )
-        pred = self.heads["language"].forward(
-            latent_sequences,
-            narrations[:, :-1],
-            generate_mask=True,
-            src_mask=padding_masks,
-        )
+            latent_sequences = (
+                latent_sequences if language_grads else latent_sequences.detach()
+            )
+            pred = self.heads["language"].forward(
+                latent_sequences,
+                narrations[:, :-1],
+                generate_mask=True,
+                src_mask=padding_masks,
+            )
+        else:
+            latent_sequences, padding_masks, actions = tools.batchify_translator_input(
+                feat,
+                data["is_first"],
+                self._narration_max_enc_seq,
+                self.device,
+                data["action"],
+            )  # type: ignore
+
+            reconstructed_images = (
+                self.heads["decoder"](latent_sequences)["image"].mode().detach().clone()
+            )
+            reconstructed_images = torch.clip(255 * reconstructed_images, 0, 255).to(
+                torch.uint8
+            )
+
+            pred = self.heads["language"].forward(
+                reconstructed_images,
+                actions,
+                narrations[:, :-1],
+                generate_mask=True,
+                src_mask=padding_masks,
+            )
 
         return pred, narrations
 
@@ -496,6 +545,7 @@ class WorldModel(nn.Module):
                             post,
                             narration_data,
                             language_grads=self._config.language_grads,
+                            baseline=self._config.translation_baseline,
                         )
                     else:
                         grad_head = name in self._config.grad_heads
