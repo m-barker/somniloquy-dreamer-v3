@@ -678,6 +678,61 @@ ai2thor-language:
   eval_n_consecutive_trajectories: 1000
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
+ai2thor-language-small:
+  steps: 1e8
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 5000
+  log_every: 1000
+  train_ratio: 64
+  actor: { dist: "onehot", std: "none" }
+  imag_gradient: "reinforce"
+  narrator:
+    {
+      narration_key:
+        [
+          "open",
+          "close",
+          "pickup",
+          "put",
+          "slice",
+          "throw",
+          "toggle_off",
+          "toggle_on",
+          "break",
+          "drop",
+          "agent_position",
+        ],
+    }
+  no_convert_list:
+    [
+      "open",
+      "close",
+      "pickup",
+      "put",
+      "slice",
+      "throw",
+      "toggle_off",
+      "toggle_on",
+      "break",
+      "drop",
+      "agent_position",
+    ]
+  enable_language: true
+  vocab_path: vocab/ai2thor.json
+  dec_max_length: 200
+  enc_max_length: 16
+  video_pred_log: true
+  task: "ai2thor_pickup"
+  time_limit: 1000
+  dyn_hidden: 128
+  dyn_deter: 128
+  units: 128
+  n_eval_samples: 5
+  eval_trajectory_length: 15
+  eval_n_consecutive_trajectories: 1000
+
 ai2thor-reconstruction:
   steps: 1e8
   envs: 1

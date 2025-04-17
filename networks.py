@@ -1054,14 +1054,22 @@ class TransformerEncoderDecoder(nn.Module):
             tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(0)).to(
                 self.device
             )
-            # Convert to boolean mask, with False where 0.0 are
-            tgt_mask = tgt_mask != 0.0
 
         if tokens_to_append is not None:
             src = torch.cat([src, tokens_to_append.unsqueeze(0)], dim=0)
 
         if tokens_to_prepend is not None:
             src = torch.cat([tokens_to_prepend.unsqueeze(0), src], dim=0)
+
+        # Convert pad_masks to a float masks
+        if tgt_pad_mask is not None:
+            tgt_pad_mask = tgt_pad_mask.float().masked_fill(
+                tgt_pad_mask == 1, float("-inf")
+            )
+        if src_pad_mask is not None:
+            src_pad_mask = src_pad_mask.float().masked_fill(
+                src_pad_mask == 1, float("-inf")
+            )
 
         out = self.transformer(
             src,
