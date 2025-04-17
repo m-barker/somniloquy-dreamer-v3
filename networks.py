@@ -1054,6 +1054,8 @@ class TransformerEncoderDecoder(nn.Module):
             tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(0)).to(
                 self.device
             )
+            # Convert to boolean mask, with False where 0.0 are
+            tgt_mask = tgt_mask != 0.0
 
         if tokens_to_append is not None:
             src = torch.cat([src, tokens_to_append.unsqueeze(0)], dim=0)
