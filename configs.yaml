@@ -625,15 +625,14 @@ safegym:
   conditional_actions: false
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
-ai2thor:
+ai2thor-language:
   steps: 1e8
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 10000
-  dataset_size: 50000
+  eval_every: 5000
+  log_every: 1000
   train_ratio: 64
-  prefill: 2500
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
   narrator:
@@ -667,18 +666,16 @@ ai2thor:
       "drop",
       "agent_position",
     ]
-  enable_language: True
-  evaluate_reconstruction_narration: false
+  enable_language: true
   vocab_path: vocab/ai2thor.json
   dec_max_length: 200
   enc_max_length: 16
   video_pred_log: true
   task: "ai2thor_pickup"
   time_limit: 1000
-  conditional_actions: false
-  n_eval_samples: 3
+  n_eval_samples: 5
   eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 60
+  eval_n_consecutive_trajectories: 1000
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
 ai2thor-reconstruction:
