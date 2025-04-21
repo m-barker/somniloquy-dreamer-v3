@@ -9,5 +9,9 @@ if __name__ == "__main__":
     controller = ai2thor.controller.Controller(
         platform=ai2thor.platform.CloudRendering, scene="FloorPlan28"
     )
-    event = controller.step(action="RotateRight")
+    step_count = 0
+    while True:
+        event = controller.step(action="RotateRight")
+        step_count += 1
+        print(f"Step: {step_count}")
     pprint(event.metadata["agent"])
