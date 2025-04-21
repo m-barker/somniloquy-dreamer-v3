@@ -219,6 +219,7 @@ crafter-language:
   train_ratio: 512
   video_pred_log: true
   log_every: 500
+  n_translation_eval_episodes: 5
   enable_language: true
   enc_max_length: 16
   dec_max_length: 150
