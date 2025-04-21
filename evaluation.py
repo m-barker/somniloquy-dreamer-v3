@@ -219,9 +219,9 @@ def get_user_actions(env, trajectory_length: int, starting_obs) -> List[torch.Te
 def sample_rollouts(
     agent,
     env,
-    n_samples: int,
+    eval_episodes: int,
     trajectory_length: int = 15,
-    n_consecutive_trajectories: int = 1,
+    n_consecutive_plans: Optional[int] = None,
     user_actions: bool = False,
     user_env=None,
 ) -> Dict[str, Any]:
@@ -230,12 +230,20 @@ def sample_rollouts(
 
     Args:
         agent (Dreamer): Dreamer agent containing the world model and actor.
+
         env (Damy): Environment to sample rollouts from.
-        n_samples (int): Number of rollouts to sample.
+
+        eval_episodes (int): Number of episodes to evaluate.
+
         trajectory_length (int, optional): Length of the imagined trajectory. Defaults to 15.
-        n_consecutive_trajectories (int, optional): Number of consecutive trajectories to sample. Defaults to 1.
+
+        n_consecutive_plans (int, optional): Number of consecutive plans to make and translate per episode.
+        If None, keeps rolling out until the environment terminates, or terminates according to the world
+        model. Defaults to None.
+
         user_actions (bool, optional): Whether the actions the agent imagines taking is provided by the user or
         the learned policy. Defaults to False.
+
         user_env (optional): Environment used to allow the user to visualise their choice of actions, wihtout stepping
         in the agent's environment.
 
@@ -252,7 +260,7 @@ def sample_rollouts(
     imagined_action_samples: List[List[torch.Tensor]] = []
     posterior_state_samples: List[List[torch.Tensor]] = []
     observation_samples: List[List[Dict[str, Any]]] = []
-    for sample in range(n_samples):
+    for episode_num in range(eval_episodes):
         obs, info = env.reset()()
         initial_state = get_posterior_state(agent, obs, no_convert, ignore)
         initial_obs = {
@@ -286,33 +294,39 @@ def sample_rollouts(
         posterior_state_samples.append(posterior_states)
         observations.insert(0, initial_obs)
         observation_samples.append(observations)
-        if n_consecutive_trajectories > 1:
-            for traj in range(n_consecutive_trajectories - 1):
-                if imagined_done or env_done:
-                    continue
-                initial_state = posteriors[-1]
-                imagined_states, imagined_actions, imagined_done = imagine_trajectory(
-                    agent=agent,
-                    initial_state=initial_state,
-                    trajectory_length=trajectory_length,
-                )
-                posterior_states, observations, posteriors, env_done = (
-                    rollout_trajectory(
-                        agent=agent,
-                        initial_state=initial_state,
-                        trajectory_length=trajectory_length,
-                        actions=imagined_actions,
-                        env=env,
-                    )
-                )
-                imagined_state_samples[-1].extend(imagined_states)
-                # Insert action of zeros to the last timestep
-                imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
-                imagined_action_samples[-1].extend(imagined_actions)
-                posterior_state_samples[-1].extend(posterior_states)
-                # Last trajectory's obs is first obs in current trajectory.
-                observations.insert(0, observation_samples[-1][-1])
-                observation_samples[-1].extend(observations)
+
+        stop = False
+        plan_count = 0
+        while not stop:
+            if imagined_done or env_done:
+                stop = True
+                continue
+            initial_state = posteriors[-1]
+            imagined_states, imagined_actions, imagined_done = imagine_trajectory(
+                agent=agent,
+                initial_state=initial_state,
+                trajectory_length=trajectory_length,
+            )
+            posterior_states, observations, posteriors, env_done = rollout_trajectory(
+                agent=agent,
+                initial_state=initial_state,
+                trajectory_length=trajectory_length,
+                actions=imagined_actions,
+                env=env,
+            )
+            imagined_state_samples[-1].extend(imagined_states)
+            # Insert action of zeros to the last timestep
+            imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
+            imagined_action_samples[-1].extend(imagined_actions)
+            posterior_state_samples[-1].extend(posterior_states)
+            # Last trajectory's obs is first obs in current trajectory.
+            observations.insert(0, observation_samples[-1][-1])
+            observation_samples[-1].extend(observations)
+
+            plan_count += 1
+            if n_consecutive_plans is not None:
+                if plan_count >= n_consecutive_plans:
+                    stop = True
 
     return {
         "imagined_state_samples": imagined_state_samples,
@@ -444,7 +458,7 @@ def generate_translation(
     agent,
     config,
     latent_states: List[torch.Tensor],
-    actions: List[torch.Tensor],
+    actions: Optional[List[torch.Tensor]] = None,
 ) -> str:
     """Returns a string containing the translated latent state plan.
 
@@ -454,8 +468,8 @@ def generate_translation(
         latent_states (List[torch.Tensor]): List containing each
         latent state plan step.
 
-        actions (List[torch.Tensor]): List containing each action
-        taken in the plan. Used for the translation baseline.
+        actions (List[torch.Tensor], optional): List containing each action
+        taken in the plan. Used for the translation baseline. Defaults to None.
 
     Returns:
         str: Latent state plan translation.
@@ -463,9 +477,10 @@ def generate_translation(
 
     # (T, N, C) -> (N, T, C)
     latent_state_tensor = torch.cat(latent_states, dim=0).permute(1, 0, 2)
-    action_tensor = torch.cat(actions, dim=0).unsqueeze(1).permute(1, 0, 2)
 
     if config.translation_baseline:
+        assert actions is not None
+        action_tensor = torch.cat(actions, dim=0).unsqueeze(1).permute(1, 0, 2)
         reconstructed_images = (
             agent._wm.heads["decoder"](latent_state_tensor)["image"]
             .mode()
@@ -936,6 +951,7 @@ def update_running_metrics(
     # Add the metrics the first time a plan is evaluated
     if len(running_translation_eval_metrics) == 0:
         for key in imagined_translation_metrics.keys():
+            # We set NaN values to -1
             running_translation_eval_metrics[f"imagined_{key}"] = (
                 np.zeros((total_episodes, max_plans_per_episode)) - 1
             )
@@ -1306,10 +1322,20 @@ def evaluate_rollouts(
     config = agent._config
 
     episode_rewards: List[float] = []
+    num_episode_plans: List[int] = []
     running_translation_eval_metrics: Dict[str, np.ndarray] = {}
+
+    max_plans_per_episode = max(
+        [
+            len(imagined_state_samples[episode]) // trajectory_length
+            for episode in range(len(imagined_state_samples))
+        ]
+    )
+    print(f"Max plans per episode: {max_plans_per_episode}")
 
     for episode in range(len(imagined_state_samples)):
         episode_reward = 0.0
+        num_plans = 0
 
         # print(f"SAMPLE LENGTH: {len(imagined_state_samples[sample])}")
         for index, trajectory in enumerate(
@@ -1320,7 +1346,7 @@ def evaluate_rollouts(
             # Adjust the end index if the environment terminated early
             for i, obs in enumerate(observations):
                 if obs["obs"] is None:
-                    end_index = i
+                    end_index = trajectory + i
                     break
             observations = observation_samples[episode][trajectory:end_index]
             imagined_states = imagined_state_samples[episode][trajectory:end_index]
@@ -1373,8 +1399,8 @@ def evaluate_rollouts(
                     reconstructed_translation_metrics,
                     running_translation_eval_metrics,
                     episode,
-                    config.n_eval_samples,
-                    config.eval_n_consecutive_trajectories,
+                    config.n_translation_eval_episodes,
+                    max_plans_per_episode,
                     index,
                 )
 
@@ -1405,8 +1431,9 @@ def evaluate_rollouts(
                         config.logdir,
                         logger.step,
                     )
-
+            num_plans += 1
         episode_rewards.append(episode_reward)
+        num_episode_plans.append(num_plans)
 
     if config.enable_language:
         imagined_metrics = {
@@ -1431,6 +1458,7 @@ def evaluate_rollouts(
             **imagined_metrics,
             **reconstructed_metrics,
             "mean_episode_reward": np.mean(episode_rewards),
+            "mean_plans_per_episode": np.mean(num_episode_plans),
         }
 
         if wandb_run is not None:
@@ -2836,7 +2864,6 @@ if __name__ == "__main__":
         env,
         1,
         trajectory_length=config.eval_trajectory_length,
-        n_consecutive_trajectories=1,
         user_actions=True,
         user_env=user_env,
     )

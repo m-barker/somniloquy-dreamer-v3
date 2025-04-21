@@ -530,9 +530,13 @@ def main(config):
                 rollout_samples = sample_rollouts(
                     agent,
                     eval_envs[0],
-                    config.n_eval_samples,
+                    config.n_translation_eval_episodes,
                     trajectory_length=config.eval_trajectory_length,
-                    n_consecutive_trajectories=config.eval_n_consecutive_trajectories,
+                    n_consecutive_plans=(
+                        config.n_consecutive_plans
+                        if config.n_consecutive_plans > 0
+                        else None
+                    ),
                 )
                 evaluate_rollouts(
                     agent,

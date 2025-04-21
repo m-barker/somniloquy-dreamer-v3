@@ -19,9 +19,6 @@ defaults:
   debug: False
   video_pred_log: True
   checkpoint: null
-  n_eval_samples: 10
-  eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 10
   token_sampling_method: "nucleus"
   use_stopwords: False
   ignore_list: []
@@ -30,8 +27,13 @@ defaults:
   conditional_actions: False
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
+
+  # Translation Evaluation
   save_plots: True
   save_translations: True
+  n_translation_eval_episodes: 3
+  eval_trajectory_length: 15
+  n_consecutive_plans: -1 # -1 means whole episode
 
   # Environment
   task: "dmc_walker_walk"
@@ -673,9 +675,6 @@ ai2thor-language:
   video_pred_log: true
   task: "ai2thor_pickup"
   time_limit: 1000
-  n_eval_samples: 5
-  eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 1000
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
 ai2thor-language-small:
@@ -729,9 +728,6 @@ ai2thor-language-small:
   dyn_hidden: 128
   dyn_deter: 128
   units: 128
-  n_eval_samples: 5
-  eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 1000
 
 ai2thor-reconstruction:
   steps: 1e8
@@ -790,9 +786,6 @@ ai2thor-reconstruction:
   task: "ai2thor_pickup"
   time_limit: 1000
   conditional_actions: false
-  n_eval_samples: 3
-  eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 60
 
 ai2thor-reconstruction-small:
   steps: 1e8
@@ -864,9 +857,6 @@ ai2thor-reconstruction-small:
   task: "ai2thor_pickup"
   time_limit: 1000
   conditional_actions: false
-  n_eval_samples: 3
-  eval_trajectory_length: 15
-  eval_n_consecutive_trajectories: 1000
 
 debug:
   debug: True
