@@ -1,6 +1,7 @@
 import random
 import os
 import json
+import gc
 from typing import List, Tuple, Union, Dict, Any, Optional
 from copy import deepcopy
 
@@ -1166,11 +1167,11 @@ def save_decoded_plan_plot(
     )
 
     imagined_images = [
-        agent._wm.heads["decoder"](state)["image"].mode().detach().clone()
+        agent._wm.heads["decoder"](state)["image"].mode().detach().cpu().clone()
         for state in imagined_latent_states
     ]
     reconstructed_images = [
-        agent._wm.heads["decoder"](state)["image"].mode().detach().clone()
+        agent._wm.heads["decoder"](state)["image"].mode().detach().cpu().clone()
         for state in reconstructed_latent_states
     ]
     imagined_images = convert_images_to_numpy(imagined_images)
@@ -1187,6 +1188,12 @@ def save_decoded_plan_plot(
     )
     reconstruction_plot.savefig(output_file_path)
     plt.close(reconstruction_plot)
+
+    # Clean up
+    del imagined_images
+    del reconstructed_images
+    del reconstruction_plot
+    gc.collect()
 
 
 def get_eval_summary_string(
