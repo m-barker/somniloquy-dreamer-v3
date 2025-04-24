@@ -1,6 +1,6 @@
 from typing import Tuple, Optional
 
-import cv2  # type: ignore
+import cv2
 import gymnasium as gym
 import numpy as np
 
@@ -39,48 +39,24 @@ class MiniGrid:
 
     def _create_env(self, task_name: str) -> gym.Env:
         print(f"Creating MiniGrid environment for task: {task_name}")
+        render_mode = None
+        if self._human_render:
+            render_mode = "human"
         if task_name == "four_squares":
-            env = FourSquares()
-            if self._full_obs:
-                env = MiniGridFullObsWrapper(env)
-            else:
-                raise NotImplementedError("Partial observation not implemented yet.")
-            if self._actions == "needed":
-                # Forward, Turn left, Turn right
-                env.action_space = gym.spaces.Discrete(3)
-
+            env: gym.Env = FourSquares(render_mode=render_mode)
         elif task_name == "teleport5x5":
-            if self._human_render:
-                env = Teleport5by5()
-            else:
-                env = Teleport5by5()
-            if self._full_obs:
-                env = MiniGridFullObsWrapper(env)
-            else:
-                raise NotImplementedError("Partial observation not implemented yet.")
-            env.action_space = gym.spaces.Discrete(3)
-            if self._actions == "needed":
-                # Forward, Turn left, Turn right
-                env.action_space = gym.spaces.Discrete(3)
+            env = Teleport5by5(render_mode=render_mode)
         elif task_name == "teleport_complex":
-            if self._human_render:
-                env = TeleportComplex()
-            else:
-                env = TeleportComplex()
-            if self._full_obs:
-                env = MiniGridFullObsWrapper(env)
-            else:
-                raise NotImplementedError("Partial observation not implemented yet.")
-            env.action_space = gym.spaces.Discrete(3)
-            if self._actions == "needed":
-                # Forward, Turn left, Turn right
-                env.action_space = gym.spaces.Discrete(3)
+            env = TeleportComplex(render_mode=render_mode)
         else:
-            env = gym.make(task_name)
-            if self._full_obs:
-                env = MiniGridFullObsWrapper(env)
-            else:
-                raise NotImplementedError("Partial observation not implemented yet.")
+            raise NotImplementedError(f"Task {task_name} not implemented yet.")
+        if self._actions == "needed":
+            # Forward, Turn left, Turn right
+            env.action_space = gym.spaces.Discrete(3)
+        if self._full_obs:
+            env = MiniGridFullObsWrapper(env)
+        else:
+            raise NotImplementedError("Partial observation not implemented yet.")
         return env
 
     @property
@@ -134,7 +110,7 @@ class MiniGrid:
         )
 
     def reset(self, seed=None, **kwargs):
-        obs, info = self._env.reset()
+        obs, info = self._env.reset(seed=seed)
         self._done = False
         self._step = 0
         obs, _, _, info = self._obs(
@@ -177,10 +153,16 @@ class MiniGrid:
 
 
 if __name__ == "__main__":
-    from minigrid.manual_control import ManualControl
-
-    env = MiniGrid(task_name="teleport5x5", full_obs=True, human_render=True)._env
-
-    # enable manual control for testing
-    manual_control = ManualControl(env, seed=42)
-    manual_control.start()
+    env = MiniGrid(
+        task_name="teleport_complex", full_obs=True, human_render=True, max_length=16
+    )
+    obs, info = env.reset()
+    done = False
+    while not done:
+        action_arr = np.zeros((env.action_space.n,), dtype=np.int16)
+        action = input("Please enter an action: ")
+        action_arr[int(action)] = 1
+        obs, reward, done, info = env.step(action_arr)
+        print(f"Reward: {reward}")
+        print(f"Is terminal: {obs['is_terminal']}")
+        print(f"Is done: {done}")

@@ -820,7 +820,7 @@ class Teleport5by5(TeleportBaseEnv):
             # Set this to True for maximum speed
             see_through_walls=True,
             max_steps=max_steps,
-            render_mode="human",
+            render_mode=render_mode,
             **kwargs,
         )
 
@@ -888,7 +888,7 @@ class TeleportComplex(TeleportBaseEnv):
             # Set this to True for maximum speed
             see_through_walls=True,
             max_steps=max_steps,
-            # render_mode="human",
+            render_mode=render_mode,
             **kwargs,
         )
 
