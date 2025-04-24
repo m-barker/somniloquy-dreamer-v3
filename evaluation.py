@@ -38,17 +38,25 @@ def imagine_trajectory(
     initial_state: Dict[str, torch.Tensor],
     trajectory_length: int,
     actions: Optional[List[torch.Tensor]] = None,
+    sample_latent: bool = False,
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor], bool]:
     """Samples a trajectory of imagined rollouts from the world model and
     actor. Returns the imagined states and actions.
 
     Args:
         agent (Dreamer): Dreamer agent containing the world model and actor.
+
         initial_state (torch.Tensor): Starting state of the model.
+
         trajectory_length (int): Length of the imagined trajectory.
+
         actions (optional, List[torch.Tensor]): Optionally provide the actions for the
         agent to imagine taking. If not provided, the actor component of the world-model
         is used.
+
+        sample_latent (bool, optional): Whether to sample the latent state from the
+        world model. Defaults to False. If False, the mode of the stochastic distribution
+        is taken.
 
     Returns:
         Tuple[List[torch.Tensor], List[torch.Tensor]]: Imagined states and actions, and whether
@@ -73,15 +81,16 @@ def imagine_trajectory(
                 else:
                     actions[t] = torch.zeros_like(actions[t - 1])
             continue
-        # No actions provided; sample the learned policy.
+        # No actions provided; act greedily wrt. the learned policy.
         if actions is None:
-            action = agent._task_behavior.actor(latent_state).sample().squeeze(0)
+            action = agent._task_behavior.actor(latent_state).mode().squeeze(0)
             imagined_actions.append(action.detach().clone())
         else:
             action = actions[t]
         prior = agent._wm.dynamics.img_step(
             prev_state=prev_state,
             prev_action=action,
+            sample=sample_latent,
         )
         prev_state = prior
         latent_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
@@ -280,6 +289,7 @@ def sample_rollouts(
             initial_state=initial_state,
             trajectory_length=trajectory_length,
             actions=actions,
+            sample_latent=config.stochastic_env,
         )
         posterior_states, observations, posteriors, env_done = rollout_trajectory(
             agent=agent,
@@ -307,6 +317,7 @@ def sample_rollouts(
                 agent=agent,
                 initial_state=initial_state,
                 trajectory_length=trajectory_length,
+                sample_latent=config.stochastic_env,
             )
             posterior_states, observations, posteriors, env_done = rollout_trajectory(
                 agent=agent,
@@ -1546,6 +1557,7 @@ def get_posterior_state(
         is_first=transition["is_first"],
         prev_state=prev_state,
         prev_action=prev_action,
+        sample=False,
     )
 
     return posterior_state
