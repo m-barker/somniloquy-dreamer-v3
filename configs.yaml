@@ -31,9 +31,10 @@ defaults:
   # Translation Evaluation
   save_plots: True
   save_translations: True
-  n_translation_eval_episodes: 3
+  n_translation_eval_episodes: 15
   eval_trajectory_length: 15
   n_consecutive_plans: -1 # -1 means whole episode
+  stochastic_env: False
 
   # Environment
   task: "dmc_walker_walk"
@@ -439,7 +440,6 @@ minigrid-language:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_n_consecutive_trajectories: 2
   eval_every: 1000
   log_every: 500
   narrator: { narration_key: ["occupancy_grid"] }
@@ -452,6 +452,7 @@ minigrid-language:
   enc_max_length: 16
   video_pred_log: true
   task: "minigrid_teleport_complex"
+  stochastic_env: True
   time_limit: 1024
 
 minigrid-reconstruction:
@@ -633,8 +634,8 @@ ai2thor-language:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 5000
-  log_every: 1000
+  eval_every: 20000
+  log_every: 10000
   train_ratio: 64
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
