@@ -43,11 +43,13 @@ class MiniGrid:
         if self._human_render:
             render_mode = "human"
         if task_name == "four_squares":
-            env: gym.Env = FourSquares(render_mode=render_mode)
+            env: gym.Env = FourSquares(
+                render_mode=render_mode, max_steps=self._max_length
+            )
         elif task_name == "teleport5x5":
-            env = Teleport5by5(render_mode=render_mode)
+            env = Teleport5by5(render_mode=render_mode, max_steps=self._max_length)
         elif task_name == "teleport_complex":
-            env = TeleportComplex(render_mode=render_mode)
+            env = TeleportComplex(render_mode=render_mode, max_steps=self._max_length)
         else:
             raise NotImplementedError(f"Task {task_name} not implemented yet.")
         if self._actions == "needed":
