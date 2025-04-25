@@ -35,6 +35,7 @@ defaults:
   eval_trajectory_length: 15
   n_consecutive_plans: -1 # -1 means whole episode
   stochastic_env: False
+  n_stochastic_plan_samples: 30
 
   # Environment
   task: "dmc_walker_walk"
@@ -202,7 +203,7 @@ crafter:
   action_repeat: 1
   envs: 1
   eval_episode_num: 1
-  eval_every: 500
+  eval_every: 2000
   train_ratio: 512
   video_pred_log: true
   log_every: 500
@@ -216,11 +217,10 @@ crafter-language:
   action_repeat: 1
   envs: 1
   eval_episode_num: 1
-  eval_every: 2000
+  eval_every: 5000
   train_ratio: 512
   video_pred_log: true
   log_every: 500
-  n_translation_eval_episodes: 5
   enable_language: true
   enc_max_length: 16
   dec_max_length: 150
@@ -454,6 +454,36 @@ minigrid-language:
   task: "minigrid_teleport_complex"
   stochastic_env: True
   time_limit: 1024
+
+minigrid-language-small:
+  steps: 1e5
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  n_translation_eval_episodes: 3
+  eval_every: 1000
+  log_every: 500
+  narrator: { narration_key: ["occupancy_grid"] }
+  imag_gradient: "reinforce"
+  actions: needed
+  enable_language: true
+  vocab_path: vocab/minigrid_teleport_complex.json
+  dec_max_length: 200
+  enc_max_length: 16
+  video_pred_log: true
+  task: "minigrid_teleport_complex"
+  stochastic_env: True
+  time_limit: 500
+  encoder: { cnn_keys: "image", cnn_depth: 32 }
+  decoder: { cnn_keys: "image", cnn_depth: 32 }
+  dyn_hidden: 128
+  dyn_deter: 256
+  units: 128
+  actor: { layers: 3, dist: "onehot", std: "none" }
+  value: { layers: 3 }
+  reward_head: { layers: 1 }
+  cont_head: { layers: 1 }
+  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-language-small-50/latest.pt"
 
 minigrid-reconstruction:
   steps: 1e5
