@@ -28,7 +28,6 @@ def hide_cuda(func):
     return wrapper
 
 
-@hide_cuda
 def main():
     controller = ai2thor.controller.Controller(
         scene="FloorPlan28",

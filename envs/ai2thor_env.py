@@ -1,6 +1,3 @@
-import functools
-import os
-
 from typing import Tuple, Dict, List, Optional, Set
 
 import numpy as np
@@ -17,27 +14,7 @@ from typing import List, Tuple, Dict, Any
 import numpy as np
 
 
-def hide_cuda(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        # Cache the current CUDA_VISIBLE_DEVICES value
-        cached_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-
-        # Temporarily disable CUDA
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
-        try:
-            # Call the original function
-            return func(*args, **kwargs)
-        finally:
-            # Restore the original CUDA_VISIBLE_DEVICES value
-            os.environ["CUDA_VISIBLE_DEVICES"] = cached_devices
-
-    return wrapper
-
-
 class AI2ThorBaseEnv(gym.Env):
-    @hide_cuda
     def __init__(
         self,
         action_names: List[str],
@@ -183,7 +160,6 @@ class AI2ThorBaseEnv(gym.Env):
         space.discrete = True
         return space
 
-    @hide_cuda
     def reset(self) -> Tuple[Dict, Dict]:
         """Resets the environment to its starting state.
 
@@ -213,7 +189,6 @@ class AI2ThorBaseEnv(gym.Env):
         obs = self.process_obs(event, info, is_first=True)
         return obs, info
 
-    @hide_cuda
     def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, Dict]:
         """Takes a step in the environment, and returns the
         standard (obs, reward, done, info) tuple.
@@ -312,7 +287,7 @@ class AI2ThorBaseEnv(gym.Env):
         # print(event.metadata["errorMessage"])
         self.prev_meta = event.metadata
         return obs, reward, done, {}
-    @hide_cuda
+
     def close(self):
         self.controller.stop()
 
@@ -731,7 +706,7 @@ class PickupObjects(AI2ThorBaseEnv):
         img_size: Tuple[int, int] = (64, 64),
         seed: int = 42,
         max_length: int = 10000,
-        headless: bool = False,
+        headless: bool = True,
         reconstruct_obs=False,
     ) -> None:
         ACTION_NAMES = [
