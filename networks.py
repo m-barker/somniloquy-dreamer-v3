@@ -1077,6 +1077,7 @@ class TransformerEncoderDecoder(nn.Module):
             tgt_mask=tgt_mask,
             tgt_key_padding_mask=tgt_pad_mask,
             src_key_padding_mask=src_pad_mask,
+            memory_key_padding_mask=src_pad_mask,
         )
         out = self.final_layer(out)
 
@@ -1119,13 +1120,31 @@ class TransformerEncoderDecoder(nn.Module):
         prompt: Optional[torch.Tensor] = None,
         return_logits: bool = False,
         tokens_to_prepend: Optional[torch.Tensor] = None,
+        src_padding_mask: Optional[torch.Tensor] = None,
     ) -> Union[str, np.ndarray, Tuple[Union[str, np.ndarray], torch.Tensor]]:
         """Generate a sequence of tokens from the input sequence. And convert the token IDs to words.
 
         Args:
             input_seq (torch.Tensor): shape (batch_length, seq_length, d_model)
+
             vocab (dict): dictionary mapping token IDs to words.
+
             max_sequence_length (int): maximum length of the generated sequence.
+
+            sampling_method (str, optional): sampling method to use. Defaults to "nucleus".
+            Other options are "greedy".
+
+            return_tokens (bool, optional): whether to return the generated tokens. Defaults to False.
+
+            prompt (Optional[torch.Tensor], optional): optional prompt to prepend to the input sequence.
+            Defaults to None.
+
+            return_logits (bool, optional): whether to return the logits. Defaults to False.
+
+            tokens_to_prepend (Optional[torch.Tensor], optional): optional tokens to prepend to the input sequence.
+
+            src_padding_mask (Optional[torch.Tensor], optional): optional padding mask for the input sequence.
+            Defaults to None. Assumed to be a Boolean that is True for padding tokens of shape (batch_size, seq_length).
 
         Returns:
             str: the generated sequence of words.
@@ -1146,6 +1165,7 @@ class TransformerEncoderDecoder(nn.Module):
                 translated_input,
                 generate_mask=True,
                 tokens_to_prepend=tokens_to_prepend,
+                src_mask=src_padding_mask,
             )[-1]
             logits.append(output_logits)
             output_probs = F.softmax(output_logits, dim=-1)
