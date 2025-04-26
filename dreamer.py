@@ -38,9 +38,7 @@ from evaluation import (
     sample_rollouts,
     evaluate_rollouts,
     evaluate_language_to_action,
-    crafter_narration_using_obs_reconstruction,
-    minigrid_narration_using_obs_reconstruction,
-    ai2thor_narration_using_obs_reconstruction,
+    evaluate_stochastic_minigrid,
 )
 
 
@@ -551,44 +549,16 @@ def main(config):
                     save_plots=config.save_plots,
                     save_translations=config.save_translations,
                 )
-            if config.evaluate_reconstruction_narration:
-                if "crafter" in config.task:
-                    crafter_narration_using_obs_reconstruction(
-                        agent,
-                        rollout_samples["imagined_state_samples"],
-                        rollout_samples["imagined_action_samples"],
-                        rollout_samples["posterior_state_samples"],
-                        rollout_samples["observation_samples"],
-                        logger=logger,
-                        trajectory_length=config.eval_trajectory_length + 1,
-                        wandb_run=run,
-                    )
-                elif "minigrid" in config.task:
-                    minigrid_narration_using_obs_reconstruction(
-                        agent,
-                        rollout_samples["imagined_state_samples"],
-                        rollout_samples["imagined_action_samples"],
-                        rollout_samples["posterior_state_samples"],
-                        rollout_samples["observation_samples"],
-                        logger=logger,
-                        trajectory_length=config.eval_trajectory_length + 1,
-                        wandb_run=run,
-                        narrator=configure_narrator(config),
-                        obs_size=train_envs[0]
-                        .observation_space["occupancy_grid"]
-                        .shape,
-                    )
-                elif "ai2thor" in config.task:
-                    ai2thor_narration_using_obs_reconstruction(
+                if config.task == "minigrid_teleport_complex":
+                    evaluate_stochastic_minigrid(
                         agent,
                         eval_envs[0],
-                        rollout_samples["imagined_state_samples"],
-                        rollout_samples["imagined_action_samples"],
-                        rollout_samples["posterior_state_samples"],
-                        rollout_samples["observation_samples"],
-                        logger=logger,
+                        config.n_translation_eval_episodes,
+                        trajectory_length=config.eval_trajectory_length,
+                        plan_samples_per_state=config.n_stochastic_plan_samples,
                         wandb_run=run,
-                        trajectory_length=config.eval_trajectory_length + 1,
+                        logger=logger,
+                        save_plans=config.save_translations,
                     )
 
             if config.enable_language_to_action:

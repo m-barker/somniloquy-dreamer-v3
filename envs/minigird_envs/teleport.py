@@ -936,7 +936,7 @@ class TeleportComplex(TeleportBaseEnv):
 
         blue_teleporter = Teleporter(active=True)
         blue_teleporter.end_locations = [(1, 5), (5, 3), (4, 8)]
-        blue_teleporter.end_probabilities = [0.33, 0.33, 0.34]
+        blue_teleporter.end_probabilities = [1 / 3, 1 / 3, 1 / 3]
 
         green_teleporter = Teleporter(active=True, active_colour="green")
         green_teleporter.end_locations = [(2, 2), (4, 8)]
@@ -949,10 +949,6 @@ class TeleportComplex(TeleportBaseEnv):
         purple_teleporter_r = Teleporter(active=True, active_colour="purple")
         purple_teleporter_r.end_locations = [(5, 3), (8, 8)]
         purple_teleporter_r.end_probabilities = [0.5, 0.5]
-
-        source_teleporter = Teleporter(active=True)
-        source_teleporter.end_locations = [(2, 2), (4, 2)]
-        source_teleporter.end_probabilities = [0.5, 0.5]
 
         destination_teleporter_locations = [
             (1, 5),

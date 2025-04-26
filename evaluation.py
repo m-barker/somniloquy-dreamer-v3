@@ -26,6 +26,7 @@ from tools import (
     word_tokenise_text,
     get_task_stopwords,
     remove_punctuation,
+    Timer,
 )
 from narration.crafter_narrator import CrafterNarrator
 from narration.ai2thor_narrator import CookEggNarrator
@@ -109,8 +110,8 @@ def rollout_trajectory(
     agent,
     initial_state: Dict[str, torch.Tensor],
     trajectory_length: int,
-    actions: Union[List[torch.Tensor], torch.Tensor],
     env,
+    actions: Optional[Union[List[torch.Tensor], torch.Tensor]] = None,
 ) -> Tuple[List[torch.Tensor], List[Dict[str, Any]], List[Dict[str, Any]], bool]:
     """Rolls out a trajectory given the planned actions. Returns the posterior
     states and the environment observations.
@@ -118,9 +119,13 @@ def rollout_trajectory(
     Args:
         agent (Dreamer): Dreamer agent used to compute the posterior states.
         initial_state (Dict[str, torch.Tensor]): Starting state of the model.
+
         trajectory_length (int): Number of timesteps to rollout (must match the length of actions).
-        actions (List[torch.Tensor]): List of actions to rollout.
+
         env (Damy): Environment to rollout the actions in.
+
+        actions (List[torch.Tensor]): List of actions to rollout, if None, queries the actor at each
+        step using the posterior stochastic state.
 
     Returns:
         Tuple[List[torch.Tensor], List[Dict[str, Any]], List[Dict[str, Any]], bool]: Posterior states and environment obs and
@@ -139,7 +144,12 @@ def rollout_trajectory(
     done = False
     env_done = False
     for t in range(trajectory_length):
-        action = actions[t]
+        if actions is not None:
+            action = actions[t]
+        else:
+            if done or env_done:
+                break
+            action = agent._task_behavior.actor(latent_state).mode().squeeze(0)
         # if actions are all zeros, imagined trajectory is done
         if done or env_done or torch.all(action == 0):
             posterior_states.append(torch.zeros_like(latent_state))
@@ -1481,6 +1491,515 @@ def evaluate_rollouts(
 
         if wandb_run is not None:
             wandb_run.log(wandb_log, step=logger.step)
+
+
+def calculate_minigrid_transition_probability(
+    plan_translations: List[str],
+) -> Dict[str, float]:
+
+    blue_teleport_precursors = [
+        "i start in the blue teleporter room and i go through the blue teleporter to",
+        "to the blue teleporter room and then i go through the blue teleporter to",
+    ]
+    blue_teleport_transitions = [
+        "the green teleporter room",
+        "the middle goal corridor",
+        "the purple teleporter room",
+    ]
+    green_teleport_precursors = [
+        "i start in the green teleporter room and i go through the green teleporter to",
+        "to the green teleporter room and then i go through the green teleporter to",
+    ]
+    green_teleport_transitions = [
+        "the left goal corridor",
+        "the purple teleporter room",
+    ]
+    purple_left_teleport_precursors = [
+        "i start in the purple teleporter room and i go through the left purple teleporter to",
+        "to the purple teleporter room and then i go through the left purple teleporter to",
+    ]
+    purple_left_teleport_transitions = [
+        "the blue teleporter room",
+        "the middle goal corridor",
+    ]
+    purple_right_teleport_precursors = [
+        "i start in the purple teleporter room and i go through the right purple teleporter to",
+        "to the purple teleporter room and then i go through the right purple teleporter to",
+    ]
+    purple_right_teleport_transitions = [
+        "the middle goal corridor",
+        "the bottom goal corridor",
+    ]
+
+    b_green_count = 0
+    b_middle_count = 0
+    b_purple_count = 0
+    b_wrong_count = 0
+
+    g_leftgoal_count = 0
+    g_purple_count = 0
+    g_wrong_count = 0
+
+    pl_blue_count = 0
+    pl_middle_count = 0
+    pl_wrong_count = 0
+
+    pr_middle_count = 0
+    pr_bottom_count = 0
+    pr_wrong_count = 0
+
+    for plan in plan_translations:
+        for precursor in blue_teleport_precursors:
+            if precursor in plan:
+                transitions = plan.split(precursor)[1:]
+                for next in transitions:
+                    # Get the next four words; first
+                    # is empty space
+                    next = next.split(" ")[1:5]  # type: ignore
+                    next = " ".join(next)
+                    print(f"Blue precursor: {precursor}")
+                    print(f"Next: {next}")
+                    if next == blue_teleport_transitions[0]:
+                        b_green_count += 1
+                    elif next == blue_teleport_transitions[1]:
+                        b_middle_count += 1
+                    elif next == blue_teleport_transitions[2]:
+                        b_purple_count += 1
+                    else:
+                        b_wrong_count += 1
+        for precursor in green_teleport_precursors:
+            if precursor in plan:
+                transitions = plan.split(precursor)[1:]
+                for next in transitions:
+                    # Get the next four words; first
+                    # is empty space
+                    next = next.split(" ")[1:5]  # type: ignore
+                    next = " ".join(next)
+                    if next == green_teleport_transitions[0]:
+                        g_leftgoal_count += 1
+                    elif next == green_teleport_transitions[1]:
+                        g_purple_count += 1
+                    else:
+                        g_wrong_count += 1
+        for precursor in purple_left_teleport_precursors:
+            if precursor in plan:
+                transitions = plan.split(precursor)[1:]
+                for next in transitions:
+                    # Get the next four words; first
+                    # is empty space
+                    next = next.split(" ")[1:5]  # type: ignore
+                    next = " ".join(next)
+                    if next == purple_left_teleport_transitions[0]:
+                        pl_blue_count += 1
+                    elif next == purple_left_teleport_transitions[1]:
+                        pl_middle_count += 1
+                    else:
+                        pl_wrong_count += 1
+        for precursor in purple_right_teleport_precursors:
+            if precursor in plan:
+                transitions = plan.split(precursor)[1:]
+                for next in transitions:
+                    # Get the next four words; first
+                    # is empty space
+                    next = next.split(" ")[1:5]  # type: ignore
+                    next = " ".join(next)
+                    if next == purple_right_teleport_transitions[0]:
+                        pr_middle_count += 1
+                    elif next == purple_right_teleport_transitions[1]:
+                        pr_bottom_count += 1
+                    else:
+                        pr_wrong_count += 1
+
+    total_blue_count = b_green_count + b_middle_count + b_purple_count + b_wrong_count
+    total_green_count = g_leftgoal_count + g_purple_count + g_wrong_count
+    total_purple_left_count = pl_blue_count + pl_middle_count + pl_wrong_count
+    total_purple_right_count = pr_middle_count + pr_bottom_count + pr_wrong_count
+
+    estimated_blue_green_prob = (
+        b_green_count / total_blue_count if total_blue_count > 0 else -1
+    )
+    estimated_blue_middle_prob = (
+        b_middle_count / total_blue_count if total_blue_count > 0 else -1
+    )
+    estimated_blue_purple_prob = (
+        b_purple_count / total_blue_count if total_blue_count > 0 else -1
+    )
+    estimated_blue_wrong_prob = (
+        b_wrong_count / total_blue_count if total_blue_count > 0 else -1
+    )
+
+    estimated_green_leftgoal_prob = (
+        g_leftgoal_count / total_green_count if total_green_count > 0 else -1
+    )
+    estimated_green_purple_prob = (
+        g_purple_count / total_green_count if total_green_count > 0 else -1
+    )
+    estimated_green_wrong_prob = (
+        g_wrong_count / total_green_count if total_green_count > 0 else -1
+    )
+
+    estimated_purple_left_blue_prob = (
+        pl_blue_count / total_purple_left_count if total_purple_left_count > 0 else -1
+    )
+    estimated_purple_left_middle_prob = (
+        pl_middle_count / total_purple_left_count if total_purple_left_count > 0 else -1
+    )
+    estimated_purple_left_wrong_prob = (
+        pl_wrong_count / total_purple_left_count if total_purple_left_count > 0 else -1
+    )
+
+    estimated_purple_right_middle_prob = (
+        pr_middle_count / total_purple_right_count
+        if total_purple_right_count > 0
+        else -1
+    )
+    estimated_purple_right_bottom_prob = (
+        pr_bottom_count / total_purple_right_count
+        if total_purple_right_count > 0
+        else -1
+    )
+    estimated_purple_right_wrong_prob = (
+        pr_wrong_count / total_purple_right_count
+        if total_purple_right_count > 0
+        else -1
+    )
+
+    # Calculate the total variational distance
+    if not all(
+        (
+            estimated_blue_green_prob == -1,
+            estimated_blue_middle_prob == -1,
+            estimated_blue_purple_prob == -1,
+            estimated_blue_wrong_prob == -1,
+        )
+    ):
+        blue_tvd = 0.0
+        estimated_blue = [
+            estimated_blue_green_prob,
+            estimated_blue_middle_prob,
+            estimated_blue_purple_prob,
+            estimated_blue_wrong_prob,
+        ]
+        true_blue = [1 / 3, 1 / 3, 1 / 3, 0]
+        for i in range(len(estimated_blue)):
+            blue_tvd += abs(estimated_blue[i] - true_blue[i])
+        blue_tvd /= 2
+    else:
+        blue_tvd = -1
+
+    if not all(
+        (
+            estimated_green_leftgoal_prob == -1,
+            estimated_green_purple_prob == -1,
+            estimated_green_wrong_prob == -1,
+        )
+    ):
+        green_tvd = 0.0
+        estimated_green = [
+            estimated_green_leftgoal_prob,
+            estimated_green_purple_prob,
+            estimated_green_wrong_prob,
+        ]
+        true_green = [1 / 2, 1 / 2, 0]
+        for i in range(len(estimated_green)):
+            green_tvd += abs(estimated_green[i] - true_green[i])
+        green_tvd /= 2
+    else:
+        green_tvd = -1
+    if not all(
+        (
+            estimated_purple_left_blue_prob == -1,
+            estimated_purple_left_middle_prob == -1,
+            estimated_purple_left_wrong_prob == -1,
+        )
+    ):
+        purple_left_tvd = 0.0
+        estimated_purple_left = [
+            estimated_purple_left_blue_prob,
+            estimated_purple_left_middle_prob,
+            estimated_purple_left_wrong_prob,
+        ]
+        true_purple_left = [1 / 2, 1 / 2, 0]
+        for i in range(len(estimated_purple_left)):
+            purple_left_tvd += abs(estimated_purple_left[i] - true_purple_left[i])
+        purple_left_tvd /= 2
+    else:
+        purple_left_tvd = -1
+    if not all(
+        (
+            estimated_purple_right_middle_prob == -1,
+            estimated_purple_right_bottom_prob == -1,
+            estimated_purple_right_wrong_prob == -1,
+        )
+    ):
+        purple_right_tvd = 0.0
+        estimated_purple_right = [
+            estimated_purple_right_middle_prob,
+            estimated_purple_right_bottom_prob,
+            estimated_purple_right_wrong_prob,
+        ]
+        true_purple_right = [1 / 2, 1 / 2, 0]
+        for i in range(len(estimated_purple_right)):
+            purple_right_tvd += abs(estimated_purple_right[i] - true_purple_right[i])
+        purple_right_tvd /= 2
+    else:
+        purple_right_tvd = -1
+
+    # Sum the total variational distance for non -1 values
+    total_teleport_tvd = [blue_tvd, green_tvd, purple_left_tvd, purple_right_tvd]
+    if len([tvd for tvd in total_teleport_tvd if tvd != -1]) == 0:
+        overall_mean_tvd = -1.0
+    else:
+        sum_tvd = sum([tvd for tvd in total_teleport_tvd if tvd != -1])
+        overall_mean_tvd = sum_tvd / len(
+            [tvd for tvd in total_teleport_tvd if tvd != -1]
+        )
+
+    return {
+        "blue_green_prob": estimated_blue_green_prob,
+        "blue_middle_prob": estimated_blue_middle_prob,
+        "blue_purple_prob": estimated_blue_purple_prob,
+        "blue_wrong_prob": estimated_blue_wrong_prob,
+        "green_leftgoal_prob": estimated_green_leftgoal_prob,
+        "green_purple_prob": estimated_green_purple_prob,
+        "green_wrong_prob": estimated_green_wrong_prob,
+        "purple_left_blue_prob": estimated_purple_left_blue_prob,
+        "purple_left_middle_prob": estimated_purple_left_middle_prob,
+        "purple_left_wrong_prob": estimated_purple_left_wrong_prob,
+        "purple_right_middle_prob": estimated_purple_right_middle_prob,
+        "purple_right_bottom_prob": estimated_purple_right_bottom_prob,
+        "purple_right_wrong_prob": estimated_purple_right_wrong_prob,
+        "blue_tvd": blue_tvd,
+        "green_tvd": green_tvd,
+        "purple_left_tvd": purple_left_tvd,
+        "purple_right_tvd": purple_right_tvd,
+        "overall_mean_tvd": overall_mean_tvd,
+    }
+
+
+@torch.no_grad()
+def evaluate_stochastic_minigrid(
+    agent,
+    env,
+    eval_episodes: int,
+    save_plans: bool = True,
+    trajectory_length: int = 15,
+    plan_samples_per_state: int = 30,
+    wandb_run=None,
+    logger=None,
+) -> None:
+    """Evaluates Somniloquy in the stochastic minigrid environment.
+
+    Args:
+        agent (_type_): _description_
+        env (_type_): _description_
+        eval_episodes (int): _description_
+        trajectory_length (int, optional): _description_. Defaults to 15.
+    """
+
+    config = agent._config
+    eval_episode_timer = Timer("Translation Evaluation episode time")
+
+    results: Dict[str, List[float]] = {
+        "blue_green_prob": [],
+        "blue_middle_prob": [],
+        "blue_purple_prob": [],
+        "blue_wrong_prob": [],
+        "green_leftgoal_prob": [],
+        "green_purple_prob": [],
+        "green_wrong_prob": [],
+        "purple_left_blue_prob": [],
+        "purple_left_middle_prob": [],
+        "purple_left_wrong_prob": [],
+        "purple_right_middle_prob": [],
+        "purple_right_bottom_prob": [],
+        "purple_right_wrong_prob": [],
+        "blue_tvd": [],
+        "green_tvd": [],
+        "purple_left_tvd": [],
+        "purple_right_tvd": [],
+        "overall_mean_tvd": [],
+    }
+
+    append_results = lambda d: [results[k].append(v) for k, v in d.items() if k in d]  # type: ignore
+
+    for eval_episode in range(eval_episodes):
+        with eval_episode_timer:
+            obs, info = env.reset()()
+            starting_state = get_posterior_state(agent, obs)
+            done = False
+            plan_translations: List[str] = []
+            while not done:
+                latent_plans: List[torch.Tensor] = []
+                # Sample N plans
+                for plan_num in range(plan_samples_per_state):
+                    imagined_states, imagined_actions, _ = imagine_trajectory(
+                        agent,
+                        starting_state,
+                        trajectory_length,
+                        sample_latent=True,  # As we have a stochastic environment
+                    )
+                    latent_plans.append(torch.cat(imagined_states))
+                plan_batch = torch.stack(latent_plans).squeeze()
+                # True for all latent states after the world model
+                # has predicted termination.
+                padding_mask = torch.all(plan_batch == 0, dim=-1)
+                plan_translation = agent._wm.heads["language"].generate(
+                    plan_batch,
+                    agent._wm.vocab,
+                    config.dec_max_length,
+                    sampling_method=config.token_sampling_method,
+                    src_padding_mask=padding_mask,
+                )
+                plan_translations.extend(plan_translation)
+                # Rollout the agent in the environment, following the greedy
+                # learned policy
+                _, observations, posteriors, done = rollout_trajectory(
+                    agent,
+                    starting_state,
+                    trajectory_length,
+                    env,
+                )
+
+                if not done:
+                    starting_state = posteriors[-1]
+
+            transition_probability_score = calculate_minigrid_transition_probability(
+                plan_translations
+            )
+            # updated the results dictionary with the transition probabilities
+            append_results(transition_probability_score)
+
+            if save_plans:
+                # Save the plans to a file
+                plan_file_path = os.path.join(
+                    config.logdir,
+                    "evaluation",
+                    f"step_{logger.step}",
+                    f"eval_episode_{eval_episode}.json",
+                )
+                os.makedirs(os.path.dirname(plan_file_path), exist_ok=True)
+                with open(plan_file_path, "w") as f:
+                    json.dump(
+                        {
+                            "plan_translations": plan_translations,
+                            "transition_probabilities": transition_probability_score,
+                        },
+                        f,
+                        indent=4,
+                    )
+
+    # take mean of all values not equal to -1
+    for k, v in results.items():
+        if "tvd" in k:
+            continue
+        mean = np.mean([x for x in v if x != -1])
+        if np.isnan(mean):
+            mean = -1
+        results[k] = mean
+
+    # calculate the tvd from the mean probabilities
+    if not all(
+        (
+            results["blue_green_prob"] == -1,
+            results["blue_middle_prob"] == -1,
+            results["blue_purple_prob"] == -1,
+            results["blue_wrong_prob"] == -1,
+        )
+    ):
+        blue_tvd = 0.0
+        estimated_blue = [
+            results["blue_green_prob"],
+            results["blue_middle_prob"],
+            results["blue_purple_prob"],
+            results["blue_wrong_prob"],
+        ]
+        true_blue = [1 / 3, 1 / 3, 1 / 3, 0]
+        for i in range(len(estimated_blue)):
+            blue_tvd += abs(estimated_blue[i] - true_blue[i])
+        blue_tvd /= 2
+    else:
+        blue_tvd = -1
+
+    if not all(
+        (
+            results["green_leftgoal_prob"] == -1,
+            results["green_purple_prob"] == -1,
+            results["green_wrong_prob"] == -1,
+        )
+    ):
+        green_tvd = 0.0
+        estimated_green = [
+            results["green_leftgoal_prob"],
+            results["green_purple_prob"],
+            results["green_wrong_prob"],
+        ]
+        true_green = [1 / 2, 1 / 2, 0]
+        for i in range(len(estimated_green)):
+            green_tvd += abs(estimated_green[i] - true_green[i])
+        green_tvd /= 2
+    else:
+        green_tvd = -1
+    if not all(
+        (
+            results["purple_left_blue_prob"] == -1,
+            results["purple_left_middle_prob"] == -1,
+            results["purple_left_tvd"] == -1,
+        )
+    ):
+        purple_left_tvd = 0.0
+        estimated_purple_left = [
+            results["purple_left_blue_prob"],
+            results["purple_left_middle_prob"],
+            results["purple_left_wrong_prob"],
+        ]
+        true_purple_left = [1 / 2, 1 / 2, 0]
+        for i in range(len(estimated_purple_left)):
+            purple_left_tvd += abs(estimated_purple_left[i] - true_purple_left[i])
+        purple_left_tvd /= 2
+    else:
+        purple_left_tvd = -1
+    if not all(
+        (
+            results["purple_right_middle_prob"] == -1,
+            results["purple_right_bottom_prob"] == -1,
+            results["purple_right_wrong_prob"] == -1,
+        )
+    ):
+        purple_right_tvd = 0.0
+        estimated_purple_right = [
+            results["purple_right_middle_prob"],
+            results["purple_right_bottom_prob"],
+            results["purple_right_wrong_prob"],
+        ]
+        true_purple_right = [1 / 2, 1 / 2, 0]
+        for i in range(len(estimated_purple_right)):
+            purple_right_tvd += abs(estimated_purple_right[i] - true_purple_right[i])
+        purple_right_tvd /= 2
+    else:
+        purple_right_tvd = -1
+
+    # Sum the total variational distance for non -1 values
+    total_teleport_tvd = [blue_tvd, green_tvd, purple_left_tvd, purple_right_tvd]
+    if len([tvd for tvd in total_teleport_tvd if tvd != -1]) == 0:
+        overall_mean_tvd = -1.0
+    else:
+        sum_tvd = sum([tvd for tvd in total_teleport_tvd if tvd != -1])
+        overall_mean_tvd = sum_tvd / len(
+            [tvd for tvd in total_teleport_tvd if tvd != -1]
+        )
+
+    results["blue_tvd"] = blue_tvd  # type: ignore
+    results["green_tvd"] = green_tvd  # type: ignore
+    results["purple_left_tvd"] = purple_left_tvd  # type: ignore
+    results["purple_right_tvd"] = purple_right_tvd  # type: ignore
+    results["overall_mean_tvd"] = overall_mean_tvd  # type: ignore
+
+    if wandb_run is not None and logger is not None:
+        wandb_run.log(
+            {k: v for k, v in results.items()},
+            step=logger.step,
+        )
 
 
 def get_action_translation_dict(n_actions: int):
