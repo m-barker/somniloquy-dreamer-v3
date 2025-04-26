@@ -608,7 +608,7 @@ class MiniGridComplexTeleportNarrator(MiniGridNarrator):
             ],
             "left goal corridor": [(1, 1), (1, 2), (2, 1), (2, 2)],
             "middle goal corridor": [(4, 3), (4, 4), (5, 4), (5, 3), (6, 4), (6, 3)],
-            "bottom right goal corridor": [(8, 8), (8, 7), (8, 6), (8, 5)],
+            "bottom goal corridor": [(8, 8), (8, 7), (8, 6), (8, 5)],
         }
 
     def _get_room_location(self, position: tuple[int, int]) -> str:
@@ -628,6 +628,8 @@ class MiniGridComplexTeleportNarrator(MiniGridNarrator):
         # This happens in the rare case the agent's start position
         # is on top of the goal -- their position is masked by the goal.
         except IndexError:
+            return "I will reach the goal"
+        if agent_start_position == self._goal_position:
             return "I will reach the goal"
         teleporter_room = True
         current_room = None
@@ -711,6 +713,9 @@ class MiniGridComplexTeleportNarrator(MiniGridNarrator):
                     observations[-1], self._OBJECT_IDS["AGENT_ID"]
                 )[0]
             except IndexError:
+                narration_str += "and then I will reach the goal"
+                return narration_str
+            if agent_end_position == self._goal_position:
                 narration_str += "and then I will reach the goal"
                 return narration_str
 
