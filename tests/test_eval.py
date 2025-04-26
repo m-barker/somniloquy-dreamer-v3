@@ -343,3 +343,91 @@ def test_metric_statistics():
     assert reconstruction_metrics["mean_reconstructed_ter"] == (
         22 / 3
     ), f"Expected mean ter score of 22/3, got {reconstruction_metrics['mean_reconstructed_ter']}"
+
+
+def test_transition_probability_estimate_score():
+    """Tests the evaluation function that calculated the sample
+    estimate transition probabilities from textual plan translations
+    and scores it by calculating the TVD between the estimated
+    and the ground truth.
+
+    Currently only used for the minigrid-teleport environment,
+    so plans are hard-coded for that in this test.
+
+    """
+
+    mock_plan_translations = [
+        "i start in the blue teleporter room and i go through the blue teleporter to the green teleporter room",
+        "i start in the blue teleporter room and i go through the blue teleporter to the green teleporter room",
+        "i start in the green teleporter room and i go through the green teleporter to the blue teleporter room",
+    ]
+
+    result = evaluation.calculate_minigrid_transition_probability(
+        mock_plan_translations
+    )
+    assert result["blue_green_prob"] == 1.0
+    assert result["green_wrong_prob"] == 1.0
+    assert result["blue_wrong_prob"] == 0.0
+    assert result["blue_tvd"] == 0.5 * (2 / 3 + 1 / 3 + 1 / 3)
+
+    mock_plan_translations = [
+        " ".join(
+            (
+                "i start in the blue teleporter room and",
+                "i go through the blue teleporter to the green teleporter room",
+                "and then i go through the green teleporter to the purple teleporter room",
+                "and then i go through the left purple teleporter to the blue teleporter room",
+                "and then i go through the blue teleporter to the purple teleporter room",
+            )
+        ),
+        " ".join(
+            (
+                "i start in the blue teleporter room and",
+                "i go through the blue teleporter to the green teleporter room",
+                "and then i go through the green teleporter to the purple teleporter room",
+                "and then i go through the left purple teleporter to the blue teleporter room",
+                "and then i go through the blue teleporter to the green teleporter room",
+            )
+        ),
+    ]
+    result = evaluation.calculate_minigrid_transition_probability(
+        mock_plan_translations
+    )
+    assert result["blue_green_prob"] == 0.75
+
+    mock_plan_translations = [
+        " ".join(
+            (
+                "i start in the blue teleporter room and",
+                "i go through the blue teleporter to the green teleporter room",
+                "and then i go through the green teleporter to the purple teleporter room",
+                "and then i go through the left purple teleporter to the blue teleporter room",
+                "and then i go through the blue teleporter to the green teleporter room",
+                "and then i go through the green teleporter to the purple teleporter room",
+                "and then i go through the left purple teleporter to the blue teleporter room",
+                "and then i go through the blue teleporter to the purple teleporter room",
+                "and then i go through the left purple teleporter to the middle goal corridor",
+            )
+        ),
+    ]
+    result = evaluation.calculate_minigrid_transition_probability(
+        mock_plan_translations
+    )
+    assert result["blue_green_prob"] == 2 / 3
+    assert result["purple_left_middle_prob"] == 1 / 3
+    assert result["blue_tvd"] == 0.5 * (1 / 3 + 1 / 3)
+    assert result["purple_left_tvd"] == 0.5 * (1 / 6 + 1 / 6)
+    assert (
+        result["overall_mean_tvd"]
+        == ((0.5 * (1 / 3 + 1 / 6)) + (0.5 * (1 / 3 + 1 / 6)) + (0.5 * (0.5 + 0.5))) / 3
+    )
+    assert result["purple_right_tvd"] == -1
+
+    mock_plan_translations = [
+        " ".join(("random text", "asdasd")),
+    ]
+    result = evaluation.calculate_minigrid_transition_probability(
+        mock_plan_translations
+    )
+    for k, v in result.items():
+        assert v == -1, f"Expected -1 for {k}, got {v}"
