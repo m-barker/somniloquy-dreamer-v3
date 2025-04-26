@@ -10,7 +10,7 @@ defaults:
   steps: 1e6
   parallel: False
   eval_every: 1e4
-  eval_episode_num: 10
+  eval_episode_num: 15
   log_every: 1e4
   reset_every: 0
   device: "cuda:0"
@@ -202,7 +202,7 @@ crafter:
   steps: 1e7
   action_repeat: 1
   envs: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 2000
   train_ratio: 512
   video_pred_log: true
@@ -216,7 +216,7 @@ crafter-language:
   step: 1e7
   action_repeat: 1
   envs: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 5000
   train_ratio: 512
   video_pred_log: true
@@ -235,7 +235,7 @@ crafter-language-baseline:
   steps: 1e7
   action_repeat: 1
   envs: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 2000
   train_ratio: 512
   translation_baseline: true
@@ -266,7 +266,7 @@ crafter-language-small:
   steps: 1e7
   action_repeat: 1
   envs: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 500
   train_ratio: 512
   translation_baseline: true
@@ -306,7 +306,7 @@ crafter-reconstruction:
   evaluate_reconstruction_narration: true
   action_repeat: 1
   envs: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 500
   train_ratio: 512
   video_pred_log: true
@@ -328,7 +328,7 @@ crafter-reconstruction-small:
   evaluate_reconstruction_narration: true
   action_repeat: 1
   envs: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 500
   train_ratio: 512
   video_pred_log: true
@@ -424,8 +424,7 @@ minigrid:
   steps: 1e5
   envs: 1
   action_repeat: 1
-  eval_episode_num: 1
-  eval_n_consecutive_trajectories: 2
+  eval_episode_num: 15
   eval_every: 1000
   log_every: 500
   actor: { dist: "onehot", std: "none" }
@@ -439,7 +438,7 @@ minigrid-language:
   steps: 1e5
   envs: 1
   action_repeat: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 1000
   log_every: 500
   narrator: { narration_key: ["occupancy_grid"] }
@@ -459,7 +458,7 @@ minigrid-language-small:
   steps: 1e5
   envs: 1
   action_repeat: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   n_translation_eval_episodes: 3
   eval_every: 1000
   log_every: 500
@@ -663,7 +662,7 @@ ai2thor-language:
   steps: 1e8
   envs: 1
   action_repeat: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 20000
   log_every: 10000
   train_ratio: 64
@@ -713,7 +712,7 @@ ai2thor-language-small:
   steps: 1e8
   envs: 1
   action_repeat: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 5000
   log_every: 1000
   train_ratio: 64
@@ -765,7 +764,7 @@ ai2thor-reconstruction:
   steps: 1e8
   envs: 1
   action_repeat: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 10000
   dataset_size: 50000
   train_ratio: 64
@@ -823,7 +822,7 @@ ai2thor-reconstruction-small:
   steps: 1e8
   envs: 1
   action_repeat: 1
-  eval_episode_num: 1
+  eval_episode_num: 15
   eval_every: 5000
   train_ratio: 64
   prefill: 2500
