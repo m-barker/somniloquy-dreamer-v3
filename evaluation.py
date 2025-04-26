@@ -499,6 +499,9 @@ def generate_translation(
 
     # (T, N, C) -> (N, T, C)
     latent_state_tensor = torch.cat(latent_states, dim=0).permute(1, 0, 2)
+    # True when all elements in the latent state are zero, which corresponds
+    # to any states after the world model thinks the episode terminates.
+    padding_mask = torch.all(latent_state_tensor == 0, dim=-1)
 
     if config.translation_baseline:
         assert actions is not None
@@ -518,6 +521,7 @@ def generate_translation(
             agent._wm.vocab,
             config.dec_max_length,
             sampling_method=config.token_sampling_method,
+            src_padding_mask=padding_mask,
         )
     else:
         # our batch size is 1 so take first item in list
@@ -526,6 +530,7 @@ def generate_translation(
             agent._wm.vocab,
             config.dec_max_length,
             sampling_method=config.token_sampling_method,
+            src_padding_mask=padding_mask,
         )[0]
     plan_translation = " ".join(
         [
