@@ -432,7 +432,7 @@ minigrid:
   actions: needed
   video_pred_log: true
   task: "minigrid_teleport_complex"
-  time_limit: 1024
+  time_limit: 100
 
 minigrid-language:
   steps: 1e5
@@ -452,7 +452,7 @@ minigrid-language:
   video_pred_log: true
   task: "minigrid_teleport_complex"
   stochastic_env: True
-  time_limit: 1024
+  time_limit: 100
 
 minigrid-language-small:
   steps: 1e5
