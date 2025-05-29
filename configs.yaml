@@ -269,7 +269,6 @@ crafter-language-small:
   eval_episode_num: 15
   eval_every: 500
   train_ratio: 512
-  translation_baseline: true
   translator_head:
     {
       attention_heads: 1,
