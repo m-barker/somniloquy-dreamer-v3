@@ -24,7 +24,6 @@ from torch import nn
 from torch import distributions as torchd
 
 # from evaluate_narration_model import plot_trajectory_graph
-from narration.mineclip_narrator import MineCLIPNarrator
 from narration.panda_narrator import PandaPushColourNarrator
 from narration.crafter_narrator import CrafterNarrator
 from narration.minigrd_narrator import (
@@ -39,6 +38,7 @@ from evaluation import (
     evaluate_rollouts,
     evaluate_language_to_action,
     evaluate_stochastic_minigrid,
+    crafter_narration_using_obs_reconstruction,
 )
 
 
@@ -461,11 +461,13 @@ def main(config):
     config, logdir = setup(config)
     step = count_steps(config.traindir)
     # step in logger is environmental step
-    run = wandb.init(
-        project="somniloquy",
-        notes="language-metrics-test",
-        config=config,
-    )
+    if not config.wandb:
+        run = wandb.init(mode="disabled")
+    else:
+        run = wandb.init(
+            project="somniloquy",
+            config=config,
+        )
     logger = tools.Logger(logdir, config.action_repeat * step, wandb_run=run)
 
     print("Create envs.")
@@ -536,19 +538,36 @@ def main(config):
                         else None
                     ),
                 )
-                evaluate_rollouts(
-                    agent,
-                    rollout_samples["imagined_state_samples"],
-                    rollout_samples["imagined_action_samples"],
-                    rollout_samples["posterior_state_samples"],
-                    rollout_samples["observation_samples"],
-                    logger=logger,
-                    trajectory_length=config.eval_trajectory_length
-                    + 1,  # +1 as we include starting states
-                    wandb_run=run,
-                    save_plots=config.save_plots,
-                    save_translations=config.save_translations,
-                )
+                if config.evaluate_reconstruction_narration:
+                    crafter_narration_using_obs_reconstruction(
+                        agent,
+                        imagined_state_samples=rollout_samples[
+                            "imagined_state_samples"
+                        ],
+                        posterior_state_samples=rollout_samples[
+                            "posterior_state_samples"
+                        ],
+                        observation_samples=rollout_samples["observation_samples"],
+                        imagined_action_samples=rollout_samples[
+                            "imagined_action_samples"
+                        ],
+                        logger=logger,
+                        wandb_run=run,
+                    )
+                else:
+                    evaluate_rollouts(
+                        agent,
+                        rollout_samples["imagined_state_samples"],
+                        rollout_samples["imagined_action_samples"],
+                        rollout_samples["posterior_state_samples"],
+                        rollout_samples["observation_samples"],
+                        logger=logger,
+                        trajectory_length=config.eval_trajectory_length
+                        + 1,  # +1 as we include starting states
+                        wandb_run=run,
+                        save_plots=config.save_plots,
+                        save_translations=config.save_translations,
+                    )
                 if config.task == "minigrid_teleport_complex":
                     evaluate_stochastic_minigrid(
                         agent,

@@ -156,9 +156,10 @@ class WorldModel(nn.Module):
         print(
             f"RSSM has {sum(param.numel() for param in self.dynamics.parameters())} variables."
         )
-        print(
-            f"Language Component has {sum(param.numel() for param in self.heads['language'].parameters())} variables."
-        )
+        if self._config.enable_language:
+            print(
+                f"Language Component has {sum(param.numel() for param in self.heads['language'].parameters())} variables."
+            )
         # other losses are scaled by 1.0.
         self._scales = dict(
             reward=config.reward_head["loss_scale"],

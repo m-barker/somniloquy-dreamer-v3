@@ -27,6 +27,7 @@ defaults:
   conditional_actions: False
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
+  wandb: True
 
   # Translation Evaluation
   save_plots: True
@@ -304,6 +305,7 @@ crafter-reconstruction:
   steps: 1e7
   evaluate_reconstruction_narration: true
   action_repeat: 1
+  enable_language: false
   envs: 1
   eval_episode_num: 15
   eval_every: 500

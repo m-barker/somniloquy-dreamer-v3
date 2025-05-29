@@ -1,6 +1,6 @@
 import torch
 import argparse
-from dreamer import setup_args, create_environments, Dreamer
+from somniloquy import setup_args, create_environments, Dreamer
 from evaluation import visual_plan_evaluation
 from tools import recursively_load_optim_state_dict
 

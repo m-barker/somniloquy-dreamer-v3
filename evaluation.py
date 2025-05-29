@@ -3376,7 +3376,7 @@ def evaluate_consecutive_translations(
 
 
 if __name__ == "__main__":
-    from dreamer import setup_args, create_environments, Dreamer
+    from somniloquy import setup_args, create_environments, Dreamer
     from tools import recursively_load_optim_state_dict
 
     config = setup_args()
