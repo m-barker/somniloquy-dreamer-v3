@@ -36,7 +36,7 @@ For the reconstruction baseline:
 python3.9 somniloquy.py --configs crafter-language-reconstruction --seed 100 --logdir logdir/crafter-langauge-reconstruction-seed-100
 ```
 
-**Please note that the reconstruction baseline is discontinued in the current version of the codebase. If you experience issues, please revert to the ** [RLDM specific commit]((https://github.com/m-barker/somniloquy-dreamer-v3/commit/7a6be7075856da9e705d617822ac68b52cecdcc7))
+**Please note that the reconstruction baseline is discontinued in the current version of the codebase. If you experience issues, please revert to the** [RLDM specific commit](https://github.com/m-barker/somniloquy-dreamer-v3/commit/7a6be7075856da9e705d617822ac68b52cecdcc7)
 
 Note that by default, the translation gradients do not flow into the RSSM to update the learned latent representation. This can be enabled by adding the `-language_grads True` argument.
 
