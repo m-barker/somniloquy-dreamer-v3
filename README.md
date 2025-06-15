@@ -58,3 +58,13 @@ Stochastic plan translations can then be found under `/logdir/<name>/evaluation/
 
 ## Acknowledgements
 The base world component is directly taken from [this excellent PyTorch Dreamer V3 implementation](https://github.com/NM512/dreamerv3-torch), which is licensed under the MIT License.
+
+## Citation
+```bibtex
+@inproceedings{barker2025translating,
+  title={Translating Latent State World Model Plans into Natural Language},
+  author={Barker, Matthew and Leonetti, Matteo},
+  booktitle={Multi-Disciplinary Conference on Reinforcement Learning and Decision Making 2025},
+  year={2025}
+}
+```
