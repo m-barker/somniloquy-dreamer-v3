@@ -61,10 +61,11 @@ The base world component is directly taken from [this excellent PyTorch Dreamer 
 
 ## Citation
 ```bibtex
-@inproceedings{barker2025translating,
-  title={Translating Latent State World Model Plans into Natural Language},
-  author={Barker, Matthew and Leonetti, Matteo},
-  booktitle={Multi-Disciplinary Conference on Reinforcement Learning and Decision Making 2025},
-  year={2025}
+@misc{barker2025translating,
+  title        = {Translating Latent State World Model Plans into Natural Language},
+  author       = {Barker, Matthew and Leonetti, Matteo},
+  howpublished = {Extended abstract presented at the Multi-Disciplinary Conference on Reinforcement Learning and Decision Making (RLDM), 2025},
+  year         = {2025}
+  url          = {https://kclpure.kcl.ac.uk/portal/en/publications/translating-latent-state-world-model-plans-into-natural-language-}
 }
 ```
