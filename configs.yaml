@@ -28,6 +28,7 @@ defaults:
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
   wandb: True
+  random_actions: False
 
   # Translation Evaluation
   save_plots: True
@@ -473,7 +474,7 @@ minigrid-language-small:
   video_pred_log: true
   task: "minigrid_teleport_complex"
   stochastic_env: True
-  time_limit: 500
+  time_limit: 1000
   encoder: { cnn_keys: "image", cnn_depth: 32 }
   decoder: { cnn_keys: "image", cnn_depth: 32 }
   dyn_hidden: 128
@@ -484,6 +485,37 @@ minigrid-language-small:
   reward_head: { layers: 1 }
   cont_head: { layers: 1 }
   checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-language-small-50/latest.pt"
+
+minigrid-language-expl-small:
+  random_actions: True
+  steps: 1e5
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  n_translation_eval_episodes: 1
+  n_consecutive_plans: 10
+  eval_every: 1000
+  log_every: 500
+  narrator: { narration_key: ["occupancy_grid"] }
+  imag_gradient: "reinforce"
+  actions: needed
+  enable_language: true
+  vocab_path: vocab/minigrid_four_squares_expl.json
+  dec_max_length: 200
+  enc_max_length: 16
+  video_pred_log: true
+  task: "minigrid_four_squares_expl"
+  stochastic_env: False
+  time_limit: 500
+  encoder: { cnn_keys: "image", cnn_depth: 32 }
+  decoder: { cnn_keys: "image", cnn_depth: 32 }
+  dyn_hidden: 128
+  dyn_deter: 256
+  units: 128
+  actor: { layers: 3, dist: "onehot", std: "none" }
+  value: { layers: 3 }
+  reward_head: { layers: 1 }
+  cont_head: { layers: 1 }
 
 minigrid-reconstruction:
   steps: 1e5

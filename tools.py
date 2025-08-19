@@ -177,6 +177,7 @@ def simulate(
     no_save_obs: Optional[List[str]] = None,
     info_keys_to_store: Optional[List[str]] = None,
     wandb_run=None,
+    random_actions: bool = False,
 ) -> Tuple:
     """Runs agent interaction with the environment.
 
@@ -1380,7 +1381,6 @@ def process_narration_batch(
     batch_size: int,
     batch_length: int,
 ) -> str:
-
     if isinstance(observations, dict):
         test_obs = observations[list(observations.keys())[0]]
         assert test_obs.shape[0] == batch_size

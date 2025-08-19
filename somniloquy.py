@@ -30,6 +30,7 @@ from narration.minigrd_narrator import (
     MiniGridFourSquareNarrator,
     MiniGridTeleportNarrator,
     MiniGridComplexTeleportNarrator,
+    MiniGridFourSquareExplNarrator,
 )
 from narration.safetygym_narrator import IslandNavigationNarrator
 from narration.ai2thor_narrator import CookEggNarrator
@@ -68,6 +69,7 @@ class Dreamer(nn.Module):
         narrator = None
         if config.enable_language:
             narrator = configure_narrator(config)
+        self._random_actions = config.random_actions
         self._wm = models.WorldModel(
             obs_space, act_space, self._step, config, narrator=narrator
         )
@@ -83,6 +85,7 @@ class Dreamer(nn.Module):
             random=lambda: expl.Random(config, act_space),
             plan2explore=lambda: expl.Plan2Explore(config, self._wm, reward),
         )[config.expl_behavior]().to(self._config.device)
+        self._random_actor = expl.Random(config, act_space).to(self._config.device)
 
     def __call__(self, obs, reset, state=None):
         step = self._step
@@ -124,7 +127,12 @@ class Dreamer(nn.Module):
             self._logger.step = self._config.action_repeat * self._step
         return policy_output, state
 
-    def _policy(self, obs, state, training):
+    def _policy(
+        self,
+        obs,
+        state,
+        training,
+    ):
         if state is None:
             latent = action = None
         else:
@@ -138,7 +146,10 @@ class Dreamer(nn.Module):
         if self._config.eval_state_mean:
             latent["stoch"] = latent["mean"]
         feat = self._wm.dynamics.get_feat(latent)
-        if not training:
+        if self._random_actions:
+            actor = self._random_actor.actor(feat)
+            action = actor.sample()
+        elif not training:
             actor = self._task_behavior.actor(feat)
             action = actor.mode()
         elif self._should_expl(self._step):
@@ -199,7 +210,10 @@ def configure_narrator(config):
             )
     elif "minigrid" in config.task:
         if "four_squares" in config.task:
-            narrator = MiniGridFourSquareNarrator()
+            if "expl" in config.task:
+                narrator = MiniGridFourSquareExplNarrator()
+            else:
+                narrator = MiniGridFourSquareNarrator()
         elif "teleport" in config.task:
             if "complex" in config.task:
                 narrator = MiniGridComplexTeleportNarrator()
@@ -213,6 +227,8 @@ def configure_narrator(config):
         narrator = IslandNavigationNarrator()
     elif "ai2thor" in config.task:
         narrator = CookEggNarrator()
+    else:
+        raise ValueError(f"{config.task} has no valid narrator")
 
     return narrator
 
@@ -406,7 +422,6 @@ def prefill_dataset(
 def create_environments(
     config,
 ) -> Tuple[List[Union[Parallel, Damy]], List[Union[Parallel, Damy]]]:
-
     make = lambda mode, id: make_env(config, mode, id)
     train_envs = [make("train", i) for i in range(config.envs)]
     eval_envs = [make("eval", i) for i in range(config.envs)]

@@ -1,5 +1,4 @@
 from typing import Tuple, Optional
-
 import cv2
 import gymnasium as gym
 import numpy as np
@@ -10,7 +9,6 @@ from .wrappers import MiniGridFullObsWrapper  # type: ignore
 
 
 class MiniGrid:
-
     def __init__(
         self,
         task_name: str,
@@ -45,6 +43,12 @@ class MiniGrid:
         if task_name == "four_squares":
             env: gym.Env = FourSquares(
                 render_mode=render_mode, max_steps=self._max_length
+            )
+        elif task_name == "four_squares_expl":
+            env = FourSquares(
+                render_mode=render_mode,
+                max_steps=self._max_length,
+                generate_goal=False,
             )
         elif task_name == "teleport5x5":
             env = Teleport5by5(render_mode=render_mode, max_steps=self._max_length)

@@ -204,8 +204,51 @@ class MiniGridFourSquareNarrator(MiniGridNarrator):
         return f"the agent moved towards the {closest_square} square which is not the goal "
 
 
-class MiniGridEmptyNarrator(MiniGridNarrator):
+class MiniGridFourSquareExplNarrator(MiniGridNarrator):
+    def narrate(self, observations: list[np.ndarray]) -> str:
+        first_obs = observations[0]
+        if not self._agent_moved(observations):
+            return "i will not move "
+        if (
+            self._get_object_location(observations[-1], self._OBJECT_IDS["AGENT_ID"])[0]
+            == self._get_object_location(observations[0], self._OBJECT_IDS["AGENT_ID"])[
+                0
+            ]
+        ):
+            return "i will move in a circle "
 
+        agent_start_position = self._get_object_location(
+            observations[0], self._OBJECT_IDS["AGENT_ID"]
+        )[0]
+
+        agent_end_position = self._get_object_location(
+            observations[-1], self._OBJECT_IDS["AGENT_ID"]
+        )[0]
+
+        coloured_square_positions = self._get_object_location(
+            observations[0], self._OBJECT_IDS["FLOOR_ID"]
+        )
+
+        biggest_delta = 0.0
+        closest_square = None
+
+        for square_position in coloured_square_positions:
+            square_colour = self._ID_TO_COLOUR[
+                first_obs[square_position[0], square_position[1], 1]
+            ]
+            if agent_end_position == square_position:
+                return f"i will reach the {square_colour} square"
+            delta = self._calculate_distance(
+                square_position, agent_start_position
+            ) - self._calculate_distance(square_position, agent_end_position)
+            if delta > biggest_delta:
+                biggest_delta = delta
+                closest_square = square_colour
+
+        return f"i will move towards the {closest_square} square"
+
+
+class MiniGridEmptyNarrator(MiniGridNarrator):
     def narrate(self, observations: list[np.ndarray]) -> str:
         first_obs = observations[0]
         try:
@@ -230,7 +273,6 @@ class MiniGridEmptyNarrator(MiniGridNarrator):
 
 
 class MiniGridDoorKeyNarrator(MiniGridNarrator):
-
     def _get_key_status(
         self, first_obs: np.ndarray, last_obs: np.ndarray
     ) -> tuple[bool, int]:
@@ -404,7 +446,9 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
                 first_obs, self._OBJECT_IDS["KEY_ID"]
             )[0]
             narration_str += self._get_agent_relative_movement_string(
-                observations, key_position, "key"  # type: ignore
+                observations,
+                key_position,
+                "key",  # type: ignore
             )
             return narration_str
         try:
@@ -417,11 +461,15 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
                 first_obs, self._OBJECT_IDS["AGENT_ID"]
             )[0]
         door_locked, agent_unlocked_door = self._get_door_lock_status(
-            first_obs, last_obs, door_position  # type: ignore
+            first_obs,
+            last_obs,
+            door_position,  # type: ignore
         )
         if door_locked:
             narration_str += self._get_agent_relative_movement_string(
-                observations, door_position, "door"  # type: ignore
+                observations,
+                door_position,
+                "door",  # type: ignore
             )
             return narration_str
 
@@ -435,13 +483,15 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
 
         if not door_locked:
             door_open_close_sequence = self._get_door_open_close_sequence(
-                observations, door_position  # type: ignore
+                observations,
+                door_position,  # type: ignore
             )
             narration_str += door_open_close_sequence
             if door_open_close_sequence != "":
                 narration_str += "and then "
                 door_last_change_frame = self._get_last_door_change_frame(
-                    observations, door_position  # type: ignore
+                    observations,
+                    door_position,  # type: ignore
                 )
                 observations = observations[door_last_change_frame + 1 :]
                 if not observations:
@@ -463,7 +513,9 @@ class MiniGridDoorKeyNarrator(MiniGridNarrator):
             narration_str += "the agent reached the goal "
         else:
             narration_str += self._get_agent_relative_movement_string(
-                observations, goal_position, "goal "  # type: ignore
+                observations,
+                goal_position,
+                "goal ",  # type: ignore
             )
 
         return narration_str

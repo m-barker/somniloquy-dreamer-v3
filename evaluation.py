@@ -213,7 +213,7 @@ def get_user_actions(env, trajectory_length: int, starting_obs) -> List[torch.Te
         while not valid_action:
             try:
                 action = int(
-                    input(f"Please enter an action between 0-{n_actions-1}:\t")
+                    input(f"Please enter an action between 0-{n_actions - 1}:\t")
                 )
                 valid_action = True
             except ValueError:
@@ -417,7 +417,8 @@ def configure_narration_data(
             ]  # type: ignore
         # Comine into a single dictionary
         narration_data = {
-            key: [data[key] for data in narration_data] for key in narration_keys  # type: ignore
+            key: [data[key] for data in narration_data]
+            for key in narration_keys  # type: ignore
         }  # type: ignore
     else:
         raise ValueError(f"Invalid narration_keys: {narration_keys}")
@@ -449,7 +450,7 @@ def generate_narration(
 
     if narrator is None:
         narrator = agent._wm.narrator
-
+    assert narrator is not None
     if "ai2thor" in task_name:
         actual_narration = narrator.narrate(
             narration_data["agent_position"],  # type: ignore
@@ -1385,9 +1386,9 @@ def evaluate_rollouts(
             imagined_states = imagined_state_samples[episode][trajectory:end_index]
             posterior_states = posterior_state_samples[episode][trajectory:end_index]
             actions = imagined_action_samples[episode][trajectory:end_index]
-            assert len(actions) == len(
-                imagined_states
-            ), "Actions and states must be the same length"
+            assert len(actions) == len(imagined_states), (
+                "Actions and states must be the same length"
+            )
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
@@ -1501,7 +1502,6 @@ def evaluate_rollouts(
 def calculate_minigrid_transition_probability(
     plan_translations: List[str],
 ) -> Dict[str, float]:
-
     blue_teleport_precursors = [
         "i start in the blue teleporter room and i go through the blue teleporter to",
         "to the blue teleporter room and then i go through the blue teleporter to",
@@ -3034,7 +3034,6 @@ def ai2thor_narration_using_obs_reconstruction(
 def visual_plan_evaluation(
     agent, env, output_folder: str, plan_length: int = 15
 ) -> None:
-
     env_done, imagined_done = None, None
     prev_state, prev_action = None, None
     prev_obs, info = env.reset()()

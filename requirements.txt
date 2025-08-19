@@ -36,7 +36,7 @@ gitdb==4.0.12
 GitPython==3.1.44
 glfw==2.7.0
 grpcio==1.65.4
-gym==0.21.0
+gym==0.22.0
 gym-notices==0.0.8
 gymnasium==0.29.1
 huggingface-hub==0.24.6
