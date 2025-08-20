@@ -487,7 +487,7 @@ minigrid-language-small:
   checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-language-small-50/latest.pt"
 
 minigrid-language-expl-small:
-  random_actions: True
+  random_actions: False
   steps: 1e5
   envs: 1
   action_repeat: 1
@@ -516,6 +516,7 @@ minigrid-language-expl-small:
   value: { layers: 3 }
   reward_head: { layers: 1 }
   cont_head: { layers: 1 }
+  checkpoint: "./logdir/minigrid-language-small-expl-seed-500/latest.pt"
 
 minigrid-reconstruction:
   steps: 1e5

@@ -1219,8 +1219,13 @@ def recursively_collect_optim_state_dict(
     return optimizers_state_dicts
 
 
-def recursively_load_optim_state_dict(obj, optimizers_state_dicts):
+def recursively_load_optim_state_dict(
+    obj, optimizers_state_dicts, wm_only: bool = False
+):
     for path, state_dict in optimizers_state_dicts.items():
+        if wm_only:
+            if "actor" in path or "value" in path:
+                continue
         keys = path.split(".")
         obj_now = obj
         for key in keys:

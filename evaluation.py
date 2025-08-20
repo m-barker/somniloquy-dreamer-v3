@@ -480,7 +480,7 @@ def generate_narration(
 def generate_translation(
     agent,
     config,
-    latent_states: List[torch.Tensor],
+    latent_states: Union[List[torch.Tensor], torch.Tensor],
     actions: Optional[List[torch.Tensor]] = None,
 ) -> str:
     """Returns a string containing the translated latent state plan.
@@ -497,9 +497,11 @@ def generate_translation(
     Returns:
         str: Latent state plan translation.
     """
-
-    # (T, N, C) -> (N, T, C)
-    latent_state_tensor = torch.cat(latent_states, dim=0).permute(1, 0, 2)
+    if isinstance(latent_states, List):
+        # (T, N, C) -> (N, T, C)
+        latent_state_tensor = torch.cat(latent_states, dim=0).permute(1, 0, 2)
+    else:
+        latent_state_tensor = latent_states
     # True when all elements in the latent state are zero, which corresponds
     # to any states after the world model thinks the episode terminates.
     padding_mask = torch.all(latent_state_tensor == 0, dim=-1)

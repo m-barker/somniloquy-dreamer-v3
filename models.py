@@ -353,7 +353,8 @@ class WorldModel(nn.Module):
             bos_token = torch.ones(1).to(self._config.device) * bos_token  # type: ignore
             eos_token = torch.ones(1).to(self._config.device) * eos_token  # type: ignore
             posterior_tokens = torch.cat(
-                [bos_token, posterior_tokens, eos_token], dim=0  # type: ignore
+                [bos_token, posterior_tokens, eos_token],
+                dim=0,  # type: ignore
             )
             excpected_token_length = (
                 self._narration_max_enc_seq * self._config.dyn_discrete
@@ -674,7 +675,9 @@ class WorldModel(nn.Module):
             narration_data_list = {k: v[0, :16] for k, v in narration_data.items()}
             if type(narration_data) is dict:
                 if len(narration_data.keys()) == 1:  # type: ignore
-                    narration_data_list = narration_data_list[list(narration_data.keys())[0]]  # type: ignore
+                    narration_data_list = narration_data_list[
+                        list(narration_data.keys())[0]
+                    ]  # type: ignore
         else:
             narration_data_list = [narration_data[0][i] for i in range(16)]  # type: ignore
         ground_truth_intent = self.narrator.narrate(narration_data_list)
@@ -779,6 +782,8 @@ class ImagBehavior(nn.Module):
                 imag_feat, imag_state, imag_action = self._imagine(
                     start, self.actor, self._config.imag_horizon
                 )
+                # print(imag_action)
+                # print(f"Start Shape: {start['stoch'].shape}")
                 reward = objective(imag_feat, imag_state, imag_action)
                 actor_ent = self.actor(imag_feat).entropy()
                 state_ent = self._world_model.dynamics.get_dist(imag_state).entropy()
@@ -854,6 +859,10 @@ class ImagBehavior(nn.Module):
         else:
             discount = self._config.discount * torch.ones_like(reward)
         value = self.value(imag_feat).mode()
+        # Should all be (T, B, D)
+        # print(f"Reward shape: {reward.shape}")
+        # print(f"Value shape: {value.shape}")
+        # print(f"Discount shape: {discount.shape}")
         target = tools.lambda_return(
             reward[1:],
             value[:-1],
