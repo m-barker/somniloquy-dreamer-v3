@@ -97,6 +97,7 @@ defaults:
       image_dist: mse,
       vector_dist: symlog_mse,
       outscale: 1.0,
+      loss_scale: 0.01,
     }
   actor:
     {
