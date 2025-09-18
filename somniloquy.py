@@ -481,7 +481,7 @@ def main(config):
     else:
         run = wandb.init(
             project="somniloquy",
-            config=config,
+            config=vars(config),
         )
     logger = tools.Logger(logdir, config.action_repeat * step, wandb_run=run)
 

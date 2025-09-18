@@ -963,9 +963,9 @@ class TransformerEncoderDecoder(nn.Module):
         self.tgt_embedding = TokenEmbedding(self._target_vocab_size, d_model)
         self.src_embedding = None
         if src_token_embedding:
-            assert (
-                src_vocab_size is not None
-            ), "src_vocab_size must be provided if using src token embeddings."
+            assert src_vocab_size is not None, (
+                "src_vocab_size must be provided if using src token embeddings."
+            )
             self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -1609,6 +1609,9 @@ class BaselineTranslator(nn.Module):
         )
 
         input = torch.cat([encoded_images, actions], dim=-1)
+
+        if generate_mask:
+            print("MASK")
 
         pred = self._transformer.forward(
             input,
