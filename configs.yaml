@@ -97,7 +97,7 @@ defaults:
       image_dist: mse,
       vector_dist: symlog_mse,
       outscale: 1.0,
-      loss_scale: 0.01,
+      loss_scale: 1.0,
     }
   actor:
     {
@@ -141,6 +141,7 @@ defaults:
       token_embed_size: 256,
       out_head_dim: 256,
       activation: "relu",
+      loss_scale: 10.0,
     }
   dyn_scale: 1.0
   rep_scale: 0.1

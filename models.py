@@ -174,6 +174,7 @@ class WorldModel(nn.Module):
             reward=config.reward_head["loss_scale"],
             cont=config.cont_head["loss_scale"],
             image=config.decoder["loss_scale"],
+            language=config.translator_head["loss_scale"],
         )
 
     def _reshape_to_narration_sequence(
@@ -593,14 +594,17 @@ class WorldModel(nn.Module):
                 if self._step % self._grad_debug_every == 0:
                     scaled_losses = {k: torch.mean(v) for k, v in scaled.items()}
                     scaled_losses["kl"] = torch.mean(kl_loss)
-                    scaled_losses["language"] = losses["language"]
+                    scaled_losses["language"] = (
+                        losses["language"] * self._scales["language"]
+                    )
                     metrics = self._model_opt(
                         scaled_losses,
                         self,
                     )
                 else:
                     metrics = self._model_opt.single_update(
-                        torch.mean(model_loss) + losses["language"],
+                        torch.mean(model_loss)
+                        + losses["language"] * self._scales["language"],
                         self.parameters(),
                     )
             else:
