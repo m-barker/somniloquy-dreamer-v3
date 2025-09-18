@@ -30,9 +30,18 @@ class RewardEMA:
 
 
 class WorldModel(nn.Module):
-    def __init__(self, obs_space, act_space, step, config, narrator=None):
+    def __init__(
+        self,
+        obs_space,
+        act_space,
+        step,
+        config,
+        narrator=None,
+        grad_debug_every: int = 100,
+    ):
         super(WorldModel, self).__init__()
-        self._step = step
+        self._step = 0
+        self._grad_debug_every = grad_debug_every
         self._use_amp = True if config.precision == 16 else False
         self._config = config
         print(obs_space.spaces.items())
@@ -511,7 +520,7 @@ class WorldModel(nn.Module):
 
         return narration_data
 
-    def _train(self, data):
+    def _train(self, data, step):
         # action (batch_size, batch_length, act_dim)
         # image (batch_size, batch_length, h, w, ch)
         # reward (batch_size, batch_length)
@@ -519,6 +528,8 @@ class WorldModel(nn.Module):
 
         narration_keys = self._config.narrator["narration_key"]
         narration_data = self._process_narration_data(data)
+        self._step += 1
+        print(f"Training model at step: {self._step}")
 
         data = self.preprocess(
             data,
@@ -578,11 +589,19 @@ class WorldModel(nn.Module):
 
             if self._config.enable_language:
                 # mean of language loss is already taken
-                metrics = self._model_opt(
-                    torch.mean(model_loss) + losses["language"],
-                    self.parameters(),
-                )
-
+                if self._step % self._grad_debug_every == 0:
+                    scaled_losses = {k: torch.mean(v) for k, v in scaled.items()}
+                    scaled_losses["kl"] = torch.mean(kl_loss)
+                    scaled_losses["language"] = losses["language"]
+                    metrics = self._model_opt(
+                        scaled_losses,
+                        self,
+                    )
+                else:
+                    metrics = self._model_opt.single_update(
+                        torch.mean(model_loss) + losses["language"],
+                        self.parameters(),
+                    )
             else:
                 metrics = self._model_opt(
                     torch.mean(model_loss),
@@ -828,8 +847,12 @@ class ImagBehavior(nn.Module):
             metrics.update(tools.tensorstats(imag_action, "imag_action"))
         metrics["actor_entropy"] = to_np(torch.mean(actor_ent))
         with tools.RequiresGrad(self):
-            metrics.update(self._actor_opt(actor_loss, self.actor.parameters()))
-            metrics.update(self._value_opt(value_loss, self.value.parameters()))
+            metrics.update(
+                self._actor_opt.single_update(actor_loss, self.actor.parameters())
+            )
+            metrics.update(
+                self._value_opt.single_update(value_loss, self.value.parameters())
+            )
         return imag_feat, imag_state, imag_action, weights, metrics
 
     def _imagine(self, start, policy, horizon):

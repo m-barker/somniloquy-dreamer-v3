@@ -716,6 +716,7 @@ class MSEDist:
     def log_prob(self, value):
         assert self._mode.shape == value.shape, (self._mode.shape, value.shape)
         distance = (self._mode - value) ** 2
+        # Aggregate over the non batch-time dimensions, i.e., (H,W,C) for images
         if self._agg == "mean":
             loss = distance.mean(list(range(len(distance.shape)))[2:])
         elif self._agg == "sum":
@@ -942,7 +943,7 @@ class Optimizer:
         }[opt]()
         self._scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
-    def __call__(self, loss, params, retain_graph=True):
+    def single_update(self, loss, params, retain_graph=True):
         assert len(loss.shape) == 0, loss.shape
         metrics = {}
         metrics[f"{self._name}_loss"] = loss.detach().cpu().numpy()
@@ -966,6 +967,61 @@ class Optimizer:
             raise NotImplementedError
         for var in varibs:
             var.data = (1 - self._wd) * var.data
+
+    def __call__(self, losses: dict, model, retain_graph=True):
+        """
+        losses: dict mapping {loss_name: loss_tensor}
+        model: torch.nn.Module (we use named_parameters for logging)
+        """
+
+        metrics = {}
+
+        # record scalar loss values
+        for name, loss in losses.items():
+            assert len(loss.shape) == 0, f"{name} has shape {loss.shape}"
+            metrics[f"{self._name}_{name}"] = loss.detach().cpu().item()
+
+        # ---- diagnostics: per-loss gradient norms ----
+        grads_per_loss = {}
+        for loss_name, loss in losses.items():
+            self._opt.zero_grad()
+            self._scaler.scale(loss).backward(retain_graph=True)
+
+            # unscale for correct grad norms
+            self._scaler.unscale_(self._opt)
+
+            # collect norms per parameter
+            layer_norms = {}
+            for pname, p in model.named_parameters():
+                if p.grad is not None:
+                    gnorm = p.grad.detach().norm().item()
+                    layer_norms[pname] = gnorm
+            grads_per_loss[loss_name] = layer_norms
+
+        # flatten into metrics
+        for loss_name, layer_norms in grads_per_loss.items():
+            for pname, gnorm in layer_norms.items():
+                metrics[f"{self._name}_{loss_name}_{pname}_grad_norm"] = gnorm
+
+        # ---- training step: total loss ----
+        total_loss = sum(losses.values())
+
+        self._opt.zero_grad()
+        self._scaler.scale(total_loss).backward()
+        self._scaler.unscale_(self._opt)
+
+        # gradient clipping on total loss
+        total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), self._clip)
+        metrics[f"{self._name}_total_grad_norm"] = total_norm.item()
+
+        if self._wd:
+            self._apply_weight_decay(model.parameters())
+
+        self._scaler.step(self._opt)
+        self._scaler.update()
+        self._opt.zero_grad()
+
+        return metrics
 
 
 def args_type(default):

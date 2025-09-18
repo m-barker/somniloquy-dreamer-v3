@@ -171,7 +171,7 @@ class Dreamer(nn.Module):
 
     def _train(self, data):
         metrics = {}
-        post, context, mets = self._wm._train(data)
+        post, context, mets = self._wm._train(data, self._step)
         metrics.update(mets)
         start = post
         reward = lambda f, s, a: self._wm.heads["reward"](

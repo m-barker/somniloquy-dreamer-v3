@@ -93,7 +93,7 @@ defaults:
       minres: 4,
       mlp_layers: 3,
       mlp_units: 768,
-      cnn_sigmoid: False,
+      cnn_sigmoid: True,
       image_dist: mse,
       vector_dist: symlog_mse,
       outscale: 1.0,
@@ -519,7 +519,7 @@ minigrid-language-small:
 
 minigrid-language-expl-small-train-wm:
   random_actions: True
-  steps: 2e4
+  steps: 1e5
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
