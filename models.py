@@ -576,7 +576,10 @@ class WorldModel(nn.Module):
                 for name, pred in preds.items():
                     if name == "language":
                         loss = tools.narration_loss(pred, narrations[:, 1:])
-                        losses[name] = loss
+                        print(
+                            f"Language loss : {loss}, language_scale: {self._scales['language']}"
+                        )
+                        losses[name] = loss * self._scales["language"]
                     else:
                         loss = -pred.log_prob(data[name])
                         assert loss.shape == embed.shape[:2], (name, loss.shape)

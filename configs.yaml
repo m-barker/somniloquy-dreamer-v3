@@ -270,7 +270,7 @@ crafter-language-small:
   action_repeat: 1
   envs: 1
   eval_episode_num: 15
-  eval_every: 500
+  eval_every: 5000
   train_ratio: 512
   translator_head:
     {
@@ -284,7 +284,7 @@ crafter-language-small:
       activation: "relu",
     }
   video_pred_log: true
-  log_every: 500
+  log_every: 100
   enable_language: true
   enc_max_length: 16
   dec_max_length: 150
