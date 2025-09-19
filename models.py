@@ -173,7 +173,6 @@ class WorldModel(nn.Module):
         self._scales = dict(
             reward=config.reward_head["loss_scale"],
             cont=config.cont_head["loss_scale"],
-            image=config.decoder["loss_scale"],
             language=config.translator_head["loss_scale"],
         )
 
