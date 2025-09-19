@@ -981,20 +981,19 @@ class Optimizer:
             assert len(loss.shape) == 0, f"{name} has shape {loss.shape}"
             metrics[f"{self._name}_{name}"] = loss.detach().cpu().item()
 
-        # ---- diagnostics: per-loss gradient norms ----
+        # ---- diagnostics: per-loss gradient norms (safe, no AMP) ----
         grads_per_loss = {}
         for loss_name, loss in losses.items():
-            self._opt.zero_grad()
-            self._scaler.scale(loss).backward(retain_graph=True)
-
-            # unscale for correct grad norms
-            self._scaler.unscale_(self._opt)
-
-            # collect norms per parameter
+            grads = torch.autograd.grad(
+                loss,
+                [p for p in model.parameters() if p.requires_grad],
+                retain_graph=True,
+                allow_unused=True,
+            )
             layer_norms = {}
-            for pname, p in model.named_parameters():
-                if p.grad is not None:
-                    gnorm = p.grad.detach().norm().item()
+            for (pname, p), g in zip(model.named_parameters(), grads):
+                if g is not None:
+                    gnorm = g.detach().norm().item()
                     layer_norms[pname] = gnorm
             grads_per_loss[loss_name] = layer_norms
 
@@ -1003,7 +1002,7 @@ class Optimizer:
             for pname, gnorm in layer_norms.items():
                 metrics[f"{self._name}_{loss_name}_{pname}_grad_norm"] = gnorm
 
-        # ---- training step: total loss ----
+        # ---- training step: total loss (with AMP) ----
         total_loss = sum(losses.values())
 
         self._opt.zero_grad()
