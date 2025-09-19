@@ -1482,45 +1482,94 @@ def process_narration_batch(
     return narration
 
 
+# def narration_loss(
+#     predicted_tokens: torch.Tensor,
+#     true_tokens: torch.Tensor,
+#     pad_idx: int = 0,
+#     debug: bool = False,
+# ) -> torch.Tensor:
+#     """Returns the cross entropy loss between the predicted and true tokens.
+
+#     Args:
+#         predicted_tokens (torch.Tensor): The predicted tokens of shape
+#         (seq_len, batch_size, target_vocab_size)
+#         true_tokens (torch.Tensor): The true tokens of shaoe
+#         (batch_size, seq_len)
+#         pad_idx (int): The padding index.
+
+#     Returns:
+#         torch.Tensor: The cross entropy loss between the predicted and true tokens.
+#     """
+#     T, N, V = predicted_tokens.shape
+#     assert N, T == true_tokens.shape
+
+#     # (seq, batch, vocab) -> (batch, seq, vocab)
+#     predicted_tokens = predicted_tokens.permute(1, 0, 2)
+#     if debug:
+#         for batch in range(N):
+#             batch_loss = nn.CrossEntropyLoss(ignore_index=pad_idx)(
+#                 predicted_tokens[batch], true_tokens[batch]
+#             )
+#             print(f"BATCH_{batch} LOSS: {batch_loss:.2f}")
+#             batch_predicted_tokens = predicted_tokens[batch].argmax(dim=-1)
+#             print(batch_predicted_tokens)
+#             print(true_tokens[batch])
+
+#     predicted_tokens = predicted_tokens.reshape(-1, V)
+#     # reshape to (batch_size * seq_len)
+#     true_tokens = true_tokens.reshape(-1)
+#     predicted_tokens_argmax = predicted_tokens.argmax(dim=-1)
+
+#     return nn.CrossEntropyLoss(ignore_index=pad_idx)(predicted_tokens, true_tokens)
+
+
 def narration_loss(
     predicted_tokens: torch.Tensor,
     true_tokens: torch.Tensor,
     pad_idx: int = 0,
     debug: bool = False,
 ) -> torch.Tensor:
-    """Returns the cross entropy loss between the predicted and true tokens.
+    """Returns sentence-level summed cross entropy loss, averaged across batch.
 
     Args:
-        predicted_tokens (torch.Tensor): The predicted tokens of shape
-        (seq_len, batch_size, target_vocab_size)
-        true_tokens (torch.Tensor): The true tokens of shaoe
-        (batch_size, seq_len)
-        pad_idx (int): The padding index.
+        predicted_tokens (torch.Tensor): Shape (seq_len, batch_size, vocab_size)
+        true_tokens (torch.Tensor): Shape (batch_size, seq_len)
+        pad_idx (int): Padding index.
+        debug (bool): If True, print per-batch loss info.
 
     Returns:
-        torch.Tensor: The cross entropy loss between the predicted and true tokens.
+        torch.Tensor: Mean of per-sentence summed CE losses.
     """
     T, N, V = predicted_tokens.shape
-    assert N, T == true_tokens.shape
+    assert true_tokens.shape == (N, T)
 
     # (seq, batch, vocab) -> (batch, seq, vocab)
-    predicted_tokens = predicted_tokens.permute(1, 0, 2)
+    predicted_tokens = predicted_tokens.permute(1, 0, 2)  # (N, T, V)
+
+    # Flatten for CE
+    logits = predicted_tokens.reshape(-1, V)  # (N*T, V)
+    targets = true_tokens.reshape(-1)  # (N*T,)
+
+    # Token-level CE losses
+    token_losses = F.cross_entropy(
+        logits, targets, reduction="none", ignore_index=pad_idx
+    )  # (N*T,)
+
+    # Reshape back to (N, T)
+    token_losses = token_losses.view(N, T)
+
+    # Sum across sequence (ignoring pad tokens automatically)
+    seq_losses = token_losses.sum(dim=1)  # (N,)
+
     if debug:
-        for batch in range(N):
-            batch_loss = nn.CrossEntropyLoss(ignore_index=pad_idx)(
-                predicted_tokens[batch], true_tokens[batch]
-            )
-            print(f"BATCH_{batch} LOSS: {batch_loss:.2f}")
-            batch_predicted_tokens = predicted_tokens[batch].argmax(dim=-1)
-            print(batch_predicted_tokens)
-            print(true_tokens[batch])
+        for b in range(N):
+            print(f"BATCH_{b} SUMMED LOSS: {seq_losses[b].item():.2f}")
+            batch_preds = predicted_tokens[b].argmax(dim=-1)
+            print("Pred:", batch_preds)
+            print("True:", true_tokens[b])
 
-    predicted_tokens = predicted_tokens.reshape(-1, V)
-    # reshape to (batch_size * seq_len)
-    true_tokens = true_tokens.reshape(-1)
-    predicted_tokens_argmax = predicted_tokens.argmax(dim=-1)
-
-    return nn.CrossEntropyLoss(ignore_index=pad_idx)(predicted_tokens, true_tokens)
+    # Mean across batch
+    return seq_losses.mean()
 
 
 def ctc_loss(
