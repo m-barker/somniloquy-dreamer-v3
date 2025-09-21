@@ -118,6 +118,7 @@ class WorldModel(nn.Module):
                 "target_vocab_size": len(self.vocab),
                 "bottleneck_input_size": feat_size,
             }
+            self._language_loss_agg: str = config.translator_head["loss_agg"]
             if config.translation_baseline:
                 cnn_encoder_params = {
                     "input_shape": (64, 64, 3),
@@ -530,7 +531,6 @@ class WorldModel(nn.Module):
         narration_keys = self._config.narrator["narration_key"]
         narration_data = self._process_narration_data(data)
         self._step += 1
-        print(f"Training model at step: {self._step}")
 
         data = self.preprocess(
             data,
@@ -575,9 +575,8 @@ class WorldModel(nn.Module):
                 losses = {}
                 for name, pred in preds.items():
                     if name == "language":
-                        loss = tools.narration_loss(pred, narrations[:, 1:])
-                        print(
-                            f"Language loss : {loss}, language_scale: {self._scales['language']}"
+                        loss = tools.narration_loss(
+                            pred, narrations[:, 1:], self._language_loss_agg
                         )
                         losses[name] = loss * self._scales["language"]
                     else:

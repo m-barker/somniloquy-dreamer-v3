@@ -1525,6 +1525,7 @@ def process_narration_batch(
 def narration_loss(
     predicted_tokens: torch.Tensor,
     true_tokens: torch.Tensor,
+    loss_aggregate: str,
     pad_idx: int = 0,
     debug: bool = False,
 ) -> torch.Tensor:
@@ -1548,6 +1549,9 @@ def narration_loss(
     # Flatten for CE
     logits = predicted_tokens.reshape(-1, V)  # (N*T, V)
     targets = true_tokens.reshape(-1)  # (N*T,)
+
+    if loss_aggregate == "mean":
+        return nn.CrossEntropyLoss(ignore_index=pad_idx)(logits, targets)
 
     # Token-level CE losses
     token_losses = F.cross_entropy(
