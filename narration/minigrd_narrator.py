@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Any, Dict, List, Tuple, Union
 import numpy as np
 
 
@@ -12,6 +12,8 @@ class MiniGridNarrator(ABC):
             "FLOOR_ID": 3,
             "DOOR_ID": 4,
             "KEY_ID": 5,
+            "BALL_ID": 6,
+            "BOX_ID": 7,
             "GOAL_ID": 8,
             "AGENT_ID": 10,
             "TELEPORTER_ID": 11,
@@ -131,8 +133,354 @@ class MiniGridNarrator(ABC):
             return f"the agent moved away from the {object_name} "
 
     @abstractmethod
-    def narrate(self, observations: list[np.ndarray]) -> str:
+    def narrate(self, observations: List[Any]) -> str:
         pass
+
+
+class BabyAIGoToLocNarrator(MiniGridNarrator):
+    """
+    Narrator for the GoToLoc environment, details of which can be found
+    https://minigrid.farama.org/environments/babyai/GoToLocal/
+    """
+
+    def _get_adjacent_coordinates(
+        self, source_coordinate: Tuple[int, int]
+    ) -> List[Tuple[int, int]]:
+        """
+        Gets a list of coordinates that are adjacent (not diagonal) to a given source coordinate
+
+        Arguments:
+            source_coordinate (Tuple(int, int)): x, y of coord to get adjacent cells
+
+        Returns List[Tuple[int, int]] - list of adjacent coordinates
+        """
+
+        adjacent_coords: List[Tuple[int, int]] = []
+
+        # Given coord X we want to return Y
+        # |-|Y|-|
+        # |Y|X|Y|
+        # |-|Y|-|
+
+        source_x, source_y = source_coordinate
+
+        adjacent_coords.append((source_x + 1, source_y))
+        adjacent_coords.append((source_x - 1, source_y))
+        adjacent_coords.append((source_x, source_y + 1))
+        adjacent_coords.append((source_x, source_y - 1))
+
+        return adjacent_coords
+
+    def _is_agent_facing_object(
+        self,
+        agent_position: Tuple[int, int],
+        agent_direction: int,
+        object_position: Tuple[int, int],
+    ) -> bool:
+        """
+        Determines if the agent is facing (i.e., pointing at) a given object.
+
+        Arguments:
+            - agent_position Tuple[int, int]: (x,y) coord of agent
+            - agent_direction int: integer encoding direction of agent in range [0,3]
+            - object_position Tuple[int, int]: (x,y) coord of object to check
+
+        Returns bool: True if agent is facing the object else false
+        """
+        agent_facing = False
+
+        # Grid coords are:
+        #   0 1 2 3
+        # 0| | | | |
+        # 1| | | | |
+        # 2| | | | |
+        # 3| | | | |
+
+        agent_x, agent_y = agent_position
+        object_x, object_y = object_position
+
+        if agent_y == object_y:
+            # Agent to the left of object
+            if agent_x == object_x - 1:
+                agent_facing = agent_direction == 0
+            # Agent to the right of object
+            elif agent_x == object_x + 1:
+                agent_facing = agent_direction == 2
+        elif agent_x == object_x:
+            # Agent above object
+            if agent_y == object_y - 1:
+                agent_facing = agent_direction == 1
+            # Agent below object
+            elif agent_y == object_y + 1:
+                agent_facing = agent_direction == 3
+
+        return agent_facing
+
+    def narrate(self, observations: List[Dict[str, Union[np.ndarray, int]]]) -> str:
+        """
+        Describes what happened in a given sequence of state observations
+        in the minigrid GoToLoc environment.
+
+        observations: Dict containing the following keys:
+            -   occupancy_grid: np.ndarray of the envs occupancy grid
+            -   agent_direction: int, denotaing the direction the agent is facing.
+                -    0 = pointing right
+                -    1 = pointing down
+                -    2 = pointing left
+                -    3 = pointing up
+
+        Returns a string.
+
+        Environment details:
+
+        “go to the {color} {type}”
+        {color} is the color of the box. Can be “red”, “green”, “blue”, “purple”, “yellow” or “grey”.
+        {type} is the type of the object. Can be “ball”, “box” or “key”.
+
+        Environment terminates when the agent is facing the request object, not just when the
+        agent is next to it. We therefore need to take into account the agent's orientation,
+        and distinguish from being next to an object to "reaching" i.e., facing, the object
+
+        """
+        narration_str = ""
+
+        occupancy_grids: List[np.ndarray] = [
+            x["occupancy_grid"]
+            for x in observations
+            if isinstance(x["occupancy_grid"], np.ndarray)
+        ]
+
+        # Check if agent ever moves
+        agent_start_pos = self._get_object_location(
+            occupancy_grids[0], self._OBJECT_IDS["AGENT_ID"]
+        )
+        if not agent_start_pos:
+            raise ValueError("Agent not found in grid")
+        agent_start_pos = agent_start_pos[0]
+        agent_moved = False
+        for grid in occupancy_grids:
+            agent_pos = self._get_object_location(grid, self._OBJECT_IDS["AGENT_ID"])
+            if not agent_pos:
+                raise ValueError("Agent not found in grid")
+            if agent_pos != agent_start_pos:
+                agent_moved = True
+                break
+        if not agent_moved:
+            return "I will not move"
+
+        agent_directions: List[int] = [
+            x["agent_direction"]
+            for x in observations
+            if isinstance(x["agent_direction"], int)
+        ]
+        first_obs = occupancy_grids[0]
+        ball_positions = self._get_object_location(
+            first_obs, self._OBJECT_IDS["BALL_ID"]
+        )
+        box_positions = self._get_object_location(first_obs, self._OBJECT_IDS["BOX_ID"])
+        key_positions = self._get_object_location(first_obs, self._OBJECT_IDS["KEY_ID"])
+
+        ball_adjacent_cells: List[List[Tuple[int, int]]] = [[] for _ in ball_positions]
+        box_adjacent_cells: List[List[Tuple[int, int]]] = [[] for _ in box_positions]
+        key_adjacent_cells: List[List[Tuple[int, int]]] = [[] for _ in key_positions]
+
+        for i, ball in enumerate(ball_positions):
+            ball_adjacent_cells[i] = self._get_adjacent_coordinates(ball)
+        for i, box in enumerate(box_positions):
+            box_adjacent_cells[i] = self._get_adjacent_coordinates(box)
+        for i, key in enumerate(key_positions):
+            key_adjacent_cells[i] = self._get_adjacent_coordinates(key)
+
+        for t, state in enumerate(occupancy_grids):
+            agent_position = self._get_object_location(
+                state, self._OBJECT_IDS["AGENT_ID"]
+            )
+            if not agent_position:
+                raise ValueError("Agent cannot be found in the current state")
+            # Should only ever be one agent
+            agent_position = agent_position[0]
+            agent_direction = agent_directions[t]
+
+            narrated_this_timestep = False
+
+            for i, ball in enumerate(ball_adjacent_cells):
+                # Each tile is encoded as the tuple (OBJECT_IDX, COLOR_IDX, STATE)
+                ball_x, ball_y = ball_positions[i]
+                ball_tile_encoding = state[ball_x, ball_y]
+                ball_colour_id = ball_tile_encoding[1]
+                ball_colour_str = self._ID_TO_COLOUR[ball_colour_id]
+
+                for adjacent_cell in ball:
+                    if agent_position == adjacent_cell:
+                        # Check if agent is facing the object
+                        facing = self._is_agent_facing_object(
+                            agent_position, agent_direction, ball_positions[i]
+                        )
+                        if narration_str == "":
+                            narration_str += "First "
+                        if facing:
+                            narration_str += f"I will go to the {ball_colour_str} ball "
+                        else:
+                            if narrated_this_timestep:
+                                narration_str += f"and I will move next to the {ball_colour_str} ball "
+                            narration_str += (
+                                f"I will move next to the {ball_colour_str} ball "
+                            )
+                        narrated_this_timestep = True
+
+            for i, box in enumerate(box_adjacent_cells):
+                # Each tile is encoded as the tuple (OBJECT_IDX, COLOR_IDX, STATE)
+                box_x, box_y = box_positions[i]
+                box_tile_encoding = state[box_x, box_y]
+                box_colour_id = box_tile_encoding[1]
+                box_colour_str = self._ID_TO_COLOUR[box_colour_id]
+
+                for adjacent_cell in box:
+                    if agent_position == adjacent_cell:
+                        # Check if agent is facing the object
+                        facing = self._is_agent_facing_object(
+                            agent_position, agent_direction, box_positions[i]
+                        )
+                        if narration_str == "":
+                            narration_str += "First "
+                        if facing:
+                            narration_str += f"I will go to the {box_colour_str} box "
+                        else:
+                            if narrated_this_timestep:
+                                narration_str += (
+                                    f"and I will move next to the {box_colour_str} box "
+                                )
+                            narration_str += (
+                                f"I will move next to the {box_colour_str} box "
+                            )
+                        narrated_this_timestep = True
+
+            for i, key in enumerate(key_adjacent_cells):
+                # Each tile is encoded as the tuple (OBJECT_IDX, COLOR_IDX, STATE)
+                key_x, key_y = key_positions[i]
+                key_tile_encoding = state[key_x, key_y]
+                key_colour_id = key_tile_encoding[1]
+                key_colour_str = self._ID_TO_COLOUR[key_colour_id]
+
+                for adjacent_cell in key:
+                    if agent_position == adjacent_cell:
+                        # Check if agent is facing the object
+                        facing = self._is_agent_facing_object(
+                            agent_position, agent_direction, key_positions[i]
+                        )
+                        if narration_str == "":
+                            narration_str += "First "
+                        if facing:
+                            narration_str += f"I will go to the {key_colour_str} key "
+                        else:
+                            if narrated_this_timestep:
+                                narration_str += (
+                                    f"and I will move next to the {key_colour_str} key "
+                                )
+                            narration_str += (
+                                f"I will move next to the {key_colour_str} key"
+                            )
+                        narrated_this_timestep = True
+
+            if narrated_this_timestep:
+                narration_str += "and then "
+
+        # If agent has moved, but hasn't moved next to any objects, then get the object(s) the agent started
+        # closest to, and compare with the closest object(s) to the agent at the end of the trajectory
+        if narration_str == "":
+            min_dist = np.inf
+            closest_objects: List[Tuple[str, Union[int, float]]] = []
+            for ball in ball_positions:
+                agent_dist = self._calculate_distance(agent_start_pos, ball)
+                if agent_dist < min_dist:
+                    ball_x, ball_y = ball
+                    ball_tile_encoding = occupancy_grids[0][ball_x, ball_y]
+                    ball_colour_id = ball_tile_encoding[1]
+                    ball_colour_str = self._ID_TO_COLOUR[ball_colour_id]
+                    closest_objects.append((f"{ball_colour_str} ball", agent_dist))
+                    min_dist = agent_dist
+            for box in box_positions:
+                agent_dist = self._calculate_distance(agent_start_pos, box)
+                if agent_dist < min_dist:
+                    box_x, box_y = box
+                    box_tile_encoding = occupancy_grids[0][box_x, box_y]
+                    box_colour_id = box_tile_encoding[1]
+                    box_colour_str = self._ID_TO_COLOUR[box_colour_id]
+                    closest_objects.append((f"{box_colour_str} box", agent_dist))
+                    min_dist = agent_dist
+            for key in key_positions:
+                agent_dist = self._calculate_distance(agent_start_pos, key)
+                if agent_dist < min_dist:
+                    key_x, key_y = key
+                    key_tile_encoding = occupancy_grids[0][key_x, key_y]
+                    key_colour_id = key_tile_encoding[1]
+                    key_colour_str = self._ID_TO_COLOUR[key_colour_id]
+                    closest_objects.append((f"{key_colour_str} key", agent_dist))
+                    min_dist = agent_dist
+
+            closest_objects.sort(key=lambda x: x[1])
+            closest_dist = closest_objects[0][1]
+            narration_str += f"I will start closest to the {closest_objects[0][0]} "
+            for obj in closest_objects[1:]:
+                if obj[1] > closest_dist:
+                    break
+                narration_str += f" and the {obj[0]} "
+
+            min_dist = np.inf
+            closest_objects: List[Tuple[str, Union[int, float]]] = []
+            agent_end_pos = self._get_object_location(
+                occupancy_grids[-1], self._OBJECT_IDS["AGENT_ID"]
+            )
+            if not agent_end_pos:
+                raise ValueError("Agent could not be found in the final observation")
+            agent_end_pos = agent_end_pos[0]
+            for ball in ball_positions:
+                agent_dist = self._calculate_distance(agent_end_pos, ball)
+                if agent_dist < min_dist:
+                    ball_x, ball_y = ball
+                    ball_tile_encoding = occupancy_grids[0][ball_x, ball_y]
+                    ball_colour_id = ball_tile_encoding[1]
+                    ball_colour_str = self._ID_TO_COLOUR[ball_colour_id]
+                    closest_objects.append((f"{ball_colour_str} ball", agent_dist))
+                    min_dist = agent_dist
+            for box in box_positions:
+                agent_dist = self._calculate_distance(agent_end_pos, box)
+                if agent_dist < min_dist:
+                    box_x, box_y = box
+                    box_tile_encoding = occupancy_grids[0][box_x, box_y]
+                    box_colour_id = box_tile_encoding[1]
+                    box_colour_str = self._ID_TO_COLOUR[box_colour_id]
+                    closest_objects.append((f"{box_colour_str} box", agent_dist))
+                    min_dist = agent_dist
+            for key in key_positions:
+                agent_dist = self._calculate_distance(agent_end_pos, key)
+                if agent_dist < min_dist:
+                    key_x, key_y = key
+                    key_tile_encoding = occupancy_grids[0][key_x, key_y]
+                    key_colour_id = key_tile_encoding[1]
+                    key_colour_str = self._ID_TO_COLOUR[key_colour_id]
+                    closest_objects.append((f"{key_colour_str} key", agent_dist))
+                    min_dist = agent_dist
+
+            closest_objects.sort(key=lambda x: x[1])
+            closest_dist = closest_objects[0][1]
+            narration_str += f"and I will end closest to the {closest_objects[0][0]} "
+            for obj in closest_objects[1:]:
+                if obj[1] > closest_dist:
+                    break
+                narration_str += f" and the {obj[0]} "
+
+        # Strip off any trailing " and then "
+        if narration_str[-5:] == "then ":
+            narration_str = narration_str[:10]
+
+        # Remove any trailing whitespace
+        if narration_str[-1] == " ":
+            narration_str = narration_str[:-1]
+
+        assert narration_str != "", "Empty narration str for BabyAIGoToLoc Narrator"
+
+        return narration_str
 
 
 class MiniGridFourSquareNarrator(MiniGridNarrator):
