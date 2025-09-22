@@ -214,6 +214,11 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             elif agent_y == object_y + 1:
                 agent_facing = agent_direction == 3
 
+        print(f"Agent position: {agent_position}")
+        print(f"Object position: {object_position}")
+        print(f"Agent direction: {agent_direction}")
+        print(f"Is agent facing object?: {agent_facing}")
+
         return agent_facing
 
     def narrate(self, observations: List[Dict[str, Union[np.ndarray, int]]]) -> str:
@@ -249,30 +254,34 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             for x in observations
             if isinstance(x["occupancy_grid"], np.ndarray)
         ]
+        agent_directions: List[int] = [
+            x["agent_direction"]
+            for x in observations
+            if isinstance(x["agent_direction"], int)
+        ]
 
         # Check if agent ever moves
         agent_start_pos = self._get_object_location(
             occupancy_grids[0], self._OBJECT_IDS["AGENT_ID"]
         )
         if not agent_start_pos:
+            print(occupancy_grids[0])
             raise ValueError("Agent not found in grid")
         agent_start_pos = agent_start_pos[0]
+        agent_start_dir = agent_directions[0]
         agent_moved = False
-        for grid in occupancy_grids:
+        for i, grid in enumerate(occupancy_grids):
             agent_pos = self._get_object_location(grid, self._OBJECT_IDS["AGENT_ID"])
+            agent_dir = agent_directions[i]
             if not agent_pos:
                 raise ValueError("Agent not found in grid")
-            if agent_pos != agent_start_pos:
+            agent_pos = agent_pos[0]
+            if agent_pos != agent_start_pos or agent_dir != agent_start_dir:
                 agent_moved = True
                 break
         if not agent_moved:
             return "I will not move"
 
-        agent_directions: List[int] = [
-            x["agent_direction"]
-            for x in observations
-            if isinstance(x["agent_direction"], int)
-        ]
         first_obs = occupancy_grids[0]
         ball_positions = self._get_object_location(
             first_obs, self._OBJECT_IDS["BALL_ID"]
@@ -291,6 +300,8 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
         for i, key in enumerate(key_positions):
             key_adjacent_cells[i] = self._get_adjacent_coordinates(key)
 
+        prev_pos = None
+        prev_direction = None
         for t, state in enumerate(occupancy_grids):
             agent_position = self._get_object_location(
                 state, self._OBJECT_IDS["AGENT_ID"]
@@ -300,6 +311,11 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             # Should only ever be one agent
             agent_position = agent_position[0]
             agent_direction = agent_directions[t]
+
+            if prev_pos is not None and prev_direction is not None:
+                # Skip if no movement, otherwise we just narrate the same thing
+                if agent_position == prev_pos and agent_direction == prev_direction:
+                    continue
 
             narrated_this_timestep = False
 
@@ -319,13 +335,16 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                         if narration_str == "":
                             narration_str += "First "
                         if facing:
+                            if narrated_this_timestep:
+                                narration_str += "and "
                             narration_str += f"I will go to the {ball_colour_str} ball "
                         else:
                             if narrated_this_timestep:
                                 narration_str += f"and I will move next to the {ball_colour_str} ball "
-                            narration_str += (
-                                f"I will move next to the {ball_colour_str} ball "
-                            )
+                            else:
+                                narration_str += (
+                                    f"I will move next to the {ball_colour_str} ball "
+                                )
                         narrated_this_timestep = True
 
             for i, box in enumerate(box_adjacent_cells):
@@ -344,15 +363,18 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                         if narration_str == "":
                             narration_str += "First "
                         if facing:
+                            if narrated_this_timestep:
+                                narration_str += "and "
                             narration_str += f"I will go to the {box_colour_str} box "
                         else:
                             if narrated_this_timestep:
                                 narration_str += (
                                     f"and I will move next to the {box_colour_str} box "
                                 )
-                            narration_str += (
-                                f"I will move next to the {box_colour_str} box "
-                            )
+                            else:
+                                narration_str += (
+                                    f"I will move next to the {box_colour_str} box "
+                                )
                         narrated_this_timestep = True
 
             for i, key in enumerate(key_adjacent_cells):
@@ -371,19 +393,25 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                         if narration_str == "":
                             narration_str += "First "
                         if facing:
+                            if narrated_this_timestep:
+                                narration_str += "and "
                             narration_str += f"I will go to the {key_colour_str} key "
                         else:
                             if narrated_this_timestep:
                                 narration_str += (
                                     f"and I will move next to the {key_colour_str} key "
                                 )
-                            narration_str += (
-                                f"I will move next to the {key_colour_str} key"
-                            )
+                            else:
+                                narration_str += (
+                                    f"I will move next to the {key_colour_str} key "
+                                )
                         narrated_this_timestep = True
 
             if narrated_this_timestep:
                 narration_str += "and then "
+
+            prev_pos = agent_position
+            prev_direction = agent_direction
 
         # If agent has moved, but hasn't moved next to any objects, then get the object(s) the agent started
         # closest to, and compare with the closest object(s) to the agent at the end of the trajectory
@@ -392,7 +420,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             closest_objects: List[Tuple[str, Union[int, float]]] = []
             for ball in ball_positions:
                 agent_dist = self._calculate_distance(agent_start_pos, ball)
-                if agent_dist < min_dist:
+                if agent_dist <= min_dist:
                     ball_x, ball_y = ball
                     ball_tile_encoding = occupancy_grids[0][ball_x, ball_y]
                     ball_colour_id = ball_tile_encoding[1]
@@ -401,7 +429,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                     min_dist = agent_dist
             for box in box_positions:
                 agent_dist = self._calculate_distance(agent_start_pos, box)
-                if agent_dist < min_dist:
+                if agent_dist <= min_dist:
                     box_x, box_y = box
                     box_tile_encoding = occupancy_grids[0][box_x, box_y]
                     box_colour_id = box_tile_encoding[1]
@@ -410,7 +438,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                     min_dist = agent_dist
             for key in key_positions:
                 agent_dist = self._calculate_distance(agent_start_pos, key)
-                if agent_dist < min_dist:
+                if agent_dist <= min_dist:
                     key_x, key_y = key
                     key_tile_encoding = occupancy_grids[0][key_x, key_y]
                     key_colour_id = key_tile_encoding[1]
@@ -424,7 +452,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             for obj in closest_objects[1:]:
                 if obj[1] > closest_dist:
                     break
-                narration_str += f" and the {obj[0]} "
+                narration_str += f"and the {obj[0]} "
 
             min_dist = np.inf
             closest_objects: List[Tuple[str, Union[int, float]]] = []
@@ -436,7 +464,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             agent_end_pos = agent_end_pos[0]
             for ball in ball_positions:
                 agent_dist = self._calculate_distance(agent_end_pos, ball)
-                if agent_dist < min_dist:
+                if agent_dist <= min_dist:
                     ball_x, ball_y = ball
                     ball_tile_encoding = occupancy_grids[0][ball_x, ball_y]
                     ball_colour_id = ball_tile_encoding[1]
@@ -445,7 +473,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                     min_dist = agent_dist
             for box in box_positions:
                 agent_dist = self._calculate_distance(agent_end_pos, box)
-                if agent_dist < min_dist:
+                if agent_dist <= min_dist:
                     box_x, box_y = box
                     box_tile_encoding = occupancy_grids[0][box_x, box_y]
                     box_colour_id = box_tile_encoding[1]
@@ -454,7 +482,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                     min_dist = agent_dist
             for key in key_positions:
                 agent_dist = self._calculate_distance(agent_end_pos, key)
-                if agent_dist < min_dist:
+                if agent_dist <= min_dist:
                     key_x, key_y = key
                     key_tile_encoding = occupancy_grids[0][key_x, key_y]
                     key_colour_id = key_tile_encoding[1]
@@ -468,11 +496,11 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             for obj in closest_objects[1:]:
                 if obj[1] > closest_dist:
                     break
-                narration_str += f" and the {obj[0]} "
+                narration_str += f"and the {obj[0]} "
 
         # Strip off any trailing " and then "
         if narration_str[-5:] == "then ":
-            narration_str = narration_str[:10]
+            narration_str = narration_str[:-9]
 
         # Remove any trailing whitespace
         if narration_str[-1] == " ":
