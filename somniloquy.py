@@ -31,6 +31,7 @@ from narration.minigrd_narrator import (
     MiniGridTeleportNarrator,
     MiniGridComplexTeleportNarrator,
     MiniGridFourSquareExplNarrator,
+    BabyAIGoToLocNarrator,
 )
 from narration.safetygym_narrator import IslandNavigationNarrator
 from narration.ai2thor_narrator import CookEggNarrator
@@ -73,7 +74,10 @@ class Dreamer(nn.Module):
         self._wm = models.WorldModel(
             obs_space, act_space, self._step, config, narrator=narrator
         )
-        self._task_behavior = models.ImagBehavior(config, self._wm)
+        if not self._random_actions:
+            self._task_behavior = models.ImagBehavior(config, self._wm)
+        else:
+            self._task_behavior = expl.Random(config, act_space).to(self._config.device)
         if (
             config.compile and os.name != "nt"
         ):  # compilation is not supported on windows
@@ -177,7 +181,8 @@ class Dreamer(nn.Module):
         reward = lambda f, s, a: self._wm.heads["reward"](
             self._wm.dynamics.get_feat(s)
         ).mode()
-        metrics.update(self._task_behavior._train(start, reward)[-1])
+        if not self._random_actions:
+            metrics.update(self._task_behavior._train(start, reward)[-1])
         if self._config.expl_behavior != "greedy":
             mets = self._expl_behavior.train(start, context, data)[-1]
             metrics.update({"expl_" + key: value for key, value in mets.items()})
@@ -199,16 +204,7 @@ def make_dataset(episodes, config):
 
 
 def configure_narrator(config):
-    if "minedojo" in config.task:
-        if config.mineclip_ckpt_path is not None:
-            with open(config.prompt_path, "r") as f:
-                prompts = json.load(f)[config.minedojo_task_id]
-            narrator = MineCLIPNarrator(
-                config.mineclip_ckpt_path,
-                torch.device("cuda"),
-                prompts,
-            )
-    elif "minigrid" in config.task:
+    if "minigrid" in config.task:
         if "four_squares" in config.task:
             if "expl" in config.task:
                 narrator = MiniGridFourSquareExplNarrator()
@@ -219,6 +215,8 @@ def configure_narrator(config):
                 narrator = MiniGridComplexTeleportNarrator()
             else:
                 narrator = MiniGridTeleportNarrator()
+        else:
+            raise ValueError(f"Provided Minigrid task {config.task} is unhandled")
     elif "panda" in config.task:
         narrator = PandaPushColourNarrator()
     elif "crafter" in config.task:
@@ -227,6 +225,8 @@ def configure_narrator(config):
         narrator = IslandNavigationNarrator()
     elif "ai2thor" in config.task:
         narrator = CookEggNarrator()
+    elif "babyai" in config.task:
+        narrator = BabyAIGoToLocNarrator()
     else:
         raise ValueError(f"{config.task} has no valid narrator")
 
@@ -331,6 +331,18 @@ def make_env(config, mode, id):
             )
         else:
             raise ValueError(f"Invalid ai2thor task: {task}")
+    elif suite == "babyai":
+        import envs.baby_ai_env as baby_ai_env
+
+        env = baby_ai_env.BabyAI(
+            task_name=task,
+            img_size=config.size,
+            actions=config.actions,
+            max_length=config.time_limit,
+            seed=config.seed,
+            reward=config.env_reward,
+            terminate=config.env_terminate,
+        )
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)

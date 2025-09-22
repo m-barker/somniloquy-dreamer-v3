@@ -214,14 +214,9 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
             elif agent_y == object_y + 1:
                 agent_facing = agent_direction == 3
 
-        print(f"Agent position: {agent_position}")
-        print(f"Object position: {object_position}")
-        print(f"Agent direction: {agent_direction}")
-        print(f"Is agent facing object?: {agent_facing}")
-
         return agent_facing
 
-    def narrate(self, observations: List[Dict[str, Union[np.ndarray, int]]]) -> str:
+    def narrate(self, observations: Dict[str, List[Union[np.ndarray, int]]]) -> str:
         """
         Describes what happened in a given sequence of state observations
         in the minigrid GoToLoc environment.
@@ -249,16 +244,8 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
         """
         narration_str = ""
 
-        occupancy_grids: List[np.ndarray] = [
-            x["occupancy_grid"]
-            for x in observations
-            if isinstance(x["occupancy_grid"], np.ndarray)
-        ]
-        agent_directions: List[int] = [
-            x["agent_direction"]
-            for x in observations
-            if isinstance(x["agent_direction"], int)
-        ]
+        occupancy_grids: List[np.ndarray] = observations["occupancy_grid"]
+        agent_directions: List[int] = observations["agent_direction"]
 
         # Check if agent ever moves
         agent_start_pos = self._get_object_location(

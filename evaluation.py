@@ -40,6 +40,7 @@ def imagine_trajectory(
     trajectory_length: int,
     actions: Optional[List[torch.Tensor]] = None,
     sample_latent: bool = False,
+    sample_policy: bool = False,
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor], bool]:
     """Samples a trajectory of imagined rollouts from the world model and
     actor. Returns the imagined states and actions.
@@ -84,7 +85,13 @@ def imagine_trajectory(
             continue
         # No actions provided; act greedily wrt. the learned policy.
         if actions is None:
-            action = agent._task_behavior.actor(latent_state).mode().squeeze(0)
+            policy = agent._task_behavior.actor(latent_state)
+            if sample_policy:
+                action = policy.sample()
+            else:
+                action = policy.mode()
+            if len(action.shape) > len(prev_state["stoch"].shape):
+                action = action.squeeze(0)
             imagined_actions.append(action.detach().clone())
         else:
             action = actions[t]
@@ -96,10 +103,11 @@ def imagine_trajectory(
         prev_state = prior
         latent_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
         imagained_states.append(latent_state.detach().clone())
-        predicted_continue = agent._wm.heads["cont"](latent_state).mode()
-        # Less than 50% predicted chance that the episode continues according to world model.
-        if predicted_continue[0, 0].detach().cpu().numpy() < 0.5:
-            done = True
+        if "cont" in agent._wm.heads:
+            predicted_continue = agent._wm.heads["cont"](latent_state).mode()
+            # Less than 50% predicted chance that the episode continues according to world model.
+            if predicted_continue[0, 0].detach().cpu().numpy() < 0.5:
+                done = True
     if actions is None:
         return imagained_states, imagined_actions, done
     return imagained_states, actions, done
@@ -300,6 +308,7 @@ def sample_rollouts(
             trajectory_length=trajectory_length,
             actions=actions,
             sample_latent=config.stochastic_env,
+            sample_policy=config.random_actions,
         )
         posterior_states, observations, posteriors, env_done = rollout_trajectory(
             agent=agent,
@@ -471,6 +480,7 @@ def generate_narration(
         if len(narration_data.keys()) == 1:  # type: ignore
             narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
         actual_narration = narrator.narrate(narration_data)
+
     else:
         raise ValueError(f"Unhandled narration data type: {type(narration_data)}")
     return actual_narration

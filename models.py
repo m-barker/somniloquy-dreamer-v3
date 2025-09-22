@@ -90,18 +90,19 @@ class WorldModel(nn.Module):
             device=config.device,
             name="Reward",
         )
-        self.heads["cont"] = networks.MLP(
-            feat_size,
-            (),
-            config.cont_head["layers"],
-            config.units,
-            config.act,
-            config.norm,
-            dist="binary",
-            outscale=config.cont_head["outscale"],
-            device=config.device,
-            name="Cont",
-        )
+        if config.env_terminate:
+            self.heads["cont"] = networks.MLP(
+                feat_size,
+                (),
+                config.cont_head["layers"],
+                config.units,
+                config.act,
+                config.norm,
+                dist="binary",
+                outscale=config.cont_head["outscale"],
+                device=config.device,
+                name="Cont",
+            )
         if config.enable_language:
             assert narrator is not None
             self.narrator = narrator
@@ -531,7 +532,6 @@ class WorldModel(nn.Module):
         narration_keys = self._config.narrator["narration_key"]
         narration_data = self._process_narration_data(data)
         self._step += 1
-
         data = self.preprocess(
             data,
             keys_to_ignore=(

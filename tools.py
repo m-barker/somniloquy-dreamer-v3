@@ -1672,6 +1672,16 @@ def get_task_stopwords(task_name: str) -> List[str]:
                 "then",
             ]
         )
+    elif "babyai" in task_name:
+        stop_words.extend(
+            [
+                "i",
+                "will",
+                "and",
+                "the",
+            ]
+        )
+
     else:
         raise ValueError(f"Task {task_name} not supported.")
     return stop_words

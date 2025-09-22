@@ -147,7 +147,7 @@ class BabyAI:
 
         rgb_image = obs["rgb_image"]
         occupancy_grid = obs["encoded_image"]
-        direction = obs["direction"]
+        direction = int(obs["direction"])
 
         if rgb_image.shape[:-2] != self._img_size:
             rgb_image = cv2.resize(
@@ -177,7 +177,7 @@ class BabyAI:
 
         rgb_image = obs["rgb_image"]
         occupancy_grid = obs["encoded_image"]
-        direction = obs["direction"]
+        direction = int(obs["direction"])
 
         if rgb_image.shape[:-2] != self._img_size:
             rgb_image = cv2.resize(

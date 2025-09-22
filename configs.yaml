@@ -28,7 +28,12 @@ defaults:
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
   wandb: True
+
+  # Change these if just learning a dynamics model
   random_actions: False
+  env_reward: True
+  env_terminate: True
+
 
   # Translation Evaluation
   save_plots: False
@@ -65,7 +70,7 @@ defaults:
   dyn_std_act: "sigmoid2"
   dyn_min_std: 0.1
   grad_heads: ["decoder", "reward", "cont"]
-  language_grads: true
+  language_grads: false
   units: 768
   act: "SiLU"
   norm: True
@@ -93,7 +98,7 @@ defaults:
       minres: 4,
       mlp_layers: 3,
       mlp_units: 768,
-      cnn_sigmoid: True,
+      cnn_sigmoid: False,
       image_dist: mse,
       vector_dist: symlog_mse,
       outscale: 1.0,
@@ -140,7 +145,8 @@ defaults:
       token_embed_size: 256,
       out_head_dim: 256,
       activation: "relu",
-      loss_scale: 10.0,
+      loss_scale: 1.0,
+      loss_agg: "mean",
     }
   dyn_scale: 1.0
   rep_scale: 0.1
@@ -264,7 +270,8 @@ crafter-language-baseline:
   actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
 
-crafter-language-small:
+# 12M Parameter Dreamer Version
+crafter-language-12m:
   task: crafter_reward
   steps: 1e7
   action_repeat: 1
@@ -272,17 +279,6 @@ crafter-language-small:
   eval_episode_num: 15
   eval_every: 5000
   train_ratio: 512
-  translator_head:
-    {
-      attention_heads: 1,
-      encoder_blocks: 1,
-      decoder_blocks: 1,
-      dropout: 0.1,
-      use_bottleneck: True,
-      token_embed_size: 128,
-      out_head_dim: 128,
-      activation: "relu",
-    }
   video_pred_log: true
   log_every: 100
   enable_language: true
@@ -291,15 +287,12 @@ crafter-language-small:
   vocab_path: vocab/crafter.json
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
-  encoder: { cnn_keys: "image", cnn_depth: 32 }
-  decoder: { cnn_keys: "image", cnn_depth: 32 }
-  dyn_hidden: 128
-  dyn_deter: 256
-  units: 128
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 1 }
-  cont_head: { layers: 1 }
+  encoder: {cnn_depth: 16 }
+  decoder: {cnn_depth: 16 }
+  dyn_hidden: 256
+  dyn_deter: 2048
+  units: 256
+  actor: { dist: "onehot", std: "none" }
   imag_gradient: "reinforce"
 
 crafter-reconstruction:
@@ -412,7 +405,7 @@ minecraft:
   value: { layers: 5 }
   reward_head: { layers: 5 }
   cont_head: { layers: 5 }
-  imag_gradient: "reinforce"
+  imagg_radient: "reinforce"
   break_speed: 100.0
   time_limit: 36000
 
@@ -725,34 +718,30 @@ panda_push:
   cont_head: { layers: 5 }
   # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/panda-push-colour-with-lang/dreamer-agent-step-102500.pt"
 
-safegym:
+safegym-island-nav-12m:
   steps: 2e4
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
   eval_every: 500
-  dyn_hidden: 1024
-  dyn_deter: 4096
-  units: 1024
   log_every: 500
-  encoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
-  decoder: { cnn_keys: "image", cnn_depth: 64, mlp_layers: 3, mlp_units: 1024 }
-  actor: { layers: 3, dist: "onehot", std: "none" }
-  value: { layers: 3 }
-  reward_head: { layers: 3 }
-  cont_head: { layers: 3 }
+
+  encoder: {cnn_depth: 16 }
+  decoder: {cnn_depth: 16 }
+  dyn_hidden: 256
+  dyn_deter: 2048
+  units: 256
+  actor: { dist: "onehot", std: "none" }
+
   narrator: { narration_key: ["occupancy_grid"] }
   imag_gradient: "reinforce"
   enable_language: true
-  evaluate_reconstruction_narration: false
   vocab_path: vocab/safegym_island_navigation.json
   dec_max_length: 50
   enc_max_length: 16
   video_pred_log: true
   task: "safegym_island_navigation"
   time_limit: 1024
-  conditional_actions: false
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
 ai2thor-language:
   steps: 1e8
@@ -985,9 +974,53 @@ ai2thor-reconstruction-small:
   time_limit: 1000
   conditional_actions: false
 
+babyai-language-12m:
+  steps: 1e5
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 1000
+  log_every: 500
+
+  encoder: {cnn_depth: 16 }
+  decoder: {cnn_depth: 16 }
+  dyn_hidden: 256
+  dyn_deter: 2048
+  units: 256
+  actor: { dist: "onehot", std: "none" }
+
+  narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
+  no_convert_list: ["agent_direction"]
+  actions: "needed"
+  imag_gradient: "reinforce"
+  enable_language: true
+  vocab_path: vocab/baby_ai_go_to_loc.json
+
+  dec_max_length: 450
+  enc_max_length: 16
+  video_pred_log: true
+  task: "babyai_BabyAI-GoToLocal-v0"
+  time_limit: 512
+
+  # Only learning a dynamics model
+  random_actions: True
+  env_reward: False
+  env_terminate: False
+  # Prevent reward and continue heads from impacting
+  # the learned latent representation. Easier than making the
+  # entire networks optional, at the cost of some computation
+  grad_heads: ["decoder"]
+
+  # Translation Evaluation
+  save_plots: True
+  save_translations: True
+  n_translation_eval_episodes: 1
+
 debug:
   debug: True
   pretrain: 1
   prefill: 1
   batch_size: 10
   batch_length: 20
+
+
