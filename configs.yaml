@@ -34,7 +34,6 @@ defaults:
   env_reward: True
   env_terminate: True
 
-
   # Translation Evaluation
   save_plots: False
   save_translations: False
@@ -287,8 +286,8 @@ crafter-language-12m:
   vocab_path: vocab/crafter.json
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
-  encoder: {cnn_depth: 16 }
-  decoder: {cnn_depth: 16 }
+  encoder: { cnn_depth: 16 }
+  decoder: { cnn_depth: 16 }
   dyn_hidden: 256
   dyn_deter: 2048
   units: 256
@@ -479,7 +478,6 @@ minigrid-language-stochastic-small:
   reward_head: { layers: 1 }
   cont_head: { layers: 1 }
   checkpoint: "/home/matt/dev/somniloquy-dreamer-v3/logdir/minigrid-language-stochastic-small-seed-100/latest.pt"
-
 
 minigrid-language-small:
   steps: 1e5
@@ -726,8 +724,8 @@ safegym-island-nav-12m:
   eval_every: 500
   log_every: 500
 
-  encoder: {cnn_depth: 16 }
-  decoder: {cnn_depth: 16 }
+  encoder: { cnn_depth: 16 }
+  decoder: { cnn_depth: 16 }
   dyn_hidden: 256
   dyn_deter: 2048
   units: 256
@@ -982,8 +980,9 @@ babyai-language-12m:
   eval_every: 1000
   log_every: 500
 
-  encoder: {cnn_depth: 16 }
-  decoder: {cnn_depth: 16 }
+  encoder: { cnn_depth: 16 }
+  decoder: { cnn_depth: 16 }
+  dyn_discrete: 16
   dyn_hidden: 256
   dyn_deter: 2048
   units: 256
@@ -1012,7 +1011,50 @@ babyai-language-12m:
   grad_heads: ["decoder"]
 
   # Translation Evaluation
-  save_plots: True
+  save_plots: False
+  save_translations: True
+  n_translation_eval_episodes: 1
+
+babyai-language-25m:
+  steps: 1e6
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 1000
+  log_every: 500
+
+  encoder: { cnn_depth: 24 }
+  decoder: { cnn_depth: 24 }
+  dyn_discrete: 24
+  dyn_hidden: 256
+  dyn_deter: 3072
+  units: 384
+  actor: { dist: "onehot", std: "none" }
+
+  narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
+  no_convert_list: ["agent_direction"]
+  actions: "needed"
+  imag_gradient: "reinforce"
+  enable_language: true
+  vocab_path: vocab/baby_ai_go_to_loc.json
+
+  dec_max_length: 450
+  enc_max_length: 16
+  video_pred_log: true
+  task: "babyai_BabyAI-GoToLocal-v0"
+  time_limit: 512
+
+  # Only learning a dynamics model
+  random_actions: True
+  env_reward: False
+  env_terminate: False
+  # Prevent reward and continue heads from impacting
+  # the learned latent representation. Easier than making the
+  # entire networks optional, at the cost of some computation
+  grad_heads: ["decoder"]
+
+  # Translation Evaluation
+  save_plots: False
   save_translations: True
   n_translation_eval_episodes: 1
 
@@ -1022,5 +1064,3 @@ debug:
   prefill: 1
   batch_size: 10
   batch_length: 20
-
-
