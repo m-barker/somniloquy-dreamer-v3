@@ -1063,7 +1063,7 @@ babyai-language-100m:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 10000
+  eval_every: 20000
   log_every: 500
 
   actor: { dist: "onehot", std: "none" }
@@ -1093,14 +1093,14 @@ babyai-language-100m:
   # Translation Evaluation
   save_plots: True
   save_translations: True
-  n_translation_eval_episodes: 10
+  n_translation_eval_episodes: 5
 
 babyai-language-100m-language-grads:
   steps: 1e7
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 10000
+  eval_every: 20000
   log_every: 500
   language_grads: false
 
@@ -1134,7 +1134,7 @@ babyai-language-100m-language-grads:
   # Translation Evaluation
   save_plots: True
   save_translations: True
-  n_translation_eval_episodes: 10
+  n_translation_eval_episodes: 5
 
 debug:
   debug: True
