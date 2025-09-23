@@ -21,6 +21,8 @@ class BabyAI:
         human_render: bool = False,
         reward: bool = False,
         terminate: bool = False,
+        fixed_env: bool = True,
+        fixed_seed: Optional[int] = None,
     ):
         """
         Wrapper for the BabyAI environments
@@ -53,6 +55,13 @@ class BabyAI:
 
             - terminate (bool): whether the episode should ever terminate. Disabled when the
                                 aim is to only learn a dynamics model. Defaults to False.
+
+            - fixed_env (bool): whether the same exact environment is used throughout training
+                                and testing. If false, the objects, start state, etc. are
+                                randomly generated after each reset. Defaults to True.
+
+            - fixed_seed (Optional[int]): seed to use to fix the environment generation. Defaults
+                                          to None.
         """
         assert img_size[0] == img_size[1]
         assert actions in ("all", "needed"), actions
@@ -69,6 +78,8 @@ class BabyAI:
 
         self._reward = reward
         self._terminate = terminate
+        self._fixed_env = fixed_env
+        self._fixed_seed = fixed_seed
 
         self._env = self._create_env(task_name)
 
@@ -172,6 +183,11 @@ class BabyAI:
         """
         Resets environment and returns obs, info
         """
+        if self._fixed_env:
+            assert self._fixed_seed is not None, (
+                "fixed seed can't be none if fixing environment generation"
+            )
+            seed = self._fixed_seed
         obs, info = self._env.reset(seed=seed)
         self._step = 0
 
@@ -228,6 +244,8 @@ if __name__ == "__main__":
         human_render=True,
         max_length=16,
         seed=42,
+        fixed_env=True,
+        fixed_seed=100,
     )
     obs, info = env.reset()
     done = False
