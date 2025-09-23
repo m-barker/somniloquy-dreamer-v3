@@ -1058,6 +1058,84 @@ babyai-language-25m:
   save_translations: True
   n_translation_eval_episodes: 1
 
+babyai-language-100m:
+  steps: 1e7
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 10000
+  log_every: 500
+
+  actor: { dist: "onehot", std: "none" }
+
+  narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
+  no_convert_list: ["agent_direction"]
+  actions: "needed"
+  imag_gradient: "reinforce"
+  enable_language: true
+  vocab_path: vocab/baby_ai_go_to_loc.json
+
+  dec_max_length: 450
+  enc_max_length: 16
+  video_pred_log: true
+  task: "babyai_BabyAI-GoToLocal-v0"
+  time_limit: 512
+
+  # Only learning a dynamics model
+  random_actions: True
+  env_reward: False
+  env_terminate: False
+  # Prevent reward and continue heads from impacting
+  # the learned latent representation. Easier than making the
+  # entire networks optional, at the cost of some computation
+  grad_heads: ["decoder"]
+
+  # Translation Evaluation
+  save_plots: True
+  save_translations: True
+  n_translation_eval_episodes: 10
+
+babyai-language-100m-language-grads:
+  steps: 1e7
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 10000
+  log_every: 500
+  language_grads: false
+
+  # Network specification
+  actor: { dist: "onehot", std: "none" }
+  decoder: { cnn_sigmoid: False }
+  translator_head: { loss_scale: 10.0, loss_agg: "sum" }
+
+  narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
+  no_convert_list: ["agent_direction"]
+  actions: "needed"
+  imag_gradient: "reinforce"
+  enable_language: true
+  vocab_path: vocab/baby_ai_go_to_loc.json
+
+  dec_max_length: 450
+  enc_max_length: 16
+  video_pred_log: true
+  task: "babyai_BabyAI-GoToLocal-v0"
+  time_limit: 512
+
+  # Only learning a dynamics model
+  random_actions: True
+  env_reward: False
+  env_terminate: False
+  # Prevent reward and continue heads from impacting
+  # the learned latent representation. Easier than making the
+  # entire networks optional, at the cost of some computation
+  grad_heads: ["decoder"]
+
+  # Translation Evaluation
+  save_plots: True
+  save_translations: True
+  n_translation_eval_episodes: 10
+
 debug:
   debug: True
   pretrain: 1
