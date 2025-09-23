@@ -376,8 +376,13 @@ def convert_images_to_numpy(images: List[torch.Tensor]) -> List[np.ndarray]:
     Returns:
         List[np.ndarray]: List of numpy arrays.
     """
-    images = [img[0, 0].detach().cpu().numpy() for img in images]
-    return [np.clip(255 * img, 0, 255).astype(np.uint8) for img in images]
+    out = []
+    for img in images:
+        # ensure contiguous, detach, move to CPU, and force copy into numpy memory
+        arr = img[0, 0].detach().cpu().contiguous().numpy().copy()
+        arr = np.clip(255 * arr, 0, 255).astype(np.uint8)
+        out.append(arr)
+    return out
 
 
 @torch.no_grad()
@@ -502,7 +507,7 @@ def generate_translation(
         latent state plan step.
 
         actions (List[torch.Tensor], optional): List containing each action
-        taken in the plan. Used for the translation baseline. Defaults to None.
+        taken in the plan. Used for the translation basline. Defaults to None.
 
     Returns:
         str: Latent state plan translation.
@@ -1227,6 +1232,7 @@ def save_decoded_plan_plot(
     )
     reconstruction_plot.savefig(output_file_path)
     plt.close(reconstruction_plot)
+    plt.close("all")
 
     # Clean up
     del imagined_images
