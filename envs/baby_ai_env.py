@@ -93,7 +93,7 @@ class BabyAI:
 
         env = gym.make(
             task_name,
-            max_episode_steps=self._max_length,
+            max_steps=self._max_length,
             render_mode=render_mode,
         )
         if self._actions == "needed":
@@ -336,21 +336,24 @@ if __name__ == "__main__":
         task_name="BabyAI-GoToLocal-v0",
         full_obs=True,
         human_render=True,
-        max_length=64,
+        max_length=512,
         seed=42,
         fixed_env=True,
         fixed_seed=100,
     )
     obs, info = env.reset()
     done = False
+    step = 0
     while not done:
         action_arr = np.zeros((env.action_space.n,), dtype=np.int16)
         action = input("Please enter an action: ")
         action_arr[int(action)] = 1
         obs, reward, done, info = env.step(action_arr)
-        print(f"Obs: {obs.keys()}")
-        print(f"Reward: {reward}")
-        print(f"Is terminal: {obs['is_terminal']}")
-        print(f"Is done: {done}")
-        print(f"Info: {info.keys()}")
-        print(f"Reward Information: {info['reward_info']}")
+        step += 1
+        print(f"Step: {step}")
+        # print(f"Obs: {obs.keys()}")
+        # print(f"Reward: {reward}")
+        # print(f"Is terminal: {obs['is_terminal']}")
+        # print(f"Is done: {done}")
+        # print(f"Info: {info.keys()}")
+        # print(f"Reward Information: {info['reward_info']}")

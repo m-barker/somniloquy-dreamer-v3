@@ -1178,7 +1178,7 @@ babyai-language-100m-multiple-reward-heads:
   enc_max_length: 16
   video_pred_log: true
   task: "babyai_BabyAI-GoToLocal-v0"
-  time_limit: 512
+  time_limit: 1024
 
   # Only learning a dynamics model
   fixed_env_seed: 100
