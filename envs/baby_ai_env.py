@@ -1,7 +1,7 @@
 import sys
 
 sys.path.append("/home/matt/dev/somniloquy-dreamer-v3")
-from typing import Dict, SupportsFloat, Tuple, Optional
+from typing import Dict, List, SupportsFloat, Tuple, Optional
 import cv2
 import gymnasium as gym
 import numpy as np
@@ -81,6 +81,8 @@ class BabyAI:
         self._fixed_env = fixed_env
         self._fixed_seed = fixed_seed
 
+        self._objects = None
+
         self._env = self._create_env(task_name)
 
     def _create_env(self, task_name: str) -> gym.Env:
@@ -136,6 +138,54 @@ class BabyAI:
         space.discrete = True
         return space
 
+    def _get_objects_in_scene(
+        self, scene: np.ndarray
+    ) -> List[Tuple[str, Tuple[int, int]]]:
+        """
+        Gets the list of object names present in the scene, e.g.,
+        "red ball". Along with their posiiton (cell coord) For
+        now, assumes that this is static, i.e., no objects can
+        be pickedup up, etc.
+
+        Arguments:
+            - scene (np.ndarray): occupancy grid representation of the scene
+
+        Returns:
+           List[str]: list of object names plus their colour
+        """
+        objects: List[Tuple[str, Tuple[int, int]]] = []
+        objects_of_interest_id_to_name = {5: "key", 6: "ball", 7: "box"}
+        colour_id_to_name = {
+            0: "red",
+            1: "green",
+            2: "blue",
+            3: "purple",
+            4: "yellow",
+            5: "grey",
+        }
+        assert len(scene.shape) == 3, "occupancy grid must have three dimensions"
+
+        for height in range(scene.shape[0]):
+            for width in range(scene.shape[1]):
+                cell = scene[height][width]
+                # Each cell is encoded as the tuple (OBJECT_IDX, COLOR_IDX, STATE)
+                object_id = cell[0]
+                object_colour_idx = cell[1]
+
+                if object_id in objects_of_interest_id_to_name.keys():
+                    object_name = objects_of_interest_id_to_name[object_id]
+                    object_colour = colour_id_to_name[object_colour_idx]
+                    object_name = f"{object_colour} {object_name}"
+
+                    # Handle multiple objects of the same colour and type
+                    unique_id = 1
+                    while any(name == object_name for name, _ in objects):
+                        object_name = f"{object_name} {unique_id}"
+                        unique_id += 1
+                    objects.append((object_name, (height, width)))
+
+        return objects
+
     def step(self, action) -> Tuple[Dict, SupportsFloat, bool, Dict]:
         """
         Returns obs, reward, done, info.
@@ -165,6 +215,8 @@ class BabyAI:
                 rgb_image, self._img_size, interpolation=cv2.INTER_AREA
             )
 
+        reward_info = self._get_reward_dict(occupancy_grid, direction)
+
         return (
             {
                 "image": rgb_image,
@@ -176,8 +228,74 @@ class BabyAI:
             {
                 "occupancy_grid": occupancy_grid,
                 "agent_direction": direction,
+                "reward_info": reward_info,
             },
         )
+
+    def _is_agent_facing_object(
+        self,
+        agent_position: Tuple[int, int],
+        agent_direction: int,
+        object_position: Tuple[int, int],
+    ) -> bool:
+        """
+        Determines if the agent is facing (i.e., pointing at) a given object.
+
+        Arguments:
+            - agent_position Tuple[int, int]: (x,y) coord of agent
+            - agent_direction int: integer encoding direction of agent in range [0,3]
+            - object_position Tuple[int, int]: (x,y) coord of object to check
+
+        Returns bool: True if agent is facing the object else false
+        """
+        agent_facing = False
+
+        # Grid coords are:
+        #   0 1 2 3
+        # 0| | | | |
+        # 1| | | | |
+        # 2| | | | |
+        # 3| | | | |
+
+        agent_x, agent_y = agent_position
+        object_x, object_y = object_position
+
+        if agent_y == object_y:
+            # Agent to the left of object
+            if agent_x == object_x - 1:
+                agent_facing = agent_direction == 0
+            # Agent to the right of object
+            elif agent_x == object_x + 1:
+                agent_facing = agent_direction == 2
+        elif agent_x == object_x:
+            # Agent above object
+            if agent_y == object_y - 1:
+                agent_facing = agent_direction == 1
+            # Agent below object
+            elif agent_y == object_y + 1:
+                agent_facing = agent_direction == 3
+
+        return agent_facing
+
+    def _get_reward_dict(self, obs: np.ndarray, agent_direction: int) -> Dict:
+        """
+        Returns a dictionary of which objects were rewarded for being reached.
+        """
+
+        objects = self._objects
+
+        reward_dict = {k[0]: 0.0 for k in objects}
+
+        agent_id = 10
+        observation_ids = obs[:, :, 0]  # Remove colour and status info
+        agent_location = np.nonzero(observation_ids == agent_id)
+        agent_location = (int(agent_location[0]), int(agent_location[1]))
+
+        for object in objects:
+            if self._is_agent_facing_object(agent_location, agent_direction, object[1]):
+                reward_dict[object[0]] = 1.0
+
+        return reward_dict
 
     def reset(self, seed=None, **kwargs) -> Tuple[Dict, Dict]:
         """
@@ -195,6 +313,9 @@ class BabyAI:
         occupancy_grid = obs["encoded_image"]
         direction = int(obs["direction"])
 
+        if self._objects is None:
+            self._objects = self._get_objects_in_scene(occupancy_grid)
+
         if rgb_image.shape[:-2] != self._img_size:
             rgb_image = cv2.resize(
                 rgb_image, self._img_size, interpolation=cv2.INTER_AREA
@@ -206,33 +327,6 @@ class BabyAI:
             "is_first": True,
         }, {"occupancy_grid": occupancy_grid, "agent_direction": direction}
 
-    def _obs(
-        self,
-        img: np.ndarray,
-        reward: float,
-        occupancy_grid: np.ndarray,
-        is_first: bool = False,
-        is_last: bool = False,
-        is_terminal: bool = False,
-    ) -> Tuple[dict, float, bool, dict]:
-        image = img
-        if image.shape[:2] != self._img_size:
-            image = cv2.resize(image, self._img_size, interpolation=cv2.INTER_AREA)
-        flattened_occupancy_grid = (occupancy_grid.flatten() / 11).astype(np.float32)
-        return (
-            {
-                "image": image,
-                "is_terminal": is_terminal,
-                "is_first": is_first,
-                "flattened_occupancy_grid": flattened_occupancy_grid,
-            },
-            reward,
-            is_last,
-            {
-                "occupancy_grid": occupancy_grid,
-            },
-        )
-
     def close(self):
         return self._env.close()
 
@@ -242,7 +336,7 @@ if __name__ == "__main__":
         task_name="BabyAI-GoToLocal-v0",
         full_obs=True,
         human_render=True,
-        max_length=16,
+        max_length=64,
         seed=42,
         fixed_env=True,
         fixed_seed=100,
@@ -259,3 +353,4 @@ if __name__ == "__main__":
         print(f"Is terminal: {obs['is_terminal']}")
         print(f"Is done: {done}")
         print(f"Info: {info.keys()}")
+        print(f"Reward Information: {info['reward_info']}")

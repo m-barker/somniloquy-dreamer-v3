@@ -1364,7 +1364,7 @@ def generate_batch_narrations(
         observations (np.ndarray): observation array of shape
         (batch_size, batch_length, *obs_shape).
         obs_per_narration (int): number of observations to use per narration.
-        max_narration_length (int): maximum length of a narration.
+        max_length (int): maximum length of a narration.
         vocab (dict): vocabulary to use for tokenisation.
         device (torch.device): device to put the tensors that are returned on.
 

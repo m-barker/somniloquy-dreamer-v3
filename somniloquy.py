@@ -118,7 +118,8 @@ class Dreamer(nn.Module):
                             "achievements",
                             "privileged_obs",
                         ]
-                        + self._config.narrator["narration_key"],
+                        + self._config.narrator["narration_key"]
+                        + list(self._config.no_convert_list),
                     )
                     self._logger.video("train_openl", to_np(openl))
                     pass
@@ -143,7 +144,9 @@ class Dreamer(nn.Module):
             latent, action = state
         obs = self._wm.preprocess(
             obs,
-            keys_to_ignore=["privileged_obs"] + self._config.narrator["narration_key"],
+            keys_to_ignore=["privileged_obs"]
+            + self._config.narrator["narration_key"]
+            + list(self._config.no_convert_list),
         )
         embed = self._wm.encoder(obs)
         latent, _ = self._wm.dynamics.obs_step(latent, action, embed, obs["is_first"])
@@ -334,6 +337,13 @@ def make_env(config, mode, id):
     elif suite == "babyai":
         import envs.baby_ai_env as baby_ai_env
 
+        fixed_env = False
+        fixed_env_seed = None
+
+        if config.fixed_env_seed != -1:
+            fixed_env = True
+            fixed_env_seed = config.fixed_env_seed
+
         env = baby_ai_env.BabyAI(
             task_name=task,
             img_size=config.size,
@@ -342,6 +352,8 @@ def make_env(config, mode, id):
             seed=config.seed,
             reward=config.env_reward,
             terminate=config.env_terminate,
+            fixed_env=fixed_env,
+            fixed_seed=fixed_env_seed,
         )
     else:
         raise NotImplementedError(suite)
@@ -423,9 +435,11 @@ def prefill_dataset(
         logger,
         limit=config.dataset_size,
         steps=prefill,
-        no_convert_obs=config.narrator["narration_key"],
+        no_convert_obs=list(config.narrator["narration_key"])
+        + list(config.no_convert_list),
         no_save_obs=["rays"],  #
-        info_keys_to_store=config.narrator["narration_key"],
+        info_keys_to_store=list(config.narrator["narration_key"])
+        + list(config.info_keys_to_store),
     )
     logger.step += prefill * config.action_repeat
     print(f"Logger: ({logger.step} steps).")
@@ -549,9 +563,11 @@ def main(config):
                     logger,
                     is_eval=True,
                     episodes=config.eval_episode_num,
-                    no_convert_obs=config.narrator["narration_key"],
+                    no_convert_obs=list(config.narrator["narration_key"])
+                    + list(config.no_convert_list),
                     no_save_obs=["rays"],
-                    info_keys_to_store=config.narrator["narration_key"],
+                    info_keys_to_store=list(config.narrator["narration_key"])
+                    + list(config.info_keys_to_store),
                     wandb_run=run,
                 )
                 rollout_samples = sample_rollouts(
@@ -614,7 +630,8 @@ def main(config):
             if config.video_pred_log:
                 video_pred = agent._wm.video_pred(
                     next(eval_dataset),
-                    ignore_keys=config.narrator["narration_key"],
+                    ignore_keys=list(config.narrator["narration_key"])
+                    + list(config.no_convert_list),
                 )
                 logger.video("eval_openl", to_np(video_pred))
         print("Start training.")
@@ -628,9 +645,11 @@ def main(config):
             limit=config.dataset_size,
             steps=config.eval_every,
             state=state,
-            no_convert_obs=config.narrator["narration_key"],
+            no_convert_obs=list(config.narrator["narration_key"])
+            + list(config.no_convert_list),
             no_save_obs=["rays"],
-            info_keys_to_store=config.narrator["narration_key"],
+            info_keys_to_store=list(config.narrator["narration_key"])
+            + list(config.info_keys_to_store),
             wandb_run=run,
         )
         items_to_save = {

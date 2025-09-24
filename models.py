@@ -90,6 +90,23 @@ class WorldModel(nn.Module):
             device=config.device,
             name="Reward",
         )
+
+        if config.multiple_reward_heads:
+            for obj_goal in config.navigation_goals:
+                head_name = f"{obj_goal.replace(' ', '_')}_reward"
+                self.heads[head_name] = networks.MLP(
+                    feat_size,
+                    (255,) if config.reward_head["dist"] == "symlog_disc" else (),
+                    config.reward_head["layers"],
+                    config.units,
+                    config.act,
+                    config.norm,
+                    dist=config.reward_head["dist"],
+                    outscale=config.reward_head["outscale"],
+                    device=config.device,
+                    name=head_name,
+                )
+
         if config.env_terminate:
             self.heads["cont"] = networks.MLP(
                 feat_size,
@@ -531,13 +548,36 @@ class WorldModel(nn.Module):
 
         narration_keys = self._config.narrator["narration_key"]
         narration_data = self._process_narration_data(data)
+
+        extra_reward_data = None
+        if self._config.multiple_reward_heads:
+            # A list of dictionaries, one per possible reward
+            input_reward_data = data["reward_info"]
+            B, T = input_reward_data.shape
+            extra_reward_data = {
+                k: np.zeros((B, T)) for k in data["reward_info"][0][0].keys()
+            }
+            for k in extra_reward_data.keys():
+                for b in range(B):
+                    for t in range(T):
+                        extra_reward_data[k][b, t] = input_reward_data[b, t][k]
+                extra_reward_data[k] = torch.Tensor(extra_reward_data[k]).to(
+                    self._config.device
+                )
+            extra_reward_data = {
+                k.replace(" ", "_") + "_reward": v for k, v in extra_reward_data.items()
+            }
+
         self._step += 1
         data = self.preprocess(
             data,
-            keys_to_ignore=(
-                [narration_keys] if type(narration_keys) is str else narration_keys
-            ),
+            keys_to_ignore=list(
+                ([narration_keys] if type(narration_keys) is str else narration_keys)
+            )
+            + list(self._config.no_convert_list),
         )
+        if extra_reward_data is not None:
+            data.update(extra_reward_data)
         with tools.RequiresGrad(self):
             with torch.cuda.amp.autocast(self._use_amp):
                 embed = self.encoder(data)

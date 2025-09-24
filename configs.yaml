@@ -24,6 +24,7 @@ defaults:
   ignore_list: []
   no_convert_list: []
   narrator: { narration_key: [] }
+  info_keys_to_store: []
   conditional_actions: False
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
@@ -33,6 +34,14 @@ defaults:
   random_actions: False
   env_reward: True
   env_terminate: True
+
+  # For environments which support an option to fix
+  # their generation
+  fixed_env_seed: -1
+
+  # For when we want to simultaneously learn multiple
+  # different reward heads
+  multiple_reward_heads: False
 
   # Translation Evaluation
   save_plots: False
@@ -979,6 +988,7 @@ babyai-language-12m:
   eval_episode_num: 1
   eval_every: 1000
   log_every: 500
+  fixed_env_seed: 100
 
   encoder: { cnn_depth: 16 }
   decoder: { cnn_depth: 16 }
@@ -988,9 +998,10 @@ babyai-language-12m:
   units: 256
   actor: { dist: "onehot", std: "none" }
 
+  info_keys_to_store: ["reward_info"]
   narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
-  no_convert_list: ["agent_direction"]
-  actions: "needed"
+  no_convert_list: ["agent_direction", "reward_info"]
+  actions: needed
   imag_gradient: "reinforce"
   enable_language: true
   vocab_path: vocab/baby_ai_go_to_loc.json
@@ -1010,6 +1021,9 @@ babyai-language-12m:
   # entire networks optional, at the cost of some computation
   grad_heads: ["decoder"]
 
+  multiple_reward_heads: True
+  navigation_goals: ["red_key", "green_ball", "blue_ball", "purple_box"]
+
   # Translation Evaluation
   save_plots: False
   save_translations: True
@@ -1022,6 +1036,7 @@ babyai-language-25m:
   eval_episode_num: 1
   eval_every: 1000
   log_every: 500
+  fixed_env_seed: 100
 
   encoder: { cnn_depth: 24 }
   decoder: { cnn_depth: 24 }
@@ -1033,7 +1048,7 @@ babyai-language-25m:
 
   narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
   no_convert_list: ["agent_direction"]
-  actions: "needed"
+  actions: needed
   imag_gradient: "reinforce"
   enable_language: true
   vocab_path: vocab/baby_ai_go_to_loc.json
@@ -1065,12 +1080,13 @@ babyai-language-100m:
   eval_episode_num: 1
   eval_every: 20000
   log_every: 500
+  fixed_env_seed: 100
 
   actor: { dist: "onehot", std: "none" }
 
   narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
   no_convert_list: ["agent_direction"]
-  actions: "needed"
+  actions: needed
   imag_gradient: "reinforce"
   enable_language: true
   vocab_path: vocab/baby_ai_go_to_loc.json
@@ -1102,7 +1118,7 @@ babyai-language-100m-language-grads:
   eval_episode_num: 1
   eval_every: 20000
   log_every: 500
-  language_grads: false
+  language_grads: True
 
   # Network specification
   actor: { dist: "onehot", std: "none" }
@@ -1111,7 +1127,7 @@ babyai-language-100m-language-grads:
 
   narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
   no_convert_list: ["agent_direction"]
-  actions: "needed"
+  actions: needed
   imag_gradient: "reinforce"
   enable_language: true
   vocab_path: vocab/baby_ai_go_to_loc.json
@@ -1130,6 +1146,55 @@ babyai-language-100m-language-grads:
   # the learned latent representation. Easier than making the
   # entire networks optional, at the cost of some computation
   grad_heads: ["decoder"]
+
+  # Translation Evaluation
+  save_plots: True
+  save_translations: True
+  n_translation_eval_episodes: 5
+
+
+babyai-language-100m-language-grads-multiple-reward-heads:
+  steps: 1e7
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 20000
+  log_every: 500
+  language_grads: True
+
+  # Network specification
+  actor: { dist: "onehot", std: "none" }
+  decoder: { cnn_sigmoid: False }
+  translator_head: { loss_scale: 10.0, loss_agg: "sum" }
+
+  narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
+  no_convert_list: ["agent_direction", "reward_info"]
+  actions: "needed"
+  imag_gradient: "reinforce"
+  enable_language: true
+  vocab_path: vocab/baby_ai_go_to_loc.json
+
+  dec_max_length: 450
+  enc_max_length: 16
+  video_pred_log: true
+  task: "babyai_BabyAI-GoToLocal-v0"
+  time_limit: 512
+
+  # Only learning a dynamics model
+  fixed_env_seed: 100
+  random_actions: True
+  env_reward: False
+  env_terminate: False
+
+  # Prevent reward and continue heads from impacting
+  # the learned latent representation. Easier than making the
+  # entire networks optional, at the cost of some computation
+  grad_heads: ["decoder"]
+
+  # Learn a separate reward head for each natural language goal
+  multiple_reward_heads: True
+  navigation_goals: ["red_key", "green_ball", "blue_ball", "purple_box"]
+  info_keys_to_store: ["reward_info"]
 
   # Translation Evaluation
   save_plots: True
