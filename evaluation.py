@@ -70,6 +70,7 @@ def imagine_trajectory(
     done = False
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
     imagained_states: List[torch.Tensor] = [latent_state.detach().clone()]
+    print(f"Sample policy? {sample_policy}")
     for t in range(trajectory_length):
         # If world model thinks the episode terminates, pad the states/actions
         # with zeros.
@@ -337,6 +338,7 @@ def sample_rollouts(
                 initial_state=initial_state,
                 trajectory_length=trajectory_length,
                 sample_latent=config.stochastic_env,
+                sample_policy=config.random_actions,
             )
             posterior_states, observations, posteriors, env_done = rollout_trajectory(
                 agent=agent,
