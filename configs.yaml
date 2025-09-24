@@ -1153,12 +1153,12 @@ babyai-language-100m-language-grads:
   n_translation_eval_episodes: 5
 
 
-babyai-language-100m-language-grads-multiple-reward-heads:
-  steps: 1e7
+babyai-language-100m-multiple-reward-heads:
+  steps: 1e6
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 20000
+  eval_every: 5000
   log_every: 500
   language_grads: True
 
