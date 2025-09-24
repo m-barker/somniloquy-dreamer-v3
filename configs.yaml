@@ -1152,6 +1152,59 @@ babyai-language-100m-language-grads:
   save_translations: True
   n_translation_eval_episodes: 5
 
+ babyai-language-25m-multiple-reward-heads:
+  steps: 1e6
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 5000
+  log_every: 500
+  language_grads: True
+
+  # Network specification
+  encoder: { cnn_depth: 24 }
+  decoder: { cnn_depth: 24, cnn_sigmoid: True }
+  dyn_discrete: 24
+  dyn_hidden: 256
+  dyn_deter: 3072
+  units: 384
+  actor: { dist: "onehot", std: "none" }
+  translator_head: { loss_scale: 10.0, loss_agg: "sum" }
+
+  narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
+  no_convert_list: ["agent_direction", "reward_info"]
+  actions: "needed"
+  imag_gradient: "reinforce"
+  enable_language: true
+  vocab_path: vocab/baby_ai_go_to_loc.json
+
+  dec_max_length: 450
+  enc_max_length: 16
+  video_pred_log: true
+  task: "babyai_BabyAI-GoToLocal-v0"
+  time_limit: 1024
+
+  # Only learning a dynamics model
+  fixed_env_seed: 100
+  random_actions: True
+  env_reward: False
+  env_terminate: False
+
+  # Prevent reward and continue heads from impacting
+  # the learned latent representation. Easier than making the
+  # entire networks optional, at the cost of some computation
+  grad_heads: ["decoder"]
+
+  # Learn a separate reward head for each natural language goal
+  multiple_reward_heads: True
+  navigation_goals: ["red_key", "green_ball", "blue_ball", "purple_box"]
+  info_keys_to_store: ["reward_info"]
+
+  # Translation Evaluation
+  save_plots: True
+  save_translations: True
+  n_translation_eval_episodes: 5
+
 
 babyai-language-100m-multiple-reward-heads:
   steps: 1e6
@@ -1164,7 +1217,7 @@ babyai-language-100m-multiple-reward-heads:
 
   # Network specification
   actor: { dist: "onehot", std: "none" }
-  decoder: { cnn_sigmoid: False }
+  decoder: { cnn_sigmoid: True }
   translator_head: { loss_scale: 10.0, loss_agg: "sum" }
 
   narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
