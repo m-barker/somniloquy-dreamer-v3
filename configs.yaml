@@ -1152,7 +1152,7 @@ babyai-language-100m-language-grads:
   save_translations: True
   n_translation_eval_episodes: 5
 
- babyai-language-25m-multiple-reward-heads:
+babyai-language-25m-multiple-reward-heads:
   steps: 1e6
   envs: 1
   action_repeat: 1
