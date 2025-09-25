@@ -7,6 +7,7 @@ import wandb
 import numpy as np
 import torch
 from torcheval.metrics.text import word_error_rate
+from tqdm import tqdm
 
 from tools import (
     recursively_collect_optim_state_dict,
@@ -131,7 +132,7 @@ class LanguageAgent:
         assert self.language_goal is not None
         g = self.language_goal
         # Imagined states are of shape (Time, Batch, Dimension)
-        T, B, _ = imagined_states["stoch"].shape
+        T, B, _ = imagined_states["deter"].shape
 
         string_plan_translations = self._generate_batch_translations(imagined_states)
 
@@ -157,7 +158,7 @@ class LanguageAgent:
 
         return reward
 
-    def _make_prefix_batches(x: torch.Tensor, pad_value: int = -1):
+    def _make_prefix_batches(self, x: torch.Tensor, pad_value: int = -1):
         """
         Expand sequences into all prefixes, padded to full length.
 
@@ -201,7 +202,7 @@ class LanguageAgent:
         assert self.language_goal is not None
         g = self.language_goal
         # Imagined states are of shape (Time, Batch, Dimension)
-        T, B, _ = imagined_states["stoch"].shape
+        T, B, _ = imagined_states["deter"].shape
         stacked_states = self._world_model._wm.dynamics.get_feat(imagined_states)  # type: ignore
         # (T, B, D) -> (B, T, D)
         stacked_states = stacked_states.permute(1, 0, 2)
@@ -213,44 +214,57 @@ class LanguageAgent:
 
         # Shape (T, T, B, D), (T, T, B)
         sequence_permutations, sequence_pad_mask = self._make_prefix_batches(
-            stacked_states.permute(0, 1, 2)
+            stacked_states.permute(1, 0, 2)
         )
 
-        for batch in range(B):
-            # This can be viewed as now being of shape (batch, T, D)
-            sequences_to_translate = sequence_permutations[:, :, batch, :]
-            sequences_padding = sequence_pad_mask[:, :, batch]
-            plan_translations = self._world_model._wm.heads["language"].generate(
-                sequences_to_translate,
-                self._world_model._wm.vocab,
-                self._world_model._config.dec_max_length,
-                self._world_model._config.token_sampling_method,
-                src_padding_mask=sequences_padding,
+        print(f"Training for {B} batches")
+
+        # Collapse the batch dimension into the sequence dimension for one pass
+        # Original shapes: (batch, T, B, D) and (batch, T, B)
+        B_size = sequence_permutations.shape[2]
+
+        flat_sequences = sequence_permutations.permute(2, 0, 1, 3).reshape(
+            -1, sequence_permutations.shape[1], sequence_permutations.shape[3]
+        )
+        flat_padding = sequence_pad_mask.permute(2, 0, 1).reshape(
+            -1, sequence_pad_mask.shape[1]
+        )
+        print(f"Generating translations for {flat_sequences.shape[0]} sequences")
+        # Generate translations in a single pass
+        plan_translations = self._world_model._wm.heads["language"].generate(
+            flat_sequences,  # shape (B*batch, T, D)
+            self._world_model._wm.vocab,
+            self._world_model._config.dec_max_length,
+            self._world_model._config.token_sampling_method,
+            src_padding_mask=flat_padding,  # shape (B*batch, T)
+        )
+        print("Generated translations")
+        print(f"Number of translations: {len(plan_translations)}")
+
+        # Post-process translations
+        string_plan_translations = [
+            " ".join(
+                [
+                    word
+                    for word in plan.split()
+                    if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                ]
             )
-            string_plan_translations = []
-            for plan in plan_translations:
-                plan_translation = " ".join(
-                    [
-                        word
-                        for word in plan.split()
-                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
-                    ]
-                )
-                string_plan_translations.append(plan_translation)
-            # Now, if the goal is every reached, allocate it to the
-            # state that caused this in translation space.
-            # We are iterating over the batches, which really are
-            # translations of the sequences in order:
-            # [0]
-            # [0,1]
-            # [0,1,2]
-            # [0,1,2,3]
-            # ...
-            # [0,1,2,...,T-1]
-            for idx, plan_translation in enumerate(string_plan_translations):
+            for plan in plan_translations
+        ]
+
+        # Reshape back into (batch, B) layout
+        string_plan_translations = torch.tensor(string_plan_translations).reshape(
+            sequence_permutations.shape[0], B_size
+        )
+
+        # Reward assignment
+        for batch in range(B_size):
+            for idx, plan_translation in enumerate(string_plan_translations[:, batch]):
                 if g in plan_translation:
                     reward[idx][batch] = 1.0
                     continues[idx:, batch] = 0.0
+                    print(f"NON-ZERO REWARD: {plan_translation} for goal {g}")
                     break
 
         reward = reward.to(self._world_model._config.device)
@@ -347,13 +361,25 @@ class LanguageAgent:
                 _, start_state, _, _, _ = self._get_env_starting_state()
             # Batchify the start state so we can compute multiple model rollouts for training
             # the policy
-            # Start state is a dictionary whose keys are of shape (Batch, Dimension)
-            start_state_batched = {
-                k: v.repeat(batch_size, 1) for k, v in start_state.items()
-            }
+            # Start state is a dictionary whose keys are of shape (Batch, *Dimension)
+            start_state_batched = {}
+            for k, v in start_state.items():
+                start_state_batched[k] = (
+                    v.repeat(batch_size, 1)
+                    if len(v.shape) == 2
+                    else v.repeat(batch_size, 1, 1)
+                )
+            # Add empty time dimension
+            for k, v in start_state_batched.items():
+                start_state_batched[k] = v.unsqueeze(0)
+            reward_func = (
+                self._language_reward
+                if not self._manually_calculate_continues
+                else self._babyai_language_reward
+            )
             self._world_model._task_behavior._train(
                 start_state_batched,
-                self._language_reward,
+                reward_func,
                 self._manually_calculate_continues,
             )  # type: ignore
             if n % save_every == 0:
@@ -416,8 +442,14 @@ def load_agent():
 
 def main():
     config, agent, eval_env, run, logdir = load_agent()
-    lang_agent = LanguageAgent(agent, config.checkpoint, eval_env, run)
-    lang_agent.train(config.language_goal, config.model_steps, logdir)
+    mannually_calculate_continues = False
+    if "babyai" in config.task:
+        mannually_calculate_continues = True
+    lang_agent = LanguageAgent(
+        agent, config.checkpoint, eval_env, run, mannually_calculate_continues
+    )
+
+    lang_agent.train(config.language_goal, int(config.model_steps), logdir)
 
 
 if __name__ == "__main__":

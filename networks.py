@@ -7,6 +7,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch import distributions as torchd
+from tqdm import tqdm
 
 import tools
 
@@ -963,9 +964,9 @@ class TransformerEncoderDecoder(nn.Module):
         self.tgt_embedding = TokenEmbedding(self._target_vocab_size, d_model)
         self.src_embedding = None
         if src_token_embedding:
-            assert src_vocab_size is not None, (
-                "src_vocab_size must be provided if using src token embeddings."
-            )
+            assert (
+                src_vocab_size is not None
+            ), "src_vocab_size must be provided if using src token embeddings."
             self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -1150,66 +1151,54 @@ class TransformerEncoderDecoder(nn.Module):
             str: the generated sequence of words.
         """
         self.eval()
-        logits = []
-        if prompt is None:
-            batch_size = input_seq.size(0)
-            translated_input = torch.tensor(
-                [self._bos_token] * batch_size, device=self.device
-            ).unsqueeze(1)
-        else:
-            translated_input = prompt
+        batch_size = input_seq.size(0)
 
-        for _ in range(max_sequence_length):
+        # BOS start
+        translated_input = torch.full(
+            (batch_size, 1), self._bos_token, device=self.device, dtype=torch.long
+        )
+
+        # Preallocate logits tensor
+        vocab_size = len(vocab)
+        all_logits = input_seq.new_zeros((max_sequence_length, batch_size, vocab_size))
+
+        for step in tqdm(range(max_sequence_length)):
             output_logits = self.forward(
                 input_seq,
                 translated_input,
                 generate_mask=True,
                 tokens_to_prepend=tokens_to_prepend,
                 src_mask=src_padding_mask,
-            )[-1]
-            logits.append(output_logits)
-            output_probs = F.softmax(output_logits, dim=-1)
+            )[
+                -1
+            ]  # shape (batch, vocab_size)
+
+            all_logits[step] = output_logits
+
             if sampling_method == "greedy":
-                predicted_token_ids = torch.argmax(output_probs, dim=-1)
-                # Add batch dimension if missing (i.e., if batch size is 1).
-                if len(predicted_token_ids.shape) == 1:
-                    predicted_token_ids = predicted_token_ids.unsqueeze(0)
+                predicted_token_ids = torch.argmax(output_logits, dim=-1)
             elif sampling_method == "nucleus":
                 predicted_token_ids = self._nuclueus_sampling(output_logits)
             else:
-                raise NotImplementedError(
-                    f"Sampling method {sampling_method} not found."
-                )
+                raise NotImplementedError
+
             translated_input = torch.cat(
-                [translated_input, predicted_token_ids[:, -1].unsqueeze(1)],
-                dim=1,
+                [translated_input, predicted_token_ids.unsqueeze(1)], dim=1
             )
 
-        # Convert the output tokens to a string
-        translated_input = translated_input.detach().cpu().numpy()
-        logits = torch.stack(logits)  # type: ignore
+        # EOS masking (vectorized)
+        tokens = translated_input
+        eos_mask = (tokens == self._eos_token).int().cumsum(dim=1) > 0
+        tokens = tokens.masked_fill(eos_mask, self._padding_token)
 
-        # Anything after the first EOS token is ignored, so convert to padding
-        for batch_num, batch in enumerate(translated_input):
-            eos_idx = np.where(batch == self._eos_token)[0]
-            if eos_idx.size > 0:
-                batch[eos_idx[0] + 1 :] = self._padding_token
-                # Logits don't have the <BOS> token hence index is one less
-                logits[eos_idx[0] :, batch_num, :] = 0.0
-                logits[eos_idx[0] :, batch_num, self._padding_token] = 1.0
-        narrations = []
-        for batch in translated_input:
-            narration = [
-                list(vocab.keys())[list(vocab.values()).index(token_id)]
-                for token_id in batch
-            ]
-            narration = " ".join(narration)
-            narrations.append(narration)
-            translation = narrations  # type: ignore
+        # Build reverse vocab once
+        id_to_word = {v: k for k, v in vocab.items()}
+        narrations = [
+            " ".join([id_to_word[t.item()] for t in batch]) for batch in tokens
+        ]
+
         self.train()
-        if return_logits:
-            return translation, logits  # type: ignore
-        return translation  # type: ignore
+        return (narrations, all_logits) if return_logits else narrations
 
 
 # class Attention(nn.Module):
