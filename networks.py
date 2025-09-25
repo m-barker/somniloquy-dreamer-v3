@@ -966,9 +966,9 @@ class TransformerEncoderDecoder(nn.Module):
         self.tgt_embedding = TokenEmbedding(self._target_vocab_size, d_model)
         self.src_embedding = None
         if src_token_embedding:
-            assert src_vocab_size is not None, (
-                "src_vocab_size must be provided if using src token embeddings."
-            )
+            assert (
+                src_vocab_size is not None
+            ), "src_vocab_size must be provided if using src token embeddings."
             self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -1171,7 +1171,9 @@ class TransformerEncoderDecoder(nn.Module):
                 generate_mask=True,
                 tokens_to_prepend=tokens_to_prepend,
                 src_mask=src_padding_mask,
-            )[-1]  # shape (batch, vocab_size)
+            )[
+                -1
+            ]  # shape (batch, vocab_size)
 
             all_logits[step] = output_logits
 
@@ -1245,6 +1247,7 @@ class BartEncoderDecoderTransformer(nn.Module):
             encoder_ffn_dim=feed_fwd_dim,
             decoder_ffn_dim=feed_fwd_dim,
             use_cache=kv_caching,
+            max_position_embeddings=max_decoder_seq_length,
         )
 
         self.encoder = BartEncoder(self._bart_config)
@@ -1343,7 +1346,7 @@ class BartEncoderDecoderTransformer(nn.Module):
         for t in range(1, max_len):
             output = self.decoder(
                 tokens[:, t - 1 : t],
-                memory,
+                encoder_hidden_states=memory,
                 past_key_values=past_key_values,
                 encoder_attention_mask=(
                     None if src_padding_mask is None else (~src_padding_mask).long()

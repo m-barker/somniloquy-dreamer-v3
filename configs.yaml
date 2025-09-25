@@ -1159,7 +1159,7 @@ babyai-language-25m-multiple-reward-heads:
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
-  eval_every: 5000
+  eval_every: 1000
   log_every: 500
   language_grads: True
 
