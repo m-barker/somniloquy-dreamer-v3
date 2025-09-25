@@ -52,7 +52,6 @@ defaults:
   stochastic_env: False
   n_stochastic_plan_samples: 30
 
-
   use_bert_transformer: False
 
   # Environment
@@ -1207,7 +1206,7 @@ babyai-language-25m-multiple-reward-heads:
   # Translation Evaluation
   save_plots: True
   save_translations: True
-  n_translation_eval_episodes: 5
+  n_translation_eval_episodes: 1
 
 babyai-language-25m-multiple-reward-heads-train-agent:
   steps: 1e6

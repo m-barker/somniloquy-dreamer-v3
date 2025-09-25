@@ -69,13 +69,12 @@ def imagine_trajectory(
     prev_state = initial_state
     done = False
     latent_state = agent._wm.dynamics.get_feat(prev_state).unsqueeze(0)
-    imagained_states: List[torch.Tensor] = [latent_state.detach().clone()]
-    print(f"Sample policy? {sample_policy}")
+    imagined_states: List[torch.Tensor] = [latent_state.detach().clone()]
     for t in range(trajectory_length):
         # If world model thinks the episode terminates, pad the states/actions
         # with zeros.
         if done:
-            imagained_states.append(torch.zeros_like(latent_state))
+            imagined_states.append(torch.zeros_like(latent_state))
             if actions is None:
                 imagined_actions.append(torch.zeros_like(imagined_actions[-1]))
             else:
@@ -103,15 +102,15 @@ def imagine_trajectory(
         )
         prev_state = prior
         latent_state = agent._wm.dynamics.get_feat(prior).unsqueeze(0)
-        imagained_states.append(latent_state.detach().clone())
+        imagined_states.append(latent_state.detach().clone())
         if "cont" in agent._wm.heads:
             predicted_continue = agent._wm.heads["cont"](latent_state).mode()
             # Less than 50% predicted chance that the episode continues according to world model.
             if predicted_continue[0, 0].detach().cpu().numpy() < 0.5:
                 done = True
     if actions is None:
-        return imagained_states, imagined_actions, done
-    return imagained_states, actions, done
+        return imagined_states, imagined_actions, done
+    return imagined_states, actions, done
 
 
 @torch.no_grad()
@@ -1406,9 +1405,9 @@ def evaluate_rollouts(
             imagined_states = imagined_state_samples[episode][trajectory:end_index]
             posterior_states = posterior_state_samples[episode][trajectory:end_index]
             actions = imagined_action_samples[episode][trajectory:end_index]
-            assert len(actions) == len(imagined_states), (
-                "Actions and states must be the same length"
-            )
+            assert len(actions) == len(
+                imagined_states
+            ), "Actions and states must be the same length"
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue

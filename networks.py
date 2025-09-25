@@ -966,9 +966,9 @@ class TransformerEncoderDecoder(nn.Module):
         self.tgt_embedding = TokenEmbedding(self._target_vocab_size, d_model)
         self.src_embedding = None
         if src_token_embedding:
-            assert src_vocab_size is not None, (
-                "src_vocab_size must be provided if using src token embeddings."
-            )
+            assert (
+                src_vocab_size is not None
+            ), "src_vocab_size must be provided if using src token embeddings."
             self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -1171,7 +1171,9 @@ class TransformerEncoderDecoder(nn.Module):
                 generate_mask=True,
                 tokens_to_prepend=tokens_to_prepend,
                 src_mask=src_padding_mask,
-            )[-1]  # shape (batch, vocab_size)
+            )[
+                -1
+            ]  # shape (batch, vocab_size)
 
             all_logits[step] = output_logits
 
@@ -1201,7 +1203,7 @@ class TransformerEncoderDecoder(nn.Module):
         return (narrations, all_logits) if return_logits else narrations
 
 
-class BartEncoderDecoderTransformer:
+class BartEncoderDecoderTransformer(nn.Module):
     """
     Instantiates a BartModel encoder-decoder transformer using the
     transformers library. This is done as PyTorch's vanilla
@@ -1229,6 +1231,7 @@ class BartEncoderDecoderTransformer:
         eos_token: int = 2,
         kv_caching: bool = True,
     ):
+        super().__init__()
         self._bart_config = BartConfig(
             vocab_size=vocab_size,
             d_model=input_dim,
@@ -1286,28 +1289,24 @@ class BartEncoderDecoderTransformer:
             src = self._latent_state_embedding_layer(src)
 
         encoder_output = self.encoder(
-            input_embeds=src.permute(1, 0, 2),
+            inputs_embeds=src,
             # Unlike PyTorch Transformers, the Transformers library expects the
             # padding mask to be 1 for tokens that are not masked
             attention_mask=None if src_mask is None else (~src_mask).long(),
         )[0]
 
-        tgt_emb = self.decoder.embed_tokens(tgt).permute(1, 0, 2)
-        tgt_mask = None
+        tgt_pad_mask = None
         if generate_mask:
-            tgt_mask = nn.Transformer.generate_square_subsequent_mask(
-                tgt_emb.size(0)
-            ).to(tgt_emb.device)
-
+            tgt_pad_mask = tgt == self._padding_token_id
         out = self.decoder(
-            tgt_emb,
-            encoder_output,
-            tgt_mask=tgt_mask,
-            memory_key_padding_mask=None if src_mask is None else (~src_mask).long(),
+            tgt,
+            encoder_hidden_states=encoder_output,
+            attention_mask=None if tgt_pad_mask is None else (~tgt_pad_mask).long(),
+            encoder_attention_mask=None if src_mask is None else (~src_mask).long(),
         )
 
-        logits = self.model_prediction_head(out[0])  # (L, B, V)
-        return logits.permute(1, 0, 2)  # (B, L, V)
+        logits = self.model_prediction_head(out[0])  # (B, L, V)
+        return logits.permute(1, 0, 2)  # (L, B, V)
 
     @torch.no_grad()
     def generate(
@@ -1315,21 +1314,22 @@ class BartEncoderDecoderTransformer:
         src_emb,
         vocab_mapping: Dict,
         max_len,
-        token_sampling_method: str = "greedy",
+        sampling_method: str = "greedy",
         src_padding_mask: Optional[torch.Tensor] = None,
     ):
         """
         Fast greedy decoding with KV caching
         src_emb: (batch, seq_len, d_model)
         """
+        self.eval()
         batch_size = src_emb.size(0)
         if self._latent_state_embedding_layer:
             src_emb = self._latent_state_embedding_layer(src_emb)
         memory = self.encoder(
-            inputs_embeds=src_emb.permute(1, 0, 2),
-            attention_mask=None
-            if src_padding_mask is None
-            else (~src_padding_mask).long(),
+            inputs_embeds=src_emb,
+            attention_mask=(
+                None if src_padding_mask is None else (~src_padding_mask).long()
+            ),
         )[0]
 
         # Initialize decoder tokens
@@ -1343,12 +1343,16 @@ class BartEncoderDecoderTransformer:
 
         past_key_values = None
         for t in range(1, max_len):
-            tgt_emb = self.decoder.embed_tokens(tokens[:, t - 1 : t]).permute(
-                1, 0, 2
-            )  # (1, batch, d_model)
-            out, past_key_values = self.decoder(
-                tgt_emb, memory, past_key_values=past_key_values
+            output = self.decoder(
+                tokens[:, t - 1 : t],
+                memory,
+                past_key_values=past_key_values,
+                encoder_attention_mask=(
+                    None if src_padding_mask is None else (~src_padding_mask).long()
+                ),
             )
+            out = output.last_hidden_state  # (batch, 1, d_model)
+            past_key_values = output.past_key_values
             step_logits = self.model_prediction_head(out[-1])  # (batch, vocab_size)
             next_token = step_logits.argmax(-1)
             tokens[:, t] = next_token
@@ -1369,7 +1373,7 @@ class BartEncoderDecoderTransformer:
                 word = id_to_word.get(token_id, "<UNK>")
                 words.append(word)
             translations.append(" ".join(words))
-
+        self.train()
         return translations
 
 
