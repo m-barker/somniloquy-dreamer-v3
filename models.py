@@ -835,6 +835,7 @@ class ImagBehavior(nn.Module):
         self,
         start,
         objective,
+        reward_returns_continue: bool = False,
     ):
         self._update_slow_target()
         metrics = {}
@@ -844,14 +845,19 @@ class ImagBehavior(nn.Module):
                 imag_feat, imag_state, imag_action = self._imagine(
                     start, self.actor, self._config.imag_horizon
                 )
-                # print(imag_action)
-                # print(f"Start Shape: {start['stoch'].shape}")
-                reward = objective(imag_feat, imag_state, imag_action)
+                continues = None
+                if reward_returns_continue:
+                    reward, continues = objective(imag_feat, imag_state, imag_action)
+                else:
+                    reward = objective(imag_feat, imag_state, imag_action)
                 actor_ent = self.actor(imag_feat).entropy()
                 state_ent = self._world_model.dynamics.get_dist(imag_state).entropy()
                 # this target is not scaled by ema or sym_log.
                 target, weights, base = self._compute_target(
-                    imag_feat, imag_state, reward
+                    imag_feat,
+                    imag_state,
+                    reward,
+                    continues,
                 )
                 actor_loss, mets = self._compute_actor_loss(
                     imag_feat,
@@ -918,10 +924,12 @@ class ImagBehavior(nn.Module):
 
         return feats, states, actions
 
-    def _compute_target(self, imag_feat, imag_state, reward):
+    def _compute_target(self, imag_feat, imag_state, reward, continues=None):
         if "cont" in self._world_model.heads:
             inp = self._world_model.dynamics.get_feat(imag_state)
             discount = self._config.discount * self._world_model.heads["cont"](inp).mean
+        elif continues is not None:
+            discount = self._config.discount * continues
         else:
             discount = self._config.discount * torch.ones_like(reward)
         value = self.value(imag_feat).mode()
