@@ -966,9 +966,9 @@ class TransformerEncoderDecoder(nn.Module):
         self.tgt_embedding = TokenEmbedding(self._target_vocab_size, d_model)
         self.src_embedding = None
         if src_token_embedding:
-            assert (
-                src_vocab_size is not None
-            ), "src_vocab_size must be provided if using src token embeddings."
+            assert src_vocab_size is not None, (
+                "src_vocab_size must be provided if using src token embeddings."
+            )
             self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -1171,9 +1171,7 @@ class TransformerEncoderDecoder(nn.Module):
                 generate_mask=True,
                 tokens_to_prepend=tokens_to_prepend,
                 src_mask=src_padding_mask,
-            )[
-                -1
-            ]  # shape (batch, vocab_size)
+            )[-1]  # shape (batch, vocab_size)
 
             all_logits[step] = output_logits
 
@@ -1351,9 +1349,9 @@ class BartEncoderDecoderTransformer(nn.Module):
                     None if src_padding_mask is None else (~src_padding_mask).long()
                 ),
             )
-            out = output.last_hidden_state  # (batch, 1, d_model)
+            out = output.last_hidden_state  # (B, 1, D)
             past_key_values = output.past_key_values
-            step_logits = self.model_prediction_head(out[-1])  # (batch, vocab_size)
+            step_logits = self.model_prediction_head(out[:, -1, :])
             next_token = step_logits.argmax(-1)
             tokens[:, t] = next_token
 
@@ -1366,6 +1364,10 @@ class BartEncoderDecoderTransformer(nn.Module):
         translations = []
         tokens_cpu = tokens.cpu().numpy()
         for seq in tokens_cpu:
+            eos_positions = (seq == self._eos_token_id).nonzero()[0]
+            if len(eos_positions) > 0:
+                first_eos = eos_positions[0]
+                seq[first_eos + 1 :] = self._eos_token_id
             words = []
             for token_id in seq:
                 if token_id == self._eos_token_id or token_id == self._bos_token_id:
