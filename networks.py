@@ -8,6 +8,8 @@ from torch import nn
 import torch.nn.functional as F
 from torch import distributions as torchd
 from tqdm import tqdm
+from transformers import BartConfig
+from transformers.models.bart.modeling_bart import BartEncoder, BartDecoder
 
 import tools
 
@@ -964,9 +966,9 @@ class TransformerEncoderDecoder(nn.Module):
         self.tgt_embedding = TokenEmbedding(self._target_vocab_size, d_model)
         self.src_embedding = None
         if src_token_embedding:
-            assert (
-                src_vocab_size is not None
-            ), "src_vocab_size must be provided if using src token embeddings."
+            assert src_vocab_size is not None, (
+                "src_vocab_size must be provided if using src token embeddings."
+            )
             self.src_embedding = TokenEmbedding(src_vocab_size, d_model)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -1169,9 +1171,7 @@ class TransformerEncoderDecoder(nn.Module):
                 generate_mask=True,
                 tokens_to_prepend=tokens_to_prepend,
                 src_mask=src_padding_mask,
-            )[
-                -1
-            ]  # shape (batch, vocab_size)
+            )[-1]  # shape (batch, vocab_size)
 
             all_logits[step] = output_logits
 
@@ -1199,6 +1199,178 @@ class TransformerEncoderDecoder(nn.Module):
 
         self.train()
         return (narrations, all_logits) if return_logits else narrations
+
+
+class BartEncoderDecoderTransformer:
+    """
+    Instantiates a BartModel encoder-decoder transformer using the
+    transformers library. This is done as PyTorch's vanilla
+    encoder-decoder transformer implentation does not support key-value
+    caching, which results in quadtratic inference time for generating a
+    translation. The transformers library natively supports this, which results
+    in a linear inference time (in the length of the sequence).
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        vocab_size: int,
+        n_heads: int = 2,
+        num_encoder_layers: int = 2,
+        num_decoder_layers: int = 2,
+        max_decoder_seq_length: int = 512,
+        feed_fwd_dim: int = 256,
+        dropout: float = 0.1,
+        activation: str = "relu",
+        input_bottleneck: bool = True,
+        bottleneck_input_size: int = 1024,
+        padding_token: int = 0,
+        bos_token: int = 1,
+        eos_token: int = 2,
+        kv_caching: bool = True,
+    ):
+        self._bart_config = BartConfig(
+            vocab_size=vocab_size,
+            d_model=input_dim,
+            encoder_layers=num_encoder_layers,
+            decoder_layers=num_decoder_layers,
+            encoder_attention_heads=n_heads,
+            decoder_attention_heads=n_heads,
+            dropout=dropout,
+            bos_token_id=bos_token,
+            eos_token_id=eos_token,
+            pad_token_id=padding_token,
+            activation_function=activation,
+            encoder_ffn_dim=feed_fwd_dim,
+            decoder_ffn_dim=feed_fwd_dim,
+            use_cache=kv_caching,
+        )
+
+        self.encoder = BartEncoder(self._bart_config)
+        self.decoder = BartDecoder(self._bart_config)
+
+        self._bos_token_id = bos_token
+        self._eos_token_id = eos_token
+        self._padding_token_id = padding_token
+
+        self.decoder.embed_tokens = nn.Embedding(vocab_size, input_dim, padding_token)
+        self.model_prediction_head = nn.Linear(input_dim, vocab_size)
+
+        self._input_bottleneck = input_bottleneck
+
+        self._latent_state_embedding_layer = None
+        if self._input_bottleneck:
+            self._latent_state_embedding_layer = nn.Linear(
+                bottleneck_input_size, input_dim
+            )
+
+    def forward(
+        self,
+        src: torch.Tensor,
+        tgt: torch.Tensor,
+        generate_mask: bool = False,
+        src_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            src: (batch, seq, D)
+            tgt: (batch, seq)
+            src_mask: (torch.Tensor, optional): Optional mask for src padding where True
+            indicates padding tokensto be ignored. Defaults to None.
+
+        Returns:
+            torch.Tensor: logits of shape (out_seq_length, batch_size, vocab_size)
+        """
+
+        if self._latent_state_embedding_layer:
+            src = self._latent_state_embedding_layer(src)
+
+        encoder_output = self.encoder(
+            input_embeds=src.permute(1, 0, 2),
+            # Unlike PyTorch Transformers, the Transformers library expects the
+            # padding mask to be 1 for tokens that are not masked
+            attention_mask=None if src_mask is None else (~src_mask).long(),
+        )[0]
+
+        tgt_emb = self.decoder.embed_tokens(tgt).permute(1, 0, 2)
+        tgt_mask = None
+        if generate_mask:
+            tgt_mask = nn.Transformer.generate_square_subsequent_mask(
+                tgt_emb.size(0)
+            ).to(tgt_emb.device)
+
+        out = self.decoder(
+            tgt_emb,
+            encoder_output,
+            tgt_mask=tgt_mask,
+            memory_key_padding_mask=None if src_mask is None else (~src_mask).long(),
+        )
+
+        logits = self.model_prediction_head(out[0])  # (L, B, V)
+        return logits.permute(1, 0, 2)  # (B, L, V)
+
+    @torch.no_grad()
+    def generate(
+        self,
+        src_emb,
+        vocab_mapping: Dict,
+        max_len,
+        token_sampling_method: str = "greedy",
+        src_padding_mask: Optional[torch.Tensor] = None,
+    ):
+        """
+        Fast greedy decoding with KV caching
+        src_emb: (batch, seq_len, d_model)
+        """
+        batch_size = src_emb.size(0)
+        if self._latent_state_embedding_layer:
+            src_emb = self._latent_state_embedding_layer(src_emb)
+        memory = self.encoder(
+            inputs_embeds=src_emb.permute(1, 0, 2),
+            attention_mask=None
+            if src_padding_mask is None
+            else (~src_padding_mask).long(),
+        )[0]
+
+        # Initialize decoder tokens
+        tokens = torch.full(
+            (batch_size, max_len),
+            self._eos_token_id,
+            device=src_emb.device,
+            dtype=torch.long,
+        )
+        tokens[:, 0] = self._bos_token_id
+
+        past_key_values = None
+        for t in range(1, max_len):
+            tgt_emb = self.decoder.embed_tokens(tokens[:, t - 1 : t]).permute(
+                1, 0, 2
+            )  # (1, batch, d_model)
+            out, past_key_values = self.decoder(
+                tgt_emb, memory, past_key_values=past_key_values
+            )
+            step_logits = self.model_prediction_head(out[-1])  # (batch, vocab_size)
+            next_token = step_logits.argmax(-1)
+            tokens[:, t] = next_token
+
+            # Stop if all sequences hit EOS
+            if (next_token == self._eos_token_id).all():
+                break
+
+        # Decode IDs to strings
+        id_to_word = {v: k for k, v in vocab_mapping.items()}
+        translations = []
+        tokens_cpu = tokens.cpu().numpy()
+        for seq in tokens_cpu:
+            words = []
+            for token_id in seq:
+                if token_id == self._eos_token_id or token_id == self._bos_token_id:
+                    continue
+                word = id_to_word.get(token_id, "<UNK>")
+                words.append(word)
+            translations.append(" ".join(words))
+
+        return translations
 
 
 # class Attention(nn.Module):

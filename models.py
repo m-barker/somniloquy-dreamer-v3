@@ -154,6 +154,20 @@ class WorldModel(nn.Module):
                     config.device,
                 )
 
+            elif config.use_bert_transformer:
+                self.heads["language"] = networks.BartEncoderDecoderTransformer(
+                    input_dim=transformer_params["d_model"],
+                    vocab_size=transformer_params["target_vocab_size"],
+                    n_heads=transformer_params["n_head"],
+                    num_encoder_layers=transformer_params["num_encoder_layers"],
+                    num_decoder_layers=transformer_params["num_decoder_layers"],
+                    max_decoder_seq_length=config.dec_max_length,
+                    feed_fwd_dim=transformer_params["dim_feedforward"],
+                    dropout=transformer_params["dropout"],
+                    activation=transformer_params["activation"],
+                    input_bottleneck=True,
+                    bottleneck_input_size=feat_size,
+                )
             else:
                 self.heads["language"] = networks.TransformerEncoderDecoder(
                     **transformer_params
