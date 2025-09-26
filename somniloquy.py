@@ -229,7 +229,8 @@ def configure_narrator(config):
     elif "ai2thor" in config.task:
         narrator = CookEggNarrator()
     elif "babyai" in config.task:
-        narrator = BabyAIGoToLocNarrator()
+        simple = config.simple_narrator
+        narrator = BabyAIGoToLocNarrator(simple_narrator=simple)
     else:
         raise ValueError(f"{config.task} has no valid narrator")
 
