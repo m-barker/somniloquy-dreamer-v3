@@ -143,6 +143,15 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
     https://minigrid.farama.org/environments/babyai/GoToLocal/
     """
 
+    def __init__(self, simple_narrator: bool = False) -> None:
+        """
+        Allows specifying a simpler narrator that gives less long-winded
+        narrations.
+        """
+
+        super().__init__()
+        self._simple_narrator = simple_narrator
+
     def _get_adjacent_coordinates(
         self, source_coordinate: Tuple[int, int]
     ) -> List[Tuple[int, int]]:
@@ -319,20 +328,23 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                         facing = self._is_agent_facing_object(
                             agent_position, agent_direction, ball_positions[i]
                         )
-                        if narration_str == "":
+                        if narration_str == "" and (
+                            facing or not self._simple_narrator
+                        ):
                             narration_str += "First "
                         if facing:
                             if narrated_this_timestep:
                                 narration_str += "and "
                             narration_str += f"I will go to the {ball_colour_str} ball "
-                        else:
+                            narrated_this_timestep = True
+                        elif not self._simple_narrator:
                             if narrated_this_timestep:
                                 narration_str += f"and I will move next to the {ball_colour_str} ball "
                             else:
                                 narration_str += (
                                     f"I will move next to the {ball_colour_str} ball "
                                 )
-                        narrated_this_timestep = True
+                            narrated_this_timestep = True
 
             for i, box in enumerate(box_adjacent_cells):
                 # Each tile is encoded as the tuple (OBJECT_IDX, COLOR_IDX, STATE)
@@ -347,13 +359,16 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                         facing = self._is_agent_facing_object(
                             agent_position, agent_direction, box_positions[i]
                         )
-                        if narration_str == "":
+                        if narration_str == "" and (
+                            facing or not self._simple_narrator
+                        ):
                             narration_str += "First "
                         if facing:
                             if narrated_this_timestep:
                                 narration_str += "and "
                             narration_str += f"I will go to the {box_colour_str} box "
-                        else:
+                            narrated_this_timestep = True
+                        elif not self._simple_narrator:
                             if narrated_this_timestep:
                                 narration_str += (
                                     f"and I will move next to the {box_colour_str} box "
@@ -362,7 +377,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                                 narration_str += (
                                     f"I will move next to the {box_colour_str} box "
                                 )
-                        narrated_this_timestep = True
+                            narrated_this_timestep = True
 
             for i, key in enumerate(key_adjacent_cells):
                 # Each tile is encoded as the tuple (OBJECT_IDX, COLOR_IDX, STATE)
@@ -377,13 +392,16 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                         facing = self._is_agent_facing_object(
                             agent_position, agent_direction, key_positions[i]
                         )
-                        if narration_str == "":
+                        if narration_str == "" and (
+                            facing or not self._simple_narrator
+                        ):
                             narration_str += "First "
                         if facing:
                             if narrated_this_timestep:
                                 narration_str += "and "
                             narration_str += f"I will go to the {key_colour_str} key "
-                        else:
+                            narrated_this_timestep = True
+                        elif not self._simple_narrator:
                             if narrated_this_timestep:
                                 narration_str += (
                                     f"and I will move next to the {key_colour_str} key "
@@ -392,7 +410,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                                 narration_str += (
                                     f"I will move next to the {key_colour_str} key "
                                 )
-                        narrated_this_timestep = True
+                            narrated_this_timestep = True
 
             if narrated_this_timestep:
                 narration_str += "and then "
@@ -402,7 +420,7 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
 
         # If agent has moved, but hasn't moved next to any objects, then get the object(s) the agent started
         # closest to, and compare with the closest object(s) to the agent at the end of the trajectory
-        if narration_str == "":
+        if narration_str == "" and not self._simple_narrator:
             min_dist = np.inf
             closest_objects: List[Tuple[str, Union[int, float]]] = []
             for ball in ball_positions:
@@ -484,10 +502,14 @@ class BabyAIGoToLocNarrator(MiniGridNarrator):
                 if obj[1] > closest_dist:
                     break
                 narration_str += f"and the {obj[0]} "
+        elif narration_str == "":
+            narration_str += "I will move but not go to anything"
 
         # Strip off any trailing " and then "
         if narration_str[-5:] == "then ":
             narration_str = narration_str[:-9]
+        if narration_str[-4:] == "then":
+            narration_str = narration_str[:-8]
 
         # Remove any trailing whitespace
         if narration_str[-1] == " ":

@@ -1,4 +1,5 @@
 import sys
+from typing import Dict, List
 
 sys.path.append("/home/matt/dev/somniloquy-dreamer-v3")
 
@@ -12,28 +13,29 @@ from narration.minigrd_narrator import BabyAIGoToLocNarrator
 def main():
     env = gym.make("BabyAI-GoToLocal-v0", render_mode="human")
     env = FullyObsWrapper(env)
-    narrator = BabyAIGoToLocNarrator()
-
-    narration_observations = []
+    narrator = BabyAIGoToLocNarrator(simple_narrator=True)
     obs, info = env.reset()
     print(obs)
 
-    narration_observations.append(
-        {"occupancy_grid": obs["image"], "agent_direction": int(obs["direction"])}
-    )
+    narration_observations: Dict[str, List] = {
+        "occupancy_grid": [obs["image"]],
+        "agent_direction": [int(obs["direction"])],
+    }
     print(type(obs["direction"]))
     while True:
         action = input("Please enter an action integer [0-2]")
         action_int = int(action)
         obs, reward, terminated, truncated, info = env.step(action_int)
-        narration_observations.append(
-            {"occupancy_grid": obs["image"], "agent_direction": int(obs["direction"])}
-        )
+        narration_observations["occupancy_grid"].append(obs["image"])
+        narration_observations["agent_direction"].append(int(obs["direction"]))
         print(terminated)
 
-        if len(narration_observations) == 16:
+        if len(narration_observations["occupancy_grid"]) == 16:
             print(narrator.narrate(narration_observations))
-            narration_observations = []
+            narration_observations = {
+                "occupancy_grid": [],
+                "agent_direction": [],
+            }
 
 
 if __name__ == "__main__":
