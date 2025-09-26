@@ -1323,7 +1323,7 @@ babyai-language-100m-multiple-reward-heads:
   # Translation Evaluation
   save_plots: True
   save_translations: True
-  n_translation_eval_episodes: 5
+  n_translation_eval_episodes: 1
 
 debug:
   debug: True
