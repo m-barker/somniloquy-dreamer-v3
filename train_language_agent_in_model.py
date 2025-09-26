@@ -217,8 +217,6 @@ class LanguageAgent:
             stacked_states.permute(1, 0, 2)
         )
 
-        print(f"Training for {B} batches")
-
         # Collapse the batch dimension into the sequence dimension for one pass
         # Original shapes: (batch, T, B, D) and (batch, T, B)
         B_size = sequence_permutations.shape[2]
@@ -229,7 +227,6 @@ class LanguageAgent:
         flat_padding = sequence_pad_mask.permute(2, 0, 1).reshape(
             -1, sequence_pad_mask.shape[1]
         )
-        print(f"Generating translations for {flat_sequences.shape[0]} sequences")
         # Generate translations in a single pass
         plan_translations = self._world_model._wm.heads["language"].generate(
             flat_sequences,  # shape (B*batch, T, D)
@@ -238,8 +235,6 @@ class LanguageAgent:
             self._world_model._config.token_sampling_method,
             src_padding_mask=flat_padding,  # shape (B*batch, T)
         )
-        print("Generated translations")
-        print(f"Number of translations: {len(plan_translations)}")
 
         # Post-process translations
         string_plan_translations = [
@@ -254,20 +249,23 @@ class LanguageAgent:
         ]
 
         # Reshape back into (batch, B) layout
-        string_plan_translations = torch.tensor(string_plan_translations).reshape(
+        string_plan_translations_array = np.array(string_plan_translations).reshape(
             sequence_permutations.shape[0], B_size
         )
 
         # Reward assignment
         for batch in range(B_size):
-            for idx, plan_translation in enumerate(string_plan_translations[:, batch]):
+            for idx, plan_translation in enumerate(
+                string_plan_translations_array[:, batch]
+            ):
                 if g in plan_translation:
                     reward[idx][batch] = 1.0
                     continues[idx:, batch] = 0.0
-                    print(f"NON-ZERO REWARD: {plan_translation} for goal {g}")
+                    # print(f"NON-ZERO REWARD: {plan_translation} for goal {g}")
                     break
 
         reward = reward.to(self._world_model._config.device)
+        continues = continues.to(self._world_model._config.device)
         if self._wandb_run is not None:
             mean_reward_batch = torch.mean(reward, dim=1)
             plan_reward = float(mean_reward_batch.sum())
@@ -311,7 +309,10 @@ class LanguageAgent:
             rgb_obs = [obs["image"]]
             prev_state = starting_latent
             eval_reward = 0.0
+            done = False
             for t in range(horizon):
+                if done:
+                    break
                 action = (
                     self._world_model._task_behavior.actor(latent_tensor)
                     .mode()
@@ -333,12 +334,20 @@ class LanguageAgent:
                     posterior
                 ).unsqueeze(0)
                 prev_state = posterior
+                print(f"Reward info: {info['reward_info']}")
+                if self._manually_calculate_continues:
+                    if (
+                        self.language_goal == "go to the red key"
+                        and info["reward_info"]["red key"] == 1.0
+                    ):
+                        done = True
+                        eval_reward += 1.0
             # (T, H, W, C)
             video_array = np.stack(rgb_obs, axis=0)
             # (T, C, H, W)
             video_array = video_array.transpose(0, 3, 1, 2)
             mean_episode_reward += eval_reward
-            print(f"Evaluation Episode {episode + 1}: eval_reward")
+            print(f"Evaluation Episode {episode + 1}: {eval_reward}")
         assert video_array is not None
         return video_array, mean_episode_reward / n_eval_episodes
 
@@ -449,7 +458,12 @@ def main():
         agent, config.checkpoint, eval_env, run, mannually_calculate_continues
     )
 
-    lang_agent.train(config.language_goal, int(config.model_steps), logdir)
+    lang_agent.train(
+        config.language_goal,
+        int(config.model_steps),
+        logdir,
+        rollout_length=config.imag_horizon,
+    )
 
 
 if __name__ == "__main__":
