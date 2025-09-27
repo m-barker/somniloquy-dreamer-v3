@@ -378,7 +378,7 @@ class LanguageAgent:
             # rollout from start_states.
             # append to buffer.
 
-    def _learned_reward_function(self, _, imagined_states, _) -> torch.Tensor:
+    def _learned_reward_function(self, _, imagined_states, __) -> torch.Tensor:
         """
         Computes the rewards using the learned reward function head
         """
