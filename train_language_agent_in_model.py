@@ -350,6 +350,24 @@ class LanguageAgent:
                     ):
                         done = True
                         eval_reward += 1.0
+                    elif (
+                        self.language_goal == "go to the green ball"
+                        and info["reward_info"]["green ball"] == 1.0
+                    ):
+                        done = True
+                        eval_reward += 1.0
+                    elif (
+                        self.language_goal == "go to the blue ball"
+                        and info["reward_info"]["blue ball"] == 1.0
+                    ):
+                        done = True
+                        eval_reward += 1.0
+                    elif (
+                        self.language_goal == "go to the purple box"
+                        and info["reward_info"]["purple box"] == 1.0
+                    ):
+                        done = True
+                        eval_reward += 1.0
             # (T, H, W, C)
             video_array = np.stack(rgb_obs, axis=0)
             # (T, C, H, W)
