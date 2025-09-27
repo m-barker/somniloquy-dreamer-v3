@@ -23,7 +23,7 @@ from somniloquy import (
     load_existing_episodes,
     count_steps,
 )
-from evaluation import get_posterior_state
+from evaluation import get_posterior_state, imagine_trajectory
 
 
 class LanguageAgent:
@@ -40,6 +40,8 @@ class LanguageAgent:
         eval_env,
         wandb_run=None,
         manually_calculate_continues: bool = False,
+        latent_buffer_size: int = 100000,
+        use_learned_reward: bool = False,
     ) -> None:
         """
         Args:
@@ -53,6 +55,13 @@ class LanguageAgent:
         self._manually_calculate_continues = manually_calculate_continues
 
         self.rewards = []
+
+        self._latent_state_buffer = []
+        self._latent_buffer_size = latent_buffer_size
+
+        # If true, uses the learned reward head for the given natural
+        # language goal. Used for comparison with language reward
+        self._use_learned_reward = use_learned_reward
 
         self._initialise_wm()
 
@@ -351,6 +360,24 @@ class LanguageAgent:
         assert video_array is not None
         return video_array, mean_episode_reward / n_eval_episodes
 
+    def _populate_buffer(self, n_steps: int = 1000):
+        if len(self._latent_state_buffer) == 0:
+            _, start_state, _, _, _ = self._get_env_starting_state()
+            for _ in range(n_steps):
+                imagined_states, _, _ = imagine_trajectory(
+                    self._world_model,
+                    start_state,
+                    trajectory_length=32,
+                    sample_latent=True,
+                )
+                imagined_states = [x.cpu().numpy() for x in imagined_states]
+                self._latent_state_buffer.extend(imagined_states)
+        else:
+            pass
+            # start_states = self._sample_latent_buffer().
+            # rollout from start_states.
+            # append to buffer.
+
     def train(
         self,
         language_goal: str,
@@ -381,11 +408,29 @@ class LanguageAgent:
             # Add empty time dimension
             for k, v in start_state_batched.items():
                 start_state_batched[k] = v.unsqueeze(0)
-            reward_func = (
-                self._language_reward
-                if not self._manually_calculate_continues
-                else self._babyai_language_reward
-            )
+            if self._use_learned_reward:
+                reward_head_name = ""
+                if self.language_goal == "go the red key":
+                    reward_head_name = "red_key_reward"
+                elif self.language_goal == "go to the green ball":
+                    reward_head_name = "green_ball_reward"
+                elif self.language_goal == "go to the blue ball":
+                    reward_head_name = "blue_ball_reward"
+                elif self.language_goal == "go to the purple box":
+                    reward_head_name = "purple_box_reward"
+                else:
+                    raise ValueError(
+                        f"No reward head available for language goal {self.language_goal}"
+                    )
+                reward_func = lambda f, s, a: self._world_model._wm.heads[
+                    reward_head_name
+                ](self._world_model._wm.dynamics.get_feat(s)).mode()
+            else:
+                reward_func = (
+                    self._language_reward
+                    if not self._manually_calculate_continues
+                    else self._babyai_language_reward
+                )
             self._world_model._task_behavior._train(
                 start_state_batched,
                 reward_func,

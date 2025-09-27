@@ -40,6 +40,7 @@ defaults:
   fixed_env_seed: -1
 
   simple_narrator: False
+  use_learned_reward = True
 
   # For when we want to simultaneously learn multiple
   # different reward heads
