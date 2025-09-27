@@ -207,7 +207,7 @@ class LanguageAgent:
         _,
         imagined_states: Dict[str, torch.Tensor],
         __,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         assert self.language_goal is not None
         g = self.language_goal
         # Imagined states are of shape (Time, Batch, Dimension)
@@ -219,7 +219,7 @@ class LanguageAgent:
         # Reward needs to match the (Time, Batch) of the stacked states
         # Dimension is 1 as reward is a scalar
         reward = torch.zeros((T, B, 1))
-        continues = torch.ones_like(reward)
+        # continues = torch.ones_like(reward)
 
         # Shape (T, T, B, D), (T, T, B)
         sequence_permutations, sequence_pad_mask = self._make_prefix_batches(
@@ -269,12 +269,12 @@ class LanguageAgent:
             ):
                 if g in plan_translation:
                     reward[idx][batch] = 1.0
-                    continues[idx:, batch] = 0.0
+                    # continues[idx:, batch] = 0.0
                     # print(f"NON-ZERO REWARD: {plan_translation} for goal {g}")
                     break
 
         reward = reward.to(self._world_model._config.device)
-        continues = continues.to(self._world_model._config.device)
+        # continues = continues.to(self._world_model._config.device)
         if self._wandb_run is not None:
             mean_reward_batch = torch.mean(reward, dim=1)
             plan_reward = float(mean_reward_batch.sum())
@@ -284,7 +284,7 @@ class LanguageAgent:
                 }
             )
 
-        return reward, continues
+        return reward  # , continues
 
     def _get_env_starting_state(self):
         """
@@ -450,14 +450,7 @@ class LanguageAgent:
                     if not self._manually_calculate_continues
                     else self._babyai_language_reward
                 )
-            self._world_model._task_behavior._train(
-                start_state_batched,
-                reward_func,
-                reward_returns_continue=(
-                    (not self._use_learned_reward)
-                    and self._manually_calculate_continues
-                ),
-            )  # type: ignore
+            self._world_model._task_behavior._train(start_state_batched, reward_func)  # type: ignore
             if n % save_every == 0:
                 items_to_save = {
                     "agent_state_dict": self._world_model.state_dict(),
