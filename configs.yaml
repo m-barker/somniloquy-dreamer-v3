@@ -1280,7 +1280,7 @@ babyai-language-25m-multiple-reward-heads-train-agent:
   random_actions: False
 
 babyai-language-100m-multiple-reward-heads:
-  steps: 1e6
+  steps: 5e4 # 50,000
   envs: 1
   action_repeat: 1
   eval_episode_num: 1
