@@ -383,9 +383,7 @@ class LanguageAgent:
         Computes the rewards using the learned reward function head
         """
 
-        stacked_latents = self._world_model._wm.dynamics.get_feat(
-            imagined_states
-        ).mode()
+        stacked_latents = self._world_model._wm.dynamics.get_feat(imagined_states)
 
         reward = self._world_model._wm.heads[self._reward_head_name](
             stacked_latents
