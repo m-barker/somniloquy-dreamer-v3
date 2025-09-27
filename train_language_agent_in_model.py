@@ -433,7 +433,7 @@ class LanguageAgent:
                 start_state_batched[k] = v.unsqueeze(0)
             if self._use_learned_reward:
                 self._reward_head_name = ""
-                if self.language_goal == "go the red key":
+                if self.language_goal == "go to the red key":
                     self._reward_head_name = "red_key_reward"
                 elif self.language_goal == "go to the green ball":
                     self._reward_head_name = "green_ball_reward"
