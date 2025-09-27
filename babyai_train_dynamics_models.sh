@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # Array of seeds
 seeds=(100 200 300 400 500)
