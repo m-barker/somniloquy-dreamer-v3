@@ -378,6 +378,29 @@ class LanguageAgent:
             # rollout from start_states.
             # append to buffer.
 
+    def _learned_reward_function(self, _, imagined_states, _) -> torch.Tensor:
+        """
+        Computes the rewards using the learned reward function head
+        """
+
+        stacked_latents = self._world_model._wm.dynamics.get_feat(
+            imagined_states
+        ).mode()
+
+        reward = self._world_model._wm.heads[self._reward_head_name](
+            stacked_latents
+        ).mode()
+
+        if self._wandb_run is not None:
+            mean_reward_batch = torch.mean(reward, dim=1)
+            plan_reward = float(mean_reward_batch.sum())
+            self._wandb_run.log(
+                {
+                    "reward_in_model": plan_reward,
+                }
+            )
+        return reward
+
     def train(
         self,
         language_goal: str,
@@ -409,22 +432,20 @@ class LanguageAgent:
             for k, v in start_state_batched.items():
                 start_state_batched[k] = v.unsqueeze(0)
             if self._use_learned_reward:
-                reward_head_name = ""
+                self._reward_head_name = ""
                 if self.language_goal == "go the red key":
-                    reward_head_name = "red_key_reward"
+                    self._reward_head_name = "red_key_reward"
                 elif self.language_goal == "go to the green ball":
-                    reward_head_name = "green_ball_reward"
+                    self._reward_head_name = "green_ball_reward"
                 elif self.language_goal == "go to the blue ball":
-                    reward_head_name = "blue_ball_reward"
+                    self._reward_head_name = "blue_ball_reward"
                 elif self.language_goal == "go to the purple box":
-                    reward_head_name = "purple_box_reward"
+                    self._reward_head_name = "purple_box_reward"
                 else:
                     raise ValueError(
                         f"No reward head available for language goal {self.language_goal}"
                     )
-                reward_func = lambda f, s, a: self._world_model._wm.heads[
-                    reward_head_name
-                ](self._world_model._wm.dynamics.get_feat(s)).mode()
+                reward_func = self._learned_reward_function
             else:
                 reward_func = (
                     self._language_reward
@@ -434,7 +455,10 @@ class LanguageAgent:
             self._world_model._task_behavior._train(
                 start_state_batched,
                 reward_func,
-                self._manually_calculate_continues,
+                reward_returns_continue=(
+                    (not self._use_learned_reward)
+                    and self._manually_calculate_continues
+                ),
             )  # type: ignore
             if n % save_every == 0:
                 items_to_save = {
@@ -497,10 +521,16 @@ def load_agent():
 def main():
     config, agent, eval_env, run, logdir = load_agent()
     mannually_calculate_continues = False
+    print(f"Use Learned Reward: {config.use_learned_reward}")
     if "babyai" in config.task:
         mannually_calculate_continues = True
     lang_agent = LanguageAgent(
-        agent, config.checkpoint, eval_env, run, mannually_calculate_continues
+        agent,
+        config.checkpoint,
+        eval_env,
+        run,
+        mannually_calculate_continues,
+        use_learned_reward=config.use_learned_reward,
     )
 
     lang_agent.train(
