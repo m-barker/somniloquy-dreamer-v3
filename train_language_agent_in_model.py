@@ -176,16 +176,16 @@ class LanguageAgent:
             pad_value: value used for padding
 
         Returns:
-            padded: Tensor of shape (num_prefixes, batch_size, seq_len, D)
-            padding_mask: Bool tensor of shape (num_prefixes, batch_size, seq_len)
+            padded: Tensor of shape (B, T, T, D) where B is batch size,
+            padding_mask: Bool tensor of shape (B, T, T) with
                           True for padding positions, False for real tokens
         """
         seq_len, batch_size, D = x.shape
         num_prefixes = seq_len
 
-        # Allocate padded output: (num_prefixes, seq_len, batch_size, D)
+        # Allocate padded output: (B, T, T, D)
         padded = torch.full(
-            (num_prefixes, seq_len, batch_size, D),
+            (batch_size, num_prefixes, seq_len, D),
             fill_value=pad_value,
             dtype=x.dtype,
             device=x.device,
@@ -193,7 +193,7 @@ class LanguageAgent:
 
         # Fill each prefix
         for i in range(1, seq_len + 1):
-            padded[i - 1, :i] = x[:i]
+            padded[:, i - 1, :i, :] = x[:i].permute(1, 0, 2)
 
         # Build padding mask (True where pad_value is present across feature dim)
         padding_mask = padded.eq(pad_value).all(
@@ -221,21 +221,20 @@ class LanguageAgent:
         reward = torch.zeros((T, B, 1))
         # continues = torch.ones_like(reward)
 
-        # Shape (T, T, B, D), (T, T, B)
+        # Shape (B, T, T, D), (B, T, T)
         sequence_permutations, sequence_pad_mask = self._make_prefix_batches(
             stacked_states.permute(1, 0, 2)
         )
 
         # Collapse the batch dimension into the sequence dimension for one pass
         # Original shapes: (batch, T, B, D) and (batch, T, B)
-        B_size = sequence_permutations.shape[2]
+        flat_sequences = sequence_permutations.reshape(
+            -1, sequence_permutations.shape[2], sequence_permutations.shape[3]
+        )  # shape (B*batch, T, D)
+        flat_padding = sequence_pad_mask.reshape(
+            -1, sequence_pad_mask.shape[2]
+        )  # shape (B*batch, T)
 
-        flat_sequences = sequence_permutations.permute(2, 0, 1, 3).reshape(
-            -1, sequence_permutations.shape[1], sequence_permutations.shape[3]
-        )
-        flat_padding = sequence_pad_mask.permute(2, 0, 1).reshape(
-            -1, sequence_pad_mask.shape[1]
-        )
         # Generate translations in a single pass
         plan_translations = self._world_model._wm.heads["language"].generate(
             flat_sequences,  # shape (B*batch, T, D)
@@ -258,12 +257,12 @@ class LanguageAgent:
         ]
 
         # Reshape back into (batch, B) layout
-        string_plan_translations_array = np.array(string_plan_translations).reshape(
-            sequence_permutations.shape[0], B_size
-        )
+        string_plan_translations_array = (
+            np.array(string_plan_translations).reshape(B, T).T
+        )  # shape (T, B)
 
         # Reward assignment
-        for batch in range(B_size):
+        for batch in range(B):
             for idx, plan_translation in enumerate(
                 string_plan_translations_array[:, batch]
             ):
@@ -271,7 +270,7 @@ class LanguageAgent:
                     reward[idx][batch] = 1.0
                     # continues[idx:, batch] = 0.0
                     # print(f"NON-ZERO REWARD: {plan_translation} for goal {g}")
-                    break
+                    # break
 
         reward = reward.to(self._world_model._config.device)
         # continues = continues.to(self._world_model._config.device)
