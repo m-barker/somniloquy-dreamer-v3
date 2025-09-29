@@ -541,8 +541,25 @@ def main():
         use_learned_reward=config.use_learned_reward,
     )
 
+    # For ease of passing, config language goal is a single word, now map
+    # it to the proper goal
+    language_goal = None
+    if config.language_goal == "red":
+        language_goal = "go to the red key"
+    elif config.language_goal == "green":
+        language_goal = "go to the green ball"
+    elif config.language_goal == "blue":
+        language_goal = "go to the blue ball"
+    elif config.language_goal == "purple":
+        language_goal = "go to the purple box"
+
+    if language_goal is None:
+        raise ValueError(
+            f"No Valid language goal could be found for {config.language_goal}"
+        )
+
     lang_agent.train(
-        config.language_goal,
+        language_goal,
         int(config.model_steps),
         logdir,
         rollout_length=config.imag_horizon,

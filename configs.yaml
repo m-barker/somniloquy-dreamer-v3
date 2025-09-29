@@ -1387,7 +1387,7 @@ babyai-language-100m-multiple-reward-heads-train-agent:
   model_steps: 1e5
 
   # For now, assumed to be contained in the narration for reaching a goal state
-  language_goal: "go to the red key"
+  language_goal: "red"
 
   # False, as now we are learning a policy in the world model
   random_actions: False
