@@ -42,5 +42,7 @@ for seed in "${seeds[@]}"; do
                   --language_goal "$goal" \
                   --model_steps "$n_training_steps" \
                   --language_grads "$use_language_grads"
+    done
+done
 
 
