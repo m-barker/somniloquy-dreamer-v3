@@ -13,7 +13,7 @@ language_goals=("red" "green" "blue" "purple")
 for seed in "${seeds[@]}"; do
     echo "Training agents for seed $seed..."
     for goal in "${language_goals[@]}"; do
-        if [ "$use_language_grads" = "true" ]; then
+        if [ "$use_language_grads" = "True" ]; then
             model_path="./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple/latest.pt"
             logdir="./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple-train-language-agent-goal-$goal"
         else
