@@ -5,8 +5,8 @@ if [ "$#" -ne 2 ]; then
     exit 1
 fi
 
-use_language_grads = $1
-n_training_steps = $2
+use_language_grads = "$1"
+n_training_steps ="$2"
 seeds = (100,200,300,400,500)
 language_goals = ("red","green","blue","purple")
 
