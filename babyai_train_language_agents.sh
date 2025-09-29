@@ -5,20 +5,20 @@ if [ "$#" -ne 2 ]; then
     exit 1
 fi
 
-use_language_grads = "$1"
-n_training_steps ="$2"
-seeds = (100,200,300,400,500)
-language_goals = ("red","green","blue","purple")
+use_language_grads="$1"
+n_training_steps="$2"
+seeds=(100,200,300,400,500)
+language_goals=("red","green","blue","purple")
 
 for seed in "${seeds[@]}"; do
     echo "Training agents for seed $seed..."
     for goal in ${language_goals[@]};
         if [ "$use_language_grads" = "true"]; then
-            model_path = "./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple/latest.pt"
-            logdir = "./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple-train-language-agent-goal-$goal"
+            model_path="./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple/latest.pt"
+            logdir="./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple-train-language-agent-goal-$goal"
         else
-            model_path = "./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple-no-language-grads/latest.pt"
-            logdir = "./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple-train-language-agent-goal-$goal-no-language-grads"
+            model_path="./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple-no-language-grads/latest.pt"
+            logdir="./logdir/babyai-language-100m-multiple-reward-heads-seed-$seed-bart-simple-train-language-agent-goal-$goal-no-language-grads"
         fi
 
         echo "Training language agent for goal $goal"
