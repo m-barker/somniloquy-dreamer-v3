@@ -315,17 +315,18 @@ class LanguageAgent:
 
     def play_video(self, array, fps=2):
         """
-        Play a numpy video array of shape (T, H, W, C) in a window until closed.
+        Play a numpy video array of shape (T, C, H, W) in a window until closed.
         """
-        T, H, W, C = array.shape
+        T, C, H, W = array.shape
+        array = array.transpose(0, 2, 3, 1)  # (T, H, W, C)
         delay = int(1000 / fps)  # ms per frame
 
         cv2.namedWindow("Video", cv2.WINDOW_NORMAL)
-
-        for t in range(T):
+        t = 0
+        while True:
             frame = array[t]
 
-            # ensure uint8 and BGR for OpenCV
+            # Ensure uint8 and BGR for OpenCV
             if frame.dtype != np.uint8:
                 frame = np.clip(frame, 0, 255).astype(np.uint8)
             if C == 3:
@@ -334,12 +335,15 @@ class LanguageAgent:
             cv2.imshow("Video", frame)
             key = cv2.waitKey(delay)
 
-            # break if user presses 'q' or closes window
+            # quit if 'q' pressed or window closed
             if (
                 key == ord("q")
                 or cv2.getWindowProperty("Video", cv2.WND_PROP_VISIBLE) < 1
             ):
                 break
+
+            # advance to next frame, loop back if needed
+            t = (t + 1) % T
 
         cv2.destroyAllWindows()
 
@@ -545,7 +549,7 @@ class LanguageAgent:
                     ),
                 }
                 torch.save(items_to_save, os.path.join(logdir, "language_agent.pt"))
-            if n % eval_every == 0:
+            if n % eval_every == 0 and n > 0:
                 with torch.no_grad():
                     eval_policy_video, eval_reward = self._eval(
                         horizon=rollout_length, n_eval_episodes=n_eval_episodes
@@ -605,7 +609,7 @@ def load_agent():
 
 
 def main():
-    if sys.argv[-1] == "--instruct":
+    if sys.argv[-1] == "instruct":
         while True:
             config, agent, eval_env, run, logdir = load_agent()
             mannually_calculate_continues = False
@@ -623,10 +627,10 @@ def main():
             language_goal = input("What would you like me to do?")
             lang_agent.train(
                 language_goal,
-                100,
+                150,
                 logdir,
                 config.imag_horizon,
-                eval_every=100,
+                eval_every=149,
                 display_video=True,
             )
 

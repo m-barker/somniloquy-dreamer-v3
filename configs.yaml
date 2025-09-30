@@ -1246,14 +1246,14 @@ babyai-language-25m-multiple-reward-heads-train-agent:
   time_limit: 1024
   simple_narrator: True
   imag_horizon: 31
-
+  instruct: "no"
   # Only learning a dynamics model
   fixed_env_seed: 100
   env_reward: False
   env_terminate: False
 
-  # Prevent reward and continue heads from impacting
   # the learned latent representation. Easier than making the
+  # Prevent reward and continue heads from impacting
   # entire networks optional, at the cost of some computation
   grad_heads: ["decoder"]
 
@@ -1329,7 +1329,6 @@ babyai-language-100m-multiple-reward-heads:
   save_translations: True
   n_translation_eval_episodes: 1
 
-
 babyai-language-100m-multiple-reward-heads-train-agent:
   steps: 1e6
   envs: 1
@@ -1340,7 +1339,7 @@ babyai-language-100m-multiple-reward-heads-train-agent:
   language_grads: True
 
   # Network specification
-  decoder: {cnn_sigmoid: True }
+  decoder: { cnn_sigmoid: True }
   actor: { dist: "onehot", std: "none" }
   translator_head: { loss_scale: 10.0, loss_agg: "sum" }
   use_bert_transformer: True
