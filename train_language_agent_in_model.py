@@ -498,7 +498,11 @@ class LanguageAgent:
                     if not self._manually_calculate_continues
                     else self._babyai_language_reward
                 )
-            self._world_model._task_behavior._train(start_state_batched, reward_func)  # type: ignore
+            self._world_model._task_behavior._train(
+                start_state_batched,
+                reward_func,
+                reward_returns_continue=self._manually_calculate_continues,
+            )  # type: ignore
             if n % save_every == 0:
                 items_to_save = {
                     "agent_state_dict": self._world_model.state_dict(),
