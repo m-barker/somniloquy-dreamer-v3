@@ -1,5 +1,7 @@
 import os
 import pathlib
+import sys
+import cv2
 from typing import Dict, List, Optional, Tuple, Union
 import statistics
 
@@ -311,6 +313,36 @@ class LanguageAgent:
         ).unsqueeze(0)
         return latent_tensor, starting_latent, obs, no_convert, obs_to_ignore
 
+    def play_video(self, array, fps=2):
+        """
+        Play a numpy video array of shape (T, H, W, C) in a window until closed.
+        """
+        T, H, W, C = array.shape
+        delay = int(1000 / fps)  # ms per frame
+
+        cv2.namedWindow("Video", cv2.WINDOW_NORMAL)
+
+        for t in range(T):
+            frame = array[t]
+
+            # ensure uint8 and BGR for OpenCV
+            if frame.dtype != np.uint8:
+                frame = np.clip(frame, 0, 255).astype(np.uint8)
+            if C == 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+            cv2.imshow("Video", frame)
+            key = cv2.waitKey(delay)
+
+            # break if user presses 'q' or closes window
+            if (
+                key == ord("q")
+                or cv2.getWindowProperty("Video", cv2.WND_PROP_VISIBLE) < 1
+            ):
+                break
+
+        cv2.destroyAllWindows()
+
     def _eval(
         self, horizon: int = 15, n_eval_episodes: int = 10
     ) -> Tuple[np.ndarray, float]:
@@ -457,6 +489,8 @@ class LanguageAgent:
         start_state: Optional[Dict] = None,
         save_every: int = 100,
         eval_every: int = 100,
+        n_eval_episodes: int = 10,
+        display_video: bool = False,
     ) -> None:
         language_goal = language_goal.lower()
         self.language_goal = language_goal
@@ -513,7 +547,9 @@ class LanguageAgent:
                 torch.save(items_to_save, os.path.join(logdir, "language_agent.pt"))
             if n % eval_every == 0:
                 with torch.no_grad():
-                    eval_policy_video, eval_reward = self._eval(horizon=rollout_length)
+                    eval_policy_video, eval_reward = self._eval(
+                        horizon=rollout_length, n_eval_episodes=n_eval_episodes
+                    )
                 if self._wandb_run is not None:
                     log_reward_name = (
                         "mean_eval_success_rate"
@@ -529,6 +565,8 @@ class LanguageAgent:
                         },
                         step=n + 1,  # wandb steps start at 1
                     )
+                if display_video:
+                    self.play_video(eval_policy_video)
 
 
 def load_agent():
@@ -567,43 +605,68 @@ def load_agent():
 
 
 def main():
-    config, agent, eval_env, run, logdir = load_agent()
-    mannually_calculate_continues = False
-    print(f"Use Learned Reward: {config.use_learned_reward}")
-    if "babyai" in config.task:
-        mannually_calculate_continues = True
-    lang_agent = LanguageAgent(
-        agent,
-        config.checkpoint,
-        eval_env,
-        run,
-        mannually_calculate_continues,
-        use_learned_reward=config.use_learned_reward,
-    )
+    if sys.argv[-1] == "--instruct":
+        while True:
+            config, agent, eval_env, run, logdir = load_agent()
+            mannually_calculate_continues = False
+            print(f"Use Learned Reward: {config.use_learned_reward}")
+            if "babyai" in config.task:
+                mannually_calculate_continues = True
+            lang_agent = LanguageAgent(
+                agent,
+                config.checkpoint,
+                eval_env,
+                run,
+                mannually_calculate_continues,
+                use_learned_reward=config.use_learned_reward,
+            )
+            language_goal = input("What would you like me to do?")
+            lang_agent.train(
+                language_goal,
+                100,
+                logdir,
+                config.imag_horizon,
+                eval_every=100,
+                display_video=True,
+            )
 
-    # For ease of passing, config language goal is a single word, now map
-    # it to the proper goal
-    language_goal = None
-    if config.language_goal == "red":
-        language_goal = "go to the red key"
-    elif config.language_goal == "green":
-        language_goal = "go to the green ball"
-    elif config.language_goal == "blue":
-        language_goal = "go to the blue ball"
-    elif config.language_goal == "purple":
-        language_goal = "go to the purple box"
-
-    if language_goal is None:
-        raise ValueError(
-            f"No Valid language goal could be found for {config.language_goal}"
+    else:
+        config, agent, eval_env, run, logdir = load_agent()
+        mannually_calculate_continues = False
+        print(f"Use Learned Reward: {config.use_learned_reward}")
+        if "babyai" in config.task:
+            mannually_calculate_continues = True
+        lang_agent = LanguageAgent(
+            agent,
+            config.checkpoint,
+            eval_env,
+            run,
+            mannually_calculate_continues,
+            use_learned_reward=config.use_learned_reward,
         )
+        # For ease of passing, config language goal is a single word, now map
+        # it to the proper goal
+        language_goal = None
+        if config.language_goal == "red":
+            language_goal = "go to the red key"
+        elif config.language_goal == "green":
+            language_goal = "go to the green ball"
+        elif config.language_goal == "blue":
+            language_goal = "go to the blue ball"
+        elif config.language_goal == "purple":
+            language_goal = "go to the purple box"
 
-    lang_agent.train(
-        language_goal,
-        int(config.model_steps),
-        logdir,
-        rollout_length=config.imag_horizon,
-    )
+        if language_goal is None:
+            raise ValueError(
+                f"No Valid language goal could be found for {config.language_goal}"
+            )
+
+        lang_agent.train(
+            language_goal,
+            int(config.model_steps),
+            logdir,
+            rollout_length=config.imag_horizon,
+        )
 
 
 if __name__ == "__main__":
