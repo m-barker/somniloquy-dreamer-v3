@@ -207,7 +207,7 @@ class LanguageAgent:
         _,
         imagined_states: Dict[str, torch.Tensor],
         __,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         assert self.language_goal is not None
         g = self.language_goal
         # Imagined states are of shape (Time, Batch, Dimension)
@@ -219,7 +219,9 @@ class LanguageAgent:
         # Reward needs to match the (Time, Batch) of the stacked states
         # Dimension is 1 as reward is a scalar
         reward = torch.zeros((T, B, 1))
-        # continues = torch.ones_like(reward)
+        continues = (
+            torch.ones_like(reward) if self._manually_calculate_continues else None
+        )
 
         # Shape (B, T, T, D), (B, T, T)
         sequence_permutations, sequence_pad_mask = self._make_prefix_batches(
@@ -268,22 +270,28 @@ class LanguageAgent:
             ):
                 if g in plan_translation:
                     reward[idx][batch] = 1.0
-                    # continues[idx:, batch] = 0.0
-                    # print(f"NON-ZERO REWARD: {plan_translation} for goal {g}")
-                    # break
+                    # Reward only the first time the goal is reached
+                    if continues is not None:
+                        continues[idx:, batch] = 0.0
+                        break
 
         reward = reward.to(self._world_model._config.device)
-        # continues = continues.to(self._world_model._config.device)
+        if continues is not None:
+            continues = continues.to(self._world_model._config.device)
         if self._wandb_run is not None:
             mean_reward_batch = torch.mean(reward, dim=1)
             plan_reward = float(mean_reward_batch.sum())
+            if continues is not None:
+                log_name = "modelled_succes_rate"
+            else:
+                log_name = "reward_in_model"
             self._wandb_run.log(
                 {
-                    "reward_in_model": plan_reward,
+                    log_name: plan_reward,
                 }
             )
 
-        return reward  # , continues
+        return reward, continues
 
     def _get_env_starting_state(self):
         """
@@ -395,7 +403,9 @@ class LanguageAgent:
             # rollout from start_states.
             # append to buffer.
 
-    def _learned_reward_function(self, _, imagined_states, __) -> torch.Tensor:
+    def _learned_reward_function(
+        self, _, imagined_states, __
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Computes the rewards using the learned reward function head
         """
@@ -406,15 +416,36 @@ class LanguageAgent:
             stacked_latents
         ).mode()
 
+        continues = (
+            torch.ones_like(reward) if self._manually_calculate_continues else None
+        )
+
+        if continues is not None:
+            # Only one a non-zero reward the first time the goal is reached
+            # In practice, this means if r(s) > epsilon.
+            # reward and continues are of shape (T, B, 1)
+            threshold = 0.5
+            T, B, _ = reward.shape
+            for b in range(B):
+                for t in range(T):
+                    if reward[t, b] > threshold:
+                        reward[t + 1 :, b] = 0.0
+                        continues[t:, b] = 0.0
+
         if self._wandb_run is not None:
             mean_reward_batch = torch.mean(reward, dim=1)
             plan_reward = float(mean_reward_batch.sum())
+            if continues is not None:
+                log_name = "modelled_succes_rate"
+            else:
+                log_name = "reward_in_model"
             self._wandb_run.log(
                 {
-                    "reward_in_model": plan_reward,
+                    log_name: plan_reward,
                 }
             )
-        return reward
+
+        return reward, continues
 
     def train(
         self,
@@ -480,12 +511,17 @@ class LanguageAgent:
                 with torch.no_grad():
                     eval_policy_video, eval_reward = self._eval(horizon=rollout_length)
                 if self._wandb_run is not None:
+                    log_reward_name = (
+                        "mean_eval_success_rate"
+                        if self._manually_calculate_continues
+                        else "mean_eval_reward"
+                    )
                     self._wandb_run.log(
                         {
                             "eval_policy": wandb.Video(
                                 eval_policy_video, fps=2, format="mp4"
                             ),
-                            "eval_reward": eval_reward,
+                            log_reward_name: eval_reward,
                         },
                         step=n + 1,  # wandb steps start at 1
                     )
