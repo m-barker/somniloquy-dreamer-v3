@@ -245,7 +245,7 @@ class LanguageAgent:
                 for plan in plan_translations
             ]
             for b, p in enumerate(string_plan_translations):
-                if p == g:
+                if g in p:
                     reward[-1, b] = 1.0
             return reward.to(self._world_model._config.device), None
 
