@@ -41,6 +41,8 @@ defaults:
 
   simple_narrator: False
   use_learned_reward: True
+  manually_calculate_continues: False
+  reward_assignment_method: "final"
 
   # For when we want to simultaneously learn multiple
   # different reward heads

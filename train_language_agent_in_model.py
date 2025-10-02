@@ -44,12 +44,16 @@ class LanguageAgent:
         manually_calculate_continues: bool = False,
         latent_buffer_size: int = 100000,
         use_learned_reward: bool = False,
+        reward_assignment_method: str = "final",
     ) -> None:
         """
         Args:
             world_model (Dreamer): Somniloquy model
             weights_path (str): path to the trained model weights
         """
+
+        assert reward_assignment_method in ("all", "once", "final")
+
         self._world_model = world_model
         self._weights_path = weights_path
         self._eval_env = eval_env
@@ -64,6 +68,7 @@ class LanguageAgent:
         # If true, uses the learned reward head for the given natural
         # language goal. Used for comparison with language reward
         self._use_learned_reward = use_learned_reward
+        self._reward_assignment_method = reward_assignment_method
 
         self._initialise_wm()
 
@@ -221,6 +226,29 @@ class LanguageAgent:
         # Reward needs to match the (Time, Batch) of the stacked states
         # Dimension is 1 as reward is a scalar
         reward = torch.zeros((T, B, 1))
+
+        if self._reward_assignment_method == "final":
+            plan_translations = self._world_model._wm.heads["language"].generate(
+                stacked_states,  # shape (B, T, D)
+                self._world_model._wm.vocab,
+                self._world_model._config.dec_max_length,
+                self._world_model._config.token_sampling_method,
+            )
+            string_plan_translations = [
+                " ".join(
+                    [
+                        word
+                        for word in plan.split()
+                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                    ]
+                )
+                for plan in plan_translations
+            ]
+            for b, p in enumerate(string_plan_translations):
+                if p == g:
+                    reward[-1, b] = 1.0
+            return reward.to(self._world_model._config.device), None
+
         continues = (
             torch.ones_like(reward) if self._manually_calculate_continues else None
         )
@@ -275,6 +303,7 @@ class LanguageAgent:
                     # Reward only the first time the goal is reached
                     if continues is not None:
                         continues[idx:, batch] = 0.0
+                    if self._reward_assignment_method == "once":
                         break
 
         reward = reward.to(self._world_model._config.device)
@@ -609,13 +638,12 @@ def load_agent():
 
 
 def main():
+    config, agent, eval_env, run, logdir = load_agent()
+    mannually_calculate_continues = config.manually_calculate_continues
+    reward_assignment_method = config.reward_assignment_method
     if sys.argv[-1] == "instruct":
         while True:
             config, agent, eval_env, run, logdir = load_agent()
-            mannually_calculate_continues = False
-            print(f"Use Learned Reward: {config.use_learned_reward}")
-            if "babyai" in config.task:
-                mannually_calculate_continues = True
             lang_agent = LanguageAgent(
                 agent,
                 config.checkpoint,
@@ -623,6 +651,7 @@ def main():
                 run,
                 mannually_calculate_continues,
                 use_learned_reward=config.use_learned_reward,
+                reward_assignment_method=reward_assignment_method,
             )
             language_goal = input("What would you like me to do?")
             lang_agent.train(
@@ -635,11 +664,7 @@ def main():
             )
 
     else:
-        config, agent, eval_env, run, logdir = load_agent()
-        mannually_calculate_continues = False
         print(f"Use Learned Reward: {config.use_learned_reward}")
-        if "babyai" in config.task:
-            mannually_calculate_continues = True
         lang_agent = LanguageAgent(
             agent,
             config.checkpoint,
@@ -647,6 +672,7 @@ def main():
             run,
             mannually_calculate_continues,
             use_learned_reward=config.use_learned_reward,
+            reward_assignment_method=reward_assignment_method,
         )
         # For ease of passing, config language goal is a single word, now map
         # it to the proper goal
