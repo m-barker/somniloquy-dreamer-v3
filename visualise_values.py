@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 from train_language_agent_in_model import load_agent
 from evaluation import get_posterior_state
+from tools import recursively_load_optim_state_dict
 
 
 def get_env_starting_state(agent, eval_env):
@@ -73,8 +74,24 @@ def visualise_values(agent, eval_env) -> None:
         state_idx += 1
 
 
+def load_wm(config, agent) -> None:
+    """
+    Initialises the world model by loading the weights
+    for the wm only (i.e., keep initiliased actor-critic weights)
+    """
+    weights = torch.load(config.checkpoint)
+    recursively_load_optim_state_dict(
+        agent,
+        weights["optims_state_dict"],
+        wm_only=False,
+    )
+
+    agent.load_state_dict(weights, strict=False)
+
+
 def main():
     config, agent, eval_env, wandb_run, logdir = load_agent()
+    load_wm(config, agent)
     visualise_values(agent, eval_env)
 
 
