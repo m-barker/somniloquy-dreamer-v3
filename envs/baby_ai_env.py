@@ -220,7 +220,7 @@ class BabyAI:
 
         return (
             {
-                "image": resized_img if resized_img else rgb_image,
+                "image": resized_img if resized_img is not None else rgb_image,
                 "is_terminal": terminated,
                 "is_first": False,  # False, as we have just taken a step
                 "original_image": rgb_image,
