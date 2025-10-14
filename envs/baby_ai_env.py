@@ -210,8 +210,9 @@ class BabyAI:
         occupancy_grid = obs["encoded_image"]
         direction = int(obs["direction"])
 
+        resized_img = None
         if rgb_image.shape[:-2] != self._img_size:
-            rgb_image = cv2.resize(
+            resized_img = cv2.resize(
                 rgb_image, self._img_size, interpolation=cv2.INTER_AREA
             )
 
@@ -219,9 +220,10 @@ class BabyAI:
 
         return (
             {
-                "image": rgb_image,
+                "image": resized_img if resized_img else rgb_image,
                 "is_terminal": terminated,
                 "is_first": False,  # False, as we have just taken a step
+                "original_image": rgb_image,
             },
             reward,
             is_last,

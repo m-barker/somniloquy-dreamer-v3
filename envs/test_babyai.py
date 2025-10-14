@@ -14,7 +14,7 @@ def main():
     env = gym.make("BabyAI-GoToLocal-v0", render_mode="human")
     env = FullyObsWrapper(env)
     narrator = BabyAIGoToLocNarrator(simple_narrator=True)
-    obs, info = env.reset()
+    obs, info = env.reset(seed=100)
     print(obs)
 
     narration_observations: Dict[str, List] = {
