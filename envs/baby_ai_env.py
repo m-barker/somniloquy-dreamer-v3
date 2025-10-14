@@ -317,16 +317,17 @@ class BabyAI:
 
         if self._objects is None:
             self._objects = self._get_objects_in_scene(occupancy_grid)
-
+        resized_img = None
         if rgb_image.shape[:-2] != self._img_size:
-            rgb_image = cv2.resize(
+            resized_img = cv2.resize(
                 rgb_image, self._img_size, interpolation=cv2.INTER_AREA
             )
 
         return {
-            "image": rgb_image,
+            "image": resized_img if resized_img is not None else rgb_image,
             "is_terminal": False,  # we're only just getting started!
             "is_first": True,
+            "original_image": rgb_image,
         }, {"occupancy_grid": occupancy_grid, "agent_direction": direction}
 
     def close(self):
