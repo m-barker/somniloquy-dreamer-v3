@@ -391,7 +391,8 @@ class LanguageAgent:
                     posterior
                 ).unsqueeze(0)
                 prev_state = posterior
-                print(f"Reward info: {info['reward_info']}")
+                print(f"State Value: {self._world_model._task_behavior.value(latent_tensor).mode()}")
+                # print(f"Reward info: {info['reward_info']}")
                 if self._manually_calculate_continues:
                     if (
                         self.language_goal == "go to the red key"

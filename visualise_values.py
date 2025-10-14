@@ -79,19 +79,16 @@ def load_wm(config, agent) -> None:
     Initialises the world model by loading the weights
     for the wm only (i.e., keep initiliased actor-critic weights)
     """
-    weights = torch.load(config.checkpoint)
-    recursively_load_optim_state_dict(
-        agent,
-        weights["optims_state_dict"],
-        wm_only=False,
-    )
-
-    agent.load_state_dict(weights, strict=False)
+    checkpoint = torch.load(config.checkpoint)
+    agent.load_state_dict(checkpoint["agent_state_dict"])
+    recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
+    
+    return agent
 
 
 def main():
     config, agent, eval_env, wandb_run, logdir = load_agent()
-    load_wm(config, agent)
+    agent = load_wm(config, agent)
     visualise_values(agent, eval_env)
 
 
