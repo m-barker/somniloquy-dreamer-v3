@@ -59,7 +59,7 @@ def visualise_values(agent, eval_env) -> None:
         action_arr = np.zeros(eval_env.action_space.n)
         action_arr[action] = 1
         action_tensor = torch.Tensor(action_arr).to(torch.device("cuda")).unsqueeze(0)
-        env_action = {"action": action_tensor}
+        env_action = {"action": action_arr}
         obs, reward, done, info = eval_env.step(env_action)()
         prev_latent = get_posterior_state(
             agent,
