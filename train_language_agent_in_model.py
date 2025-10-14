@@ -363,7 +363,7 @@ class LanguageAgent:
             latent_tensor, starting_latent, obs, no_convert, obs_to_ignore = (
                 self._get_env_starting_state()
             )
-            rgb_obs = [obs["image"]]
+            rgb_obs = [obs["original_image"]]
             prev_state = starting_latent
             eval_reward = 0.0
             done = False
