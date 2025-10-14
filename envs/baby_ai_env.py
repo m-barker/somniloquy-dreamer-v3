@@ -224,6 +224,7 @@ class BabyAI:
                 "is_terminal": terminated,
                 "is_first": False,  # False, as we have just taken a step
                 "original_image": rgb_image,
+                "high_res_image": obs["high_res_image"],
             },
             reward,
             is_last,
@@ -328,6 +329,7 @@ class BabyAI:
             "is_terminal": False,  # we're only just getting started!
             "is_first": True,
             "original_image": rgb_image,
+            "high_res_image": obs["high_res_image"],
         }, {"occupancy_grid": occupancy_grid, "agent_direction": direction}
 
     def close(self):

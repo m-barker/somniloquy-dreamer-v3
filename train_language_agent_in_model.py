@@ -363,7 +363,7 @@ class LanguageAgent:
             latent_tensor, starting_latent, obs, no_convert, obs_to_ignore = (
                 self._get_env_starting_state()
             )
-            rgb_obs = [obs["original_image"]]
+            rgb_obs = [obs["high_res_image"]]
             prev_state = starting_latent
             eval_reward = 0.0
             done = False
@@ -378,7 +378,7 @@ class LanguageAgent:
                 action_dict = {"action": action.squeeze(0).detach().cpu().numpy()}
                 obs, reward, done, info = self._eval_env.step(action_dict)()
                 eval_reward += reward
-                rgb_obs.append(obs["original_image"])
+                rgb_obs.append(obs["high_res_image"])
                 posterior = get_posterior_state(
                     self._world_model,
                     obs,

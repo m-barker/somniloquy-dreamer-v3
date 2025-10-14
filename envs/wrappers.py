@@ -2,6 +2,8 @@ import datetime
 import gym
 import numpy as np
 import uuid
+import pygame
+import pygame.freetype
 from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 import gymnasium as gym
 from gymnasium import ObservationWrapper, spaces
@@ -122,14 +124,12 @@ class UUID(gym.Wrapper):
 
 
 class MiniGridFullObsWrapper(ObservationWrapper):
-    """Combining the two existing mini-grid RGBImage wrapper and
-    FullObs wrapper into one wrapper."""
+    """
+    Combines MiniGrid's RGB and FullObs wrappers into one, and adds a high-quality
+    'human'-style rendered image as 'high_res_image' (generated headlessly).
+    """
 
-    def __init__(
-        self,
-        env,
-        tile_size: int = 8,
-    ):
+    def __init__(self, env, tile_size: int = 8):
         super().__init__(env)
         self._tile_size = tile_size
 
@@ -151,24 +151,79 @@ class MiniGridFullObsWrapper(ObservationWrapper):
             dtype="uint8",
         )
 
+        # We'll assume high_res_image uses env.screen_size (same as 'human' render)
+        high_res_size = getattr(self.env, "screen_size", 640)
+        high_res_space = spaces.Box(
+            low=0,
+            high=255,
+            shape=(high_res_size, high_res_size, 3),
+            dtype="uint8",
+        )
+
         self.observation_space = spaces.Dict(
             {
                 **self.observation_space.spaces,
                 "rgb_image": rgb_image_space,
                 "encoded_image": encoded_image_space,
+                "high_res_image": high_res_space,
             }
         )
 
-    def observation(self, observation) -> dict:
-        rgb_image = self.get_frame(highlight=True, tile_size=self._tile_size)
+    def _render_high_res_image(self):
+        """Generate a headless high-quality image that looks like MiniGrid's human render."""
         env = self.unwrapped
+        img = env.get_frame(env.highlight, env.tile_size, env.agent_pov)
+        img = np.transpose(img, axes=(1, 0, 2))
+
+        # Initialize pygame headlessly if needed
+        if not pygame.get_init():
+            pygame.init()
+        if not pygame.display.get_init():
+            pygame.display.init()
+            pygame.display.set_mode((1, 1), flags=pygame.HIDDEN)
+
+        surf = pygame.surfarray.make_surface(img)
+        offset = surf.get_size()[0] * 0.1
+        bg = pygame.Surface(
+            (int(surf.get_size()[0] + offset), int(surf.get_size()[1] + offset))
+        )
+        if pygame.display.get_surface() is not None:
+            bg = bg.convert()  # Safe: only if display surface exists
+
+        bg.fill((255, 255, 255))
+        bg.blit(surf, (offset / 2, 0))
+        bg = pygame.transform.smoothscale(bg, (env.screen_size, env.screen_size))
+
+        # Optional mission text
+        font_size = 22
+        text = getattr(env, "mission", "")
+        font = pygame.freetype.SysFont(pygame.font.get_default_font(), font_size)
+        text_rect = font.get_rect(text, size=font_size)
+        text_rect.center = bg.get_rect().center
+        text_rect.y = bg.get_height() - font_size * 1.5
+        font.render_to(bg, text_rect, text, size=font_size)
+
+        # Convert to numpy
+        rgb_array = pygame.surfarray.array3d(bg)
+        rgb_array = np.transpose(rgb_array, (1, 0, 2))
+        return rgb_array
+
+    def observation(self, observation) -> dict:
+        env = self.unwrapped
+        rgb_image = self.get_frame(highlight=True, tile_size=self._tile_size)
+
+        # Encode the full environment grid (with agent)
         full_grid = env.grid.encode()
         full_grid[env.agent_pos[0]][env.agent_pos[1]] = np.array(
             [OBJECT_TO_IDX["agent"], COLOR_TO_IDX["red"], env.agent_dir]
         )
-        encoded_image = full_grid
+
+        # Generate high-resolution render
+        high_res_image = self._render_high_res_image()
+
         return {
             **observation,
             "rgb_image": rgb_image,
-            "encoded_image": encoded_image,
+            "encoded_image": full_grid,
+            "high_res_image": high_res_image,
         }
