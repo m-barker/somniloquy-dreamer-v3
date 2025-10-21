@@ -4,10 +4,10 @@ import numpy as np
 import uuid
 import pygame
 import pygame.freetype
-from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 import gymnasium as gym
 from gymnasium import ObservationWrapper, spaces
 from minigrid.core.constants import OBJECT_TO_IDX, COLOR_TO_IDX  # type: ignore
+from minigrid.wrappers import RGBImgPartialObsWrapper
 
 
 class TimeLimit(gym.Wrapper):
@@ -123,15 +123,16 @@ class UUID(gym.Wrapper):
         return self.env.reset()
 
 
-class MiniGridFullObsWrapper(ObservationWrapper):
+class MiniGridRGBObsWrapper(ObservationWrapper):
     """
     Combines MiniGrid's RGB and FullObs wrappers into one, and adds a high-quality
     'human'-style rendered image as 'high_res_image' (generated headlessly).
     """
 
-    def __init__(self, env, tile_size: int = 8):
+    def __init__(self, env, tile_size: int = 8, full_obs: bool = True):
         super().__init__(env)
         self._tile_size = tile_size
+        self.full_obs = full_obs
 
         rgb_image_space = spaces.Box(
             low=0,
@@ -210,7 +211,13 @@ class MiniGridFullObsWrapper(ObservationWrapper):
 
     def observation(self, observation) -> dict:
         env = self.unwrapped
-        rgb_image = self.get_frame(highlight=True, tile_size=self._tile_size)
+
+        if self.full_obs:
+            rgb_image = self.get_frame(highlight=True, tile_size=self._tile_size)
+        else:
+            rgb_image = self.unwrapped.get_frame(
+                tile_size=self.tile_size, agent_pov=True
+            )
 
         # Encode the full environment grid (with agent)
         full_grid = env.grid.encode()

@@ -1,13 +1,20 @@
-from minigird_envs.custom_unlock import UnlockEnv
+import numpy as np
+from unlock_env import Unlock
+import matplotlib.pyplot as plt
 
 
 def main():
-    env = UnlockEnv(agent_start_cell=(1, 1), room_size=15, render_mode="human")
+    env = Unlock()
     obs, info = env.reset()
     while True:
         action = input("Please enter an action: ")
         action = int(action)
-        obs, reward, terminated, truncated, info = env.step(action)
+        action_arr = np.zeros(5)
+        action_arr[action] = 1
+        obs, reward, terminated, info = env.step(action_arr)
+        plt.imshow(obs["image"])
+        plt.axis("off")  # optional: hides the axis ticks
+        plt.show()
         if terminated:
             break
 

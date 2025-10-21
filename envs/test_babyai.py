@@ -13,7 +13,7 @@ from wrappers import MiniGridFullObsWrapper
 
 
 def main():
-    env = gym.make("BabyAI-GoToLocal-v0", render_mode="rgb_array")
+    env = gym.make("BabyAI-GoToLocal-v0", render_mode="human")
     env = MiniGridFullObsWrapper(env)
     narrator = BabyAIGoToLocNarrator(simple_narrator=True)
     obs, info = env.reset(seed=100)
@@ -25,9 +25,6 @@ def main():
     }
     print(type(obs["direction"]))
     while True:
-        plt.imshow(obs["high_res_image"])
-        plt.axis("off")
-        plt.show()
         action = input("Please enter an action integer [0-2]")
         action_int = int(action)
         obs, reward, terminated, truncated, info = env.step(action_int)

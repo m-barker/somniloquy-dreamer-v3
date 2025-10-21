@@ -8,7 +8,7 @@ import numpy as np
 
 from minigird_envs.minigrid_four_squares import FourSquares  # type: ignore
 from minigird_envs.teleport import Teleport5by5, TeleportComplex  # type: ignore
-from wrappers import MiniGridFullObsWrapper  # type: ignore
+from wrappers import MiniGridRGBObsWrapper
 
 
 class MiniGrid:
@@ -62,10 +62,7 @@ class MiniGrid:
         if self._actions == "needed":
             # Forward, Turn left, Turn right
             env.action_space = gym.spaces.Discrete(3)
-        if self._full_obs:
-            env = MiniGridFullObsWrapper(env)
-        else:
-            raise NotImplementedError("Partial observation not implemented yet.")
+        env = MiniGridRGBObsWrapper(env, full_obs=self._full_obs)
         return env
 
     @property

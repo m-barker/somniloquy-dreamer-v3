@@ -6,7 +6,7 @@ import cv2
 import gymnasium as gym
 import numpy as np
 
-from wrappers import MiniGridFullObsWrapper  # type: ignore
+from wrappers import MiniGridRGBObsWrapper
 
 
 class BabyAI:
@@ -99,10 +99,7 @@ class BabyAI:
         if self._actions == "needed":
             # Forward, Turn left, Turn right
             env.action_space = gym.spaces.Discrete(3)
-        if self._full_obs:
-            env = MiniGridFullObsWrapper(env)
-        else:
-            raise NotImplementedError("Partial observation not implemented yet.")
+        env = MiniGridRGBObsWrapper(env, full_obs=self._full_obs)
         return env
 
     @property
