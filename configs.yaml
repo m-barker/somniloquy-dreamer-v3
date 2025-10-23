@@ -236,11 +236,11 @@ crafter:
 
 crafter-language:
   task: crafter_reward
-  step: 1e7
+  step: 1e6
   action_repeat: 1
   envs: 1
   eval_episode_num: 15
-  eval_every: 5000
+  eval_every: 50000
   train_ratio: 512
   video_pred_log: true
   log_every: 500
@@ -248,6 +248,7 @@ crafter-language:
   enc_max_length: 16
   dec_max_length: 150
   vocab_path: vocab/crafter.json
+  use_bert_transformer: True,
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
   actor: { dist: "onehot", std: "none" }
@@ -1326,6 +1327,68 @@ babyai-language-100m-multiple-reward-heads:
   n_translation_eval_episodes: 1
 
 babyai-language-100m-multiple-reward-heads-train-agent:
+  steps: 1e6
+  envs: 1
+  action_repeat: 1
+  eval_episode_num: 1
+  eval_every: 5000
+  log_every: 500
+  language_grads: True
+
+  # Network specification
+  decoder: { cnn_sigmoid: True }
+  actor: { dist: "onehot", std: "none" }
+  translator_head: { loss_scale: 10.0, loss_agg: "sum" }
+  use_bert_transformer: True
+
+  narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
+  no_convert_list: ["agent_direction", "reward_info"]
+  actions: "needed"
+  imag_gradient: "reinforce"
+  enable_language: true
+  vocab_path: vocab/baby_ai_go_to_loc.json
+
+  dec_max_length: 450
+  enc_max_length: 16
+  video_pred_log: true
+  task: "babyai_BabyAI-GoToLocal-v0"
+  time_limit: 1024
+  simple_narrator: True
+  imag_horizon: 31
+
+  # Only learning a dynamics model
+  fixed_env_seed: 100
+  env_reward: False
+  env_terminate: False
+
+  # Prevent reward and continue heads from impacting
+  # the learned latent representation. Easier than making the
+  # entire networks optional, at the cost of some computation
+  grad_heads: ["decoder"]
+
+  # Learn a separate reward head for each natural language goal
+  multiple_reward_heads: True
+  navigation_goals: ["red_key", "green_ball", "blue_ball", "purple_box"]
+  info_keys_to_store: ["reward_info"]
+
+  # Translation Evaluation
+  save_plots: True
+  save_translations: True
+  n_translation_eval_episodes: 1
+
+  # Pre-trained dynamics model
+  checkpoint: "./logdir/babyai-language-100m-multiple-reward-heads-seed-100-bart-simple/latest.pt"
+
+  # Number of model steps to make when training agent
+  model_steps: 1e5
+
+  # For now, assumed to be contained in the narration for reaching a goal state
+  language_goal: "red"
+
+  # False, as now we are learning a policy in the world model
+  random_actions: False
+
+crafter-language-100m-train-language-agent:
   steps: 1e6
   envs: 1
   action_repeat: 1
