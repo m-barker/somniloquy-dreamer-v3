@@ -6,7 +6,7 @@ import cv2
 import gymnasium as gym
 import numpy as np
 
-from wrappers import MiniGridFullObsWrapper  # type: ignore
+from wrappers import MiniGridRGBObsWrapper
 
 
 class BabyAI:
@@ -99,10 +99,7 @@ class BabyAI:
         if self._actions == "needed":
             # Forward, Turn left, Turn right
             env.action_space = gym.spaces.Discrete(3)
-        if self._full_obs:
-            env = MiniGridFullObsWrapper(env)
-        else:
-            raise NotImplementedError("Partial observation not implemented yet.")
+        env = MiniGridRGBObsWrapper(env, full_obs=self._full_obs)
         return env
 
     @property
@@ -210,8 +207,9 @@ class BabyAI:
         occupancy_grid = obs["encoded_image"]
         direction = int(obs["direction"])
 
+        resized_img = None
         if rgb_image.shape[:-2] != self._img_size:
-            rgb_image = cv2.resize(
+            resized_img = cv2.resize(
                 rgb_image, self._img_size, interpolation=cv2.INTER_AREA
             )
 
@@ -219,9 +217,11 @@ class BabyAI:
 
         return (
             {
-                "image": rgb_image,
+                "image": resized_img if resized_img is not None else rgb_image,
                 "is_terminal": terminated,
                 "is_first": False,  # False, as we have just taken a step
+                "original_image": rgb_image,
+                "high_res_image": obs["high_res_image"],
             },
             reward,
             is_last,
@@ -315,16 +315,18 @@ class BabyAI:
 
         if self._objects is None:
             self._objects = self._get_objects_in_scene(occupancy_grid)
-
+        resized_img = None
         if rgb_image.shape[:-2] != self._img_size:
-            rgb_image = cv2.resize(
+            resized_img = cv2.resize(
                 rgb_image, self._img_size, interpolation=cv2.INTER_AREA
             )
 
         return {
-            "image": rgb_image,
+            "image": resized_img if resized_img is not None else rgb_image,
             "is_terminal": False,  # we're only just getting started!
             "is_first": True,
+            "original_image": rgb_image,
+            "high_res_image": obs["high_res_image"],
         }, {"occupancy_grid": occupancy_grid, "agent_direction": direction}
 
     def close(self):

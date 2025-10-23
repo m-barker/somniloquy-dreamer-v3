@@ -40,11 +40,11 @@ class LanguageAgent:
         world_model: Dreamer,
         weights_path: str,
         eval_env,
+        task: str,
         wandb_run=None,
-        manually_calculate_continues: bool = False,
-        latent_buffer_size: int = 100000,
         use_learned_reward: bool = False,
         reward_assignment_method: str = "final",
+        reward_model_threshold: float = 0.5,
     ) -> None:
 
         """
@@ -59,17 +59,18 @@ class LanguageAgent:
         self._weights_path = weights_path
         self._eval_env = eval_env
         self._wandb_run = wandb_run
-        self._manually_calculate_continues = manually_calculate_continues
 
         self.rewards = []
-
-        self._latent_state_buffer = []
-        self._latent_buffer_size = latent_buffer_size
 
         # If true, uses the learned reward head for the given natural
         # language goal. Used for comparison with language reward
         self._use_learned_reward = use_learned_reward
         self._reward_assignment_method = reward_assignment_method
+        self._goal_reached_reward_model_threshold = reward_model_threshold
+
+        self.task = task
+
+        self._manually_calculate_continues = reward_assignment_method == "once"
 
         self._initialise_wm()
 
@@ -139,41 +140,6 @@ class LanguageAgent:
             )
             string_plan_translations.append(plan_translation)
         return string_plan_translations
-
-    def _language_reward(
-        self,
-        _,
-        imagined_states: Dict[str, torch.Tensor],
-        __,
-    ) -> torch.Tensor:
-        assert self.language_goal is not None
-        g = self.language_goal
-        # Imagined states are of shape (Time, Batch, Dimension)
-        T, B, _ = imagined_states["deter"].shape
-
-        string_plan_translations = self._generate_batch_translations(imagined_states)
-
-        # Reward needs to match the (Time, Batch) of the stacked states
-        # Dimension is 1 as reward is a scalar
-        reward = torch.zeros((T, B, 1))
-
-        # At the moment, set the reward for the final state
-        # as 1.0 if goal is reached, 0 everywhere else.
-        for t, p in enumerate(string_plan_translations):
-            if p == g:
-                reward[-1, t] = 1.0
-
-        reward = reward.to(self._world_model._config.device)
-        if self._wandb_run is not None:
-            mean_reward_batch = torch.mean(reward, dim=1)
-            plan_reward = float(mean_reward_batch.sum())
-            self._wandb_run.log(
-                {
-                    "reward_in_model": plan_reward,
-                }
-            )
-
-        return reward
 
     def _make_prefix_batches(self, x: torch.Tensor, pad_value: int = -1):
         """
@@ -248,7 +214,17 @@ class LanguageAgent:
             for b, p in enumerate(string_plan_translations):
                 if g in p:
                     reward[-1, b] = 1.0
-            return reward.to(self._world_model._config.device), None
+            reward = reward.to(self._world_model._config.device)
+            if self._wandb_run is not None:
+                mean_reward_batch = torch.mean(reward, dim=1)
+                plan_reward = float(mean_reward_batch.sum())
+                log_name = "modelled_succes_rate"
+                self._wandb_run.log(
+                    {
+                        log_name: plan_reward,
+                    }
+                )
+            return reward, None
 
         continues = (
             torch.ones_like(reward) if self._manually_calculate_continues else None
@@ -388,7 +364,7 @@ class LanguageAgent:
             latent_tensor, starting_latent, obs, no_convert, obs_to_ignore = (
                 self._get_env_starting_state()
             )
-            rgb_obs = [obs["image"]]
+            rgb_obs = [obs["high_res_image"]]
             prev_state = starting_latent
             eval_reward = 0.0
             done = False
@@ -403,7 +379,7 @@ class LanguageAgent:
                 action_dict = {"action": action.squeeze(0).detach().cpu().numpy()}
                 obs, reward, done, info = self._eval_env.step(action_dict)()
                 eval_reward += reward
-                rgb_obs.append(obs["image"])
+                rgb_obs.append(obs["high_res_image"])
                 posterior = get_posterior_state(
                     self._world_model,
                     obs,
@@ -416,7 +392,8 @@ class LanguageAgent:
                     posterior
                 ).unsqueeze(0)
                 prev_state = posterior
-                print(f"Reward info: {info['reward_info']}")
+                print(f"State Value: {self._world_model._task_behavior.value(latent_tensor).mode()}")
+                # print(f"Reward info: {info['reward_info']}")
                 if self._manually_calculate_continues:
                     if (
                         self.language_goal == "go to the red key"
@@ -451,24 +428,6 @@ class LanguageAgent:
         assert video_array is not None
         return video_array, mean_episode_reward / n_eval_episodes
 
-    def _populate_buffer(self, n_steps: int = 1000):
-        if len(self._latent_state_buffer) == 0:
-            _, start_state, _, _, _ = self._get_env_starting_state()
-            for _ in range(n_steps):
-                imagined_states, _, _ = imagine_trajectory(
-                    self._world_model,
-                    start_state,
-                    trajectory_length=32,
-                    sample_latent=True,
-                )
-                imagined_states = [x.cpu().numpy() for x in imagined_states]
-                self._latent_state_buffer.extend(imagined_states)
-        else:
-            pass
-            # start_states = self._sample_latent_buffer().
-            # rollout from start_states.
-            # append to buffer.
-
     def _learned_reward_function(
         self, _, imagined_states, __
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -487,16 +446,17 @@ class LanguageAgent:
         )
 
         if continues is not None:
-            # Only one a non-zero reward the first time the goal is reached
-            # In practice, this means if r(s) > epsilon.
-            # reward and continues are of shape (T, B, 1)
-            threshold = 0.5
+            threshold = self._goal_reached_reward_model_threshold
             T, B, _ = reward.shape
             for b in range(B):
                 for t in range(T):
+                    # Only one a non-zero reward the first time the goal is reached
+                    # In practice, this means if r(s) > epsilon.
+                    # reward and continues are of shape (T, B, 1)
                     if reward[t, b] > threshold:
                         reward[t + 1 :, b] = 0.0
                         continues[t:, b] = 0.0
+                        break
 
         if self._wandb_run is not None:
             mean_reward_batch = torch.mean(reward, dim=1)
@@ -561,11 +521,12 @@ class LanguageAgent:
                     )
                 reward_func = self._learned_reward_function
             else:
-                reward_func = (
-                    self._language_reward
-                    if not self._manually_calculate_continues
-                    else self._babyai_language_reward
-                )
+                if "babyai" in self.task:
+                    reward_func = self._babyai_language_reward
+                else:
+                    raise ValueError(
+                        f"No language reward function available for {self.task}"
+                    )
             self._world_model._task_behavior._train(
                 start_state_batched,
                 reward_func,
@@ -640,7 +601,6 @@ def load_agent():
 
 def main():
     config, agent, eval_env, run, logdir = load_agent()
-    mannually_calculate_continues = config.manually_calculate_continues
     reward_assignment_method = config.reward_assignment_method
     if sys.argv[-1] == "instruct":
         while True:
@@ -649,8 +609,8 @@ def main():
                 agent,
                 config.checkpoint,
                 eval_env,
+                config.task,
                 run,
-                mannually_calculate_continues,
                 use_learned_reward=config.use_learned_reward,
                 reward_assignment_method=reward_assignment_method,
             )
@@ -670,12 +630,12 @@ def main():
             agent,
             config.checkpoint,
             eval_env,
+            config.task,
             run,
-            mannually_calculate_continues,
             use_learned_reward=config.use_learned_reward,
             reward_assignment_method=reward_assignment_method,
         )
-        # For ease of passing, config language goal is a single word, now map
+        # For ease of passing, config language goal can be a single word, now map
         # it to the proper goal
         language_goal = None
         if config.language_goal == "red":
@@ -686,11 +646,8 @@ def main():
             language_goal = "go to the blue ball"
         elif config.language_goal == "purple":
             language_goal = "go to the purple box"
-
-        if language_goal is None:
-            raise ValueError(
-                f"No Valid language goal could be found for {config.language_goal}"
-            )
+        else:
+            language_goal = config.language_goal
 
         lang_agent.train(
             language_goal,

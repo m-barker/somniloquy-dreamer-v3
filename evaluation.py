@@ -90,7 +90,7 @@ def imagine_trajectory(
                 action = policy.sample()
             else:
                 action = policy.mode()
-            if len(action.shape) > len(prev_state["stoch"].shape):
+            if len(action.shape) > len(prev_state["stoch"].shape) - 1:
                 action = action.squeeze(0)
             imagined_actions.append(action.detach().clone())
         else:
@@ -1405,9 +1405,9 @@ def evaluate_rollouts(
             imagined_states = imagined_state_samples[episode][trajectory:end_index]
             posterior_states = posterior_state_samples[episode][trajectory:end_index]
             actions = imagined_action_samples[episode][trajectory:end_index]
-            assert len(actions) == len(
-                imagined_states
-            ), "Actions and states must be the same length"
+            assert len(actions) == len(imagined_states), (
+                "Actions and states must be the same length"
+            )
             # Happens when environment (or imagined trajectory) terminates early.
             if len(imagined_states) == 0 or len(observations) == 0:
                 continue
