@@ -46,6 +46,7 @@ class LanguageAgent:
         use_learned_reward: bool = False,
         reward_assignment_method: str = "final",
     ) -> None:
+
         """
         Args:
             world_model (Dreamer): Somniloquy model

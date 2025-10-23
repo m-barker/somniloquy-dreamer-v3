@@ -493,7 +493,6 @@ minigrid-language-stochastic-small:
   value: { layers: 3 }
   reward_head: { layers: 1 }
   cont_head: { layers: 1 }
-  checkpoint: "/home/matt/dev/somniloquy-dreamer-v3/logdir/minigrid-language-stochastic-small-seed-100/latest.pt"
 
 minigrid-language-small:
   steps: 1e5
@@ -523,7 +522,6 @@ minigrid-language-small:
   value: { layers: 3 }
   reward_head: { layers: 1 }
   cont_head: { layers: 1 }
-  checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/minigrid-language-small-50/latest.pt"
 
 minigrid-language-expl-small-train-wm:
   random_actions: True
@@ -689,7 +687,6 @@ minedojo:
   reward_head: { layers: 5 }
   cont_head: { layers: 5 }
   imag_gradient: "reinforce"
-  # checkpoint: "/data/Matt/dev/somniloquy-dreamer-v3/logdir/minedojo-hunt-cow/dreamer-agent-step-412500.pt"
 
 panda_push:
   steps: 1e8
@@ -730,7 +727,6 @@ panda_push:
   value: { layers: 5 }
   reward_head: { layers: 5 }
   cont_head: { layers: 5 }
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/panda-push-colour-with-lang/dreamer-agent-step-102500.pt"
 
 safegym-island-nav-12m:
   steps: 2e4
@@ -805,7 +801,6 @@ ai2thor-language:
   video_pred_log: true
   task: "ai2thor_pickup"
   time_limit: 1000
-  # checkpoint: "/home/mattbarker/dev/somniloquy-dreamer-v3/logdir/safegym-seed-50/latest.pt"
 
 ai2thor-language-small:
   steps: 1e8
