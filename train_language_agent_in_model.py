@@ -3,12 +3,10 @@ import pathlib
 import sys
 import cv2
 from typing import Dict, List, Optional, Tuple, Union
-import statistics
 
 import wandb
 import numpy as np
 import torch
-from torcheval.metrics.text import word_error_rate
 from tqdm import tqdm
 
 from tools import (
@@ -25,7 +23,7 @@ from somniloquy import (
     load_existing_episodes,
     count_steps,
 )
-from evaluation import get_posterior_state, imagine_trajectory
+from evaluation import get_posterior_state
 
 
 class LanguageAgent:
@@ -584,6 +582,7 @@ def load_agent():
 def main():
     config, agent, eval_env, run, logdir = load_agent()
     reward_assignment_method = config.reward_assignment_method
+    reward_entailment_method = config.reward_entailment_method
     if sys.argv[-1] == "instruct":
         while True:
             config, agent, eval_env, run, logdir = load_agent()
@@ -595,6 +594,7 @@ def main():
                 run,
                 use_learned_reward=config.use_learned_reward,
                 reward_assignment_method=reward_assignment_method,
+                reward_entailment_method=reward_entailment_method,
             )
             language_goal = input("What would you like me to do?")
             lang_agent.train(
@@ -616,6 +616,7 @@ def main():
             run,
             use_learned_reward=config.use_learned_reward,
             reward_assignment_method=reward_assignment_method,
+            reward_entailment_method=reward_entailment_method,
         )
         # For ease of passing, config language goal can be a single word, now map
         # it to the proper goal

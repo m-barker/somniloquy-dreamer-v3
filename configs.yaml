@@ -39,9 +39,9 @@ defaults:
   # their generation
   fixed_env_seed: -1
 
+
   simple_narrator: False
   use_learned_reward: True
-  reward_assignment_method: "final"
 
   # For when we want to simultaneously learn multiple
   # different reward heads
@@ -56,7 +56,13 @@ defaults:
   stochastic_env: False
   n_stochastic_plan_samples: 30
 
-  use_bert_transformer: False
+  use_bert_transformer: True
+
+  # These can be configured when training a language reward agent
+  # inside of the world model
+  language_goal: ""
+  reward_assignment_method: "once"
+  reward_entailment_method: "substring"
 
   # Environment
   task: "dmc_walker_walk"
