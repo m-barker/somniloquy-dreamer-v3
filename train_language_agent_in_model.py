@@ -44,9 +44,9 @@ class LanguageAgent:
         wandb_run=None,
         use_learned_reward: bool = False,
         reward_assignment_method: str = "final",
+        reward_entailment_method: str = "substring",
         reward_model_threshold: float = 0.5,
     ) -> None:
-
         """
         Args:
             world_model (Dreamer): Somniloquy model
@@ -54,6 +54,7 @@ class LanguageAgent:
         """
 
         assert reward_assignment_method in ("all", "once", "final")
+        assert reward_entailment_method in ("substring")
 
         self._world_model = world_model
         self._weights_path = weights_path
@@ -65,7 +66,11 @@ class LanguageAgent:
         # If true, uses the learned reward head for the given natural
         # language goal. Used for comparison with language reward
         self._use_learned_reward = use_learned_reward
+
+        # Determines which states are assigned a reward
         self._reward_assignment_method = reward_assignment_method
+        # Determines how goal entailment from translation is decided
+        self._reward_entailment_method = reward_entailment_method
         self._goal_reached_reward_model_threshold = reward_model_threshold
 
         self.task = task
@@ -176,14 +181,13 @@ class LanguageAgent:
 
         return padded, padding_mask
 
-    def _babyai_language_reward(
+    def _language_reward(
         self,
         _,
         imagined_states: Dict[str, torch.Tensor],
         __,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         assert self.language_goal is not None
-        g = self.language_goal
         # Imagined states are of shape (Time, Batch, Dimension)
         T, B, _ = imagined_states["deter"].shape
         stacked_states = self._world_model._wm.dynamics.get_feat(imagined_states)  # type: ignore
@@ -193,6 +197,9 @@ class LanguageAgent:
         # Reward needs to match the (Time, Batch) of the stacked states
         # Dimension is 1 as reward is a scalar
         reward = torch.zeros((T, B, 1))
+        continues = (
+            torch.ones_like(reward) if self._manually_calculate_continues else None
+        )
 
         if self._reward_assignment_method == "final":
             plan_translations = self._world_model._wm.heads["language"].generate(
@@ -211,77 +218,65 @@ class LanguageAgent:
                 )
                 for plan in plan_translations
             ]
-            for b, p in enumerate(string_plan_translations):
-                if g in p:
-                    reward[-1, b] = 1.0
-            reward = reward.to(self._world_model._config.device)
-            if self._wandb_run is not None:
-                mean_reward_batch = torch.mean(reward, dim=1)
-                plan_reward = float(mean_reward_batch.sum())
-                log_name = "modelled_succes_rate"
-                self._wandb_run.log(
-                    {
-                        log_name: plan_reward,
-                    }
-                )
-            return reward, None
+            for b, plan_translation in enumerate(string_plan_translations):
+                if self._reward_entailment_method == "substring":
+                    if self.language_goal in plan_translation:
+                        reward[-1, b] = 1.0
 
-        continues = (
-            torch.ones_like(reward) if self._manually_calculate_continues else None
-        )
-
-        # Shape (B, T, T, D), (B, T, T)
-        sequence_permutations, sequence_pad_mask = self._make_prefix_batches(
-            stacked_states.permute(1, 0, 2)
-        )
-
-        # Collapse the batch dimension into the sequence dimension for one pass
-        # Original shapes: (batch, T, B, D) and (batch, T, B)
-        flat_sequences = sequence_permutations.reshape(
-            -1, sequence_permutations.shape[2], sequence_permutations.shape[3]
-        )  # shape (B*batch, T, D)
-        flat_padding = sequence_pad_mask.reshape(
-            -1, sequence_pad_mask.shape[2]
-        )  # shape (B*batch, T)
-
-        # Generate translations in a single pass
-        plan_translations = self._world_model._wm.heads["language"].generate(
-            flat_sequences,  # shape (B*batch, T, D)
-            self._world_model._wm.vocab,
-            self._world_model._config.dec_max_length,
-            self._world_model._config.token_sampling_method,
-            src_padding_mask=flat_padding,  # shape (B*batch, T)
-        )
-
-        # Post-process translations
-        string_plan_translations = [
-            " ".join(
-                [
-                    word
-                    for word in plan.split()
-                    if word not in ["<BOS>", "<EOS>", "<PAD>"]
-                ]
+        elif self._reward_assignment_method in ("once", "all"):
+            # Shape (B, T, T, D), (B, T, T)
+            sequence_permutations, sequence_pad_mask = self._make_prefix_batches(
+                stacked_states.permute(1, 0, 2)
             )
-            for plan in plan_translations
-        ]
 
-        # Reshape back into (batch, B) layout
-        string_plan_translations_array = (
-            np.array(string_plan_translations).reshape(B, T).T
-        )  # shape (T, B)
+            # Collapse the batch dimension into the sequence dimension for one pass
+            # Original shapes: (batch, T, B, D) and (batch, T, B)
+            flat_sequences = sequence_permutations.reshape(
+                -1, sequence_permutations.shape[2], sequence_permutations.shape[3]
+            )  # shape (B*batch, T, D)
+            flat_padding = sequence_pad_mask.reshape(
+                -1, sequence_pad_mask.shape[2]
+            )  # shape (B*batch, T)
 
-        # Reward assignment
-        for batch in range(B):
-            for idx, plan_translation in enumerate(
-                string_plan_translations_array[:, batch]
-            ):
-                if g in plan_translation:
-                    reward[idx][batch] = 1.0
-                    # Reward only the first time the goal is reached
-                    if continues is not None:
-                        continues[idx:, batch] = 0.0
-                    if self._reward_assignment_method == "once":
-                        break
+            # Generate translations in a single pass
+            plan_translations = self._world_model._wm.heads["language"].generate(
+                flat_sequences,  # shape (B*batch, T, D)
+                self._world_model._wm.vocab,
+                self._world_model._config.dec_max_length,
+                self._world_model._config.token_sampling_method,
+                src_padding_mask=flat_padding,  # shape (B*batch, T)
+            )
+
+            # Post-process translations
+            string_plan_translations = [
+                " ".join(
+                    [
+                        word
+                        for word in plan.split()
+                        if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                    ]
+                )
+                for plan in plan_translations
+            ]
+
+            # Reshape back into (batch, B) layout
+            string_plan_translations_array = (
+                np.array(string_plan_translations).reshape(B, T).T
+            )  # shape (T, B)
+
+            # Reward assignment
+            for batch in range(B):
+                for idx, plan_translation in enumerate(
+                    string_plan_translations_array[:, batch]
+                ):
+                    if self._reward_entailment_method == "substring":
+                        if self.language_goal in plan_translation:
+                            reward[idx][batch] = 1.0
+                            # Reward only the first time the goal is reached
+                            if continues is not None:
+                                continues[idx:, batch] = 0.0
+                            if self._reward_assignment_method == "once":
+                                break
 
         reward = reward.to(self._world_model._config.device)
         if continues is not None:
@@ -289,10 +284,7 @@ class LanguageAgent:
         if self._wandb_run is not None:
             mean_reward_batch = torch.mean(reward, dim=1)
             plan_reward = float(mean_reward_batch.sum())
-            if continues is not None:
-                log_name = "modelled_succes_rate"
-            else:
-                log_name = "reward_in_model"
+            log_name = "reward_in_model"
             self._wandb_run.log(
                 {
                     log_name: plan_reward,
@@ -392,7 +384,9 @@ class LanguageAgent:
                     posterior
                 ).unsqueeze(0)
                 prev_state = posterior
-                print(f"State Value: {self._world_model._task_behavior.value(latent_tensor).mode()}")
+                print(
+                    f"State Value: {self._world_model._task_behavior.value(latent_tensor).mode()}"
+                )
                 # print(f"Reward info: {info['reward_info']}")
                 if self._manually_calculate_continues:
                     if (
@@ -461,10 +455,7 @@ class LanguageAgent:
         if self._wandb_run is not None:
             mean_reward_batch = torch.mean(reward, dim=1)
             plan_reward = float(mean_reward_batch.sum())
-            if continues is not None:
-                log_name = "modelled_succes_rate"
-            else:
-                log_name = "reward_in_model"
+            log_name = "reward_in_model"
             self._wandb_run.log(
                 {
                     log_name: plan_reward,
@@ -521,12 +512,7 @@ class LanguageAgent:
                     )
                 reward_func = self._learned_reward_function
             else:
-                if "babyai" in self.task:
-                    reward_func = self._babyai_language_reward
-                else:
-                    raise ValueError(
-                        f"No language reward function available for {self.task}"
-                    )
+                reward_func = self._language_reward
             self._world_model._task_behavior._train(
                 start_state_batched,
                 reward_func,
@@ -546,11 +532,7 @@ class LanguageAgent:
                         horizon=rollout_length, n_eval_episodes=n_eval_episodes
                     )
                 if self._wandb_run is not None:
-                    log_reward_name = (
-                        "mean_eval_success_rate"
-                        if self._manually_calculate_continues
-                        else "mean_eval_reward"
-                    )
+                    log_reward_name = "mean_eval_reward"
                     self._wandb_run.log(
                         {
                             "eval_policy": wandb.Video(
