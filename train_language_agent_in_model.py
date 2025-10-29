@@ -392,7 +392,7 @@ class LanguageAgent:
             Tuple(bool, float): termination, reward
         """
 
-        assert ("semantic", "inventory", "achievements") in env_info.keys()
+        assert {"semantic", "inventory", "achievements"}.issubset(set(env_info.keys()))
 
         done = False
         eval_reward = 0
