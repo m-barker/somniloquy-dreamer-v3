@@ -381,7 +381,7 @@ class LanguageAgent:
             eval_reward += 1
         return done, eval_reward
 
-    def _calculate_crafer_true_reward(self, env_info: Dict) -> Tuple[bool, float]:
+    def _calculate_crafter_true_reward(self, env_info: Dict) -> Tuple[bool, float]:
         """n
         Calculates the ground-truth reward in the crafter environment for the given natural
         language goal
