@@ -1,3 +1,4 @@
+import re
 import os
 import pathlib
 import sys
@@ -343,6 +344,70 @@ class LanguageAgent:
 
         cv2.destroyAllWindows()
 
+    def _calculate_babyai_true_reward(self, env_info: Dict) -> Tuple[bool, float]:
+        """n
+        Calculates the ground-truth reward in the babyai environment for the given natural
+        language goal
+
+        Args:
+            env_info (Dict): info dict returned by the envrionment after each step
+
+        Returns:
+            Tuple(bool, float): termination, reward
+        """
+        done = False
+        eval_reward = 0
+        if (
+            self.language_goal == "go to the red key"
+            and env_info["reward_info"]["red key"] == 1.0
+        ):
+            done = True
+        elif (
+            self.language_goal == "go to the green ball"
+            and env_info["reward_info"]["green ball"] == 1.0
+        ):
+            done = True
+        elif (
+            self.language_goal == "go to the blue ball"
+            and env_info["reward_info"]["blue ball"] == 1.0
+        ):
+            done = True
+        elif (
+            self.language_goal == "go to the purple box"
+            and env_info["reward_info"]["purple box"] == 1.0
+        ):
+            done = True
+        if done:
+            eval_reward += 1
+        return done, eval_reward
+
+    def _calculate_crafer_true_reward(self, env_info: Dict) -> Tuple[bool, float]:
+        """n
+        Calculates the ground-truth reward in the crafter environment for the given natural
+        language goal
+
+        Args:
+            env_info (Dict): info dict returned by the envrionment after each step
+        Returns:
+            Tuple(bool, float): termination, reward
+        """
+
+        assert ("semantic", "inventory", "achievements") in env_info.keys()
+
+        done = False
+        eval_reward = 0
+
+        if "harvest wood" in self.language_goal:
+            harvest_goal_count = re.findall(r"\b\d+\b", self.language_goal)
+            assert len(harvest_goal_count) == 1
+            harvest_goal_count = int(harvest_goal_count[0])
+            true_harvest_count = env_info["inventory"]["wood"]
+            done = harvest_goal_count == true_harvest_count
+
+        if done:
+            eval_reward += 1
+        return done, eval_reward
+
     def _eval(
         self, horizon: int = 15, n_eval_episodes: int = 10
     ) -> Tuple[np.ndarray, float]:
@@ -354,7 +419,8 @@ class LanguageAgent:
             latent_tensor, starting_latent, obs, no_convert, obs_to_ignore = (
                 self._get_env_starting_state()
             )
-            rgb_obs = [obs["high_res_image"]]
+            image_key = "high_res_image" if "high_res_image" in obs.keys() else "image"
+            rgb_obs = [obs[image_key]]
             prev_state = starting_latent
             eval_reward = 0.0
             done = False
@@ -369,7 +435,7 @@ class LanguageAgent:
                 action_dict = {"action": action.squeeze(0).detach().cpu().numpy()}
                 obs, reward, done, info = self._eval_env.step(action_dict)()
                 eval_reward += reward
-                rgb_obs.append(obs["high_res_image"])
+                rgb_obs.append(obs[image_key])
                 posterior = get_posterior_state(
                     self._world_model,
                     obs,
@@ -385,32 +451,11 @@ class LanguageAgent:
                 print(
                     f"State Value: {self._world_model._task_behavior.value(latent_tensor).mode()}"
                 )
-                # print(f"Reward info: {info['reward_info']}")
-                if self._manually_calculate_continues:
-                    if (
-                        self.language_goal == "go to the red key"
-                        and info["reward_info"]["red key"] == 1.0
-                    ):
-                        done = True
-                        eval_reward += 1.0
-                    elif (
-                        self.language_goal == "go to the green ball"
-                        and info["reward_info"]["green ball"] == 1.0
-                    ):
-                        done = True
-                        eval_reward += 1.0
-                    elif (
-                        self.language_goal == "go to the blue ball"
-                        and info["reward_info"]["blue ball"] == 1.0
-                    ):
-                        done = True
-                        eval_reward += 1.0
-                    elif (
-                        self.language_goal == "go to the purple box"
-                        and info["reward_info"]["purple box"] == 1.0
-                    ):
-                        done = True
-                        eval_reward += 1.0
+                if "babyai" in self.task:
+                    done, step_reward = self._calculate_babyai_true_reward(info)
+                    eval_reward += step_reward
+                elif "crafter" in self.task:
+                    done, step_reward = self._calculate_crafter_true_reward(info)
             # (T, H, W, C)
             video_array = np.stack(rgb_obs, axis=0)
             # (T, C, H, W)
