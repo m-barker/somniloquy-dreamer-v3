@@ -20,7 +20,7 @@ defaults:
   video_pred_log: True
   checkpoint: null
   token_sampling_method: "greedy"
-  use_stopwords: False
+  use_stopwords: True
   ignore_list: []
   no_convert_list: []
   narrator: { narration_key: [] }

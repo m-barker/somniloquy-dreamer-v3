@@ -507,11 +507,17 @@ class LanguageAgent:
                 print(
                     f"State Value: {self._world_model._task_behavior.value(latent_tensor).mode()}"
                 )
+                goal_achieved = False
                 if "babyai" in self.task:
-                    done, step_reward = self._calculate_babyai_true_reward(info)
+                    goal_achieved, step_reward = self._calculate_babyai_true_reward(
+                        info
+                    )
                     eval_reward += step_reward
                 elif "crafter" in self.task:
-                    done, eval_reward = self._calculate_crafter_true_reward(info)
+                    goal_achieved, eval_reward = self._calculate_crafter_true_reward(
+                        info
+                    )
+                done = done or goal_achieved
             # (T, H, W, C)
             video_array = np.stack(rgb_obs, axis=0)
             # (T, C, H, W)
@@ -571,8 +577,8 @@ class LanguageAgent:
         batch_size: int = 64,
         rollout_length: int = 15,
         start_state: Optional[Dict] = None,
-        save_every: int = 100,
-        eval_every: int = 100,
+        save_every: int = 500,
+        eval_every: int = 500,
         n_eval_episodes: int = 10,
         display_video: bool = False,
     ) -> None:
