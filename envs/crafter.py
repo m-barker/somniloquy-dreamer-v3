@@ -1,4 +1,5 @@
 import gym
+import cv2
 import numpy as np
 
 
@@ -9,17 +10,18 @@ class Crafter:
         assert task in ("reward", "noreward")
         import crafter
 
-        self._env = crafter.Env(size=size, reward=(task == "reward"), seed=seed)
+        self._size = size
+
+        self._env = crafter.Env(reward=(task == "reward"), seed=seed)
         self._achievements = crafter.constants.achievements.copy()
         self.reward_range = [-np.inf, np.inf]
         self._local_grid_shape = (7, 9)
 
     @property
     def observation_space(self):
+        img_shape = self._size + (3,)
         spaces = {
-            "image": gym.spaces.Box(
-                0, 255, self._env.observation_space.shape, dtype=np.uint8
-            ),
+            "image": gym.spaces.Box(0, 255, img_shape, dtype=np.uint8),
             "is_first": gym.spaces.Box(-np.inf, np.inf, (1,), dtype=np.uint8),
             "is_last": gym.spaces.Box(-np.inf, np.inf, (1,), dtype=np.uint8),
             "is_terminal": gym.spaces.Box(-np.inf, np.inf, (1,), dtype=np.uint8),
@@ -80,6 +82,10 @@ class Crafter:
 
     def step(self, action):
         image, reward, terminated, truncated, info = self._env.step(action)
+        if image.shape[:2] != self._size:
+            resized_img = cv2.resize(image, self._size, interpolation=cv2.INTER_AREA)
+        else:
+            resized_img = image
         reward = np.float32(reward)
         log_achievements = {
             f"log_achievement_{k}": info["achievements"][k] if info else 0
@@ -104,7 +110,8 @@ class Crafter:
         assert flattened_grid.max() <= 1
 
         obs = {
-            "image": image,
+            "image": resized_img,
+            "high_res_image": image,
             "flattened_grid": flattened_grid,
             "flattened_inventory": flattened_inventory,
             "flattened_achievements": flattened_achievements,
@@ -121,6 +128,10 @@ class Crafter:
 
     def reset(self):
         image, info = self._env.reset()
+        if image.shape[:2] != self._size:
+            resized_img = cv2.resize(image, self._size, interpolation=cv2.INTER_AREA)
+        else:
+            resized_img = image
         # Want to focus the occupancy grid to only be what the agent actually
         # sees
         occupancy_grid = info["semantic"]
@@ -138,7 +149,8 @@ class Crafter:
         assert flattened_grid.max() <= 1
 
         obs = {
-            "image": image,
+            "image": resized_img,
+            "high_res_image": image,
             "flattened_grid": flattened_grid,
             "flattened_inventory": flattened_inventory,
             "flattened_achievements": flattened_achievements,
@@ -147,3 +159,15 @@ class Crafter:
             "is_terminal": False,
         }
         return obs, info
+
+
+def main():
+    env = Crafter(task="reward", seed=100)
+    obs, info = env.reset()
+
+    print(obs["high_res_image"].shape)
+    print(obs["image"].shape)
+
+
+if __name__ == "__main__":
+    main()
