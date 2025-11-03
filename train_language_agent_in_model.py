@@ -397,12 +397,68 @@ class LanguageAgent:
         done = False
         eval_reward = 0
 
-        if "harvest wood" in self.language_goal:
-            harvest_goal_count = re.findall(r"\b\d+\b", self.language_goal)
-            assert len(harvest_goal_count) == 1
-            harvest_goal_count = int(harvest_goal_count[0])
-            true_harvest_count = env_info["inventory"]["wood"]
-            done = harvest_goal_count == true_harvest_count
+        if "harvest" in self.language_goal:
+            params = re.search(r"\bharvest\s+(\d+)\s+(\w+)\b", self.language_goal)
+            if params:
+                harvest_goal_count = params.group(1)
+                harvest_goal_material = params.group(2)
+                true_harvest_count = env_info["inventory"][harvest_goal_material]
+                done = harvest_goal_count == true_harvest_count
+            else:
+                raise ValueError(f"Can't figure out language goal {self.language_goal}")
+        elif "place" in self.language_goal:
+            params = re.search(r"\bplace\s+(\d+)\s+(\w+)\b", self.language_goal)
+            if params:
+                place_goal_count = int(params.group(1))
+                place_goal_object = params.group(2)
+                # Strip plural from goal
+                if place_goal_object[-1] == "s":
+                    place_goal_object = place_goal_object[:-1]
+                true_place_count = env_info["achievements"][
+                    f"place_{place_goal_object}"
+                ]
+                done = true_place_count == place_goal_count
+            else:
+                raise ValueError(
+                    f"Can't handle place language goal: {self.language_goal}"
+                )
+        elif "drink" in self.language_goal:
+            params = re.search(r"\bdrink\s+(\d+)\s+waters?\b", self.language_goal)
+            if params:
+                drink_goal_amount = int(params.group(1))
+                true_drink_amount = env_info["achievements"]["collect_drink"]
+                done = true_drink_amount == drink_goal_amount
+            else:
+                raise ValueError(
+                    f"Can't handle drink language goal: {self.language_goal}"
+                )
+        elif "eat" in self.language_goal:
+            params = re.search(r"\beat\s+(\d+)\s+(\w+)\b", self.language_goal)
+            if params:
+                eat_goal_amount = int(params.group(1))
+                eat_goal_object = params.group(2)
+                if eat_goal_object[-1] == "s":
+                    eat_goal_object = eat_goal_object[:-1]
+                true_eat_amount = env_info["achievements"][f"eat_{eat_goal_object}"]
+                done = true_eat_amount == eat_goal_amount
+            else:
+                raise ValueError(f"Unhandled eat goal: {self.language_goal}")
+        elif "craft" in self.language_goal:
+            params = re.search(r"\bcraft\s+(\d+)\s+([a-zA-Z ]+)\b", self.language_goal)
+            if params:
+                craft_goal_amount = int(params.group(1))
+                craft_goal_object = params.group(2)
+                true_craft_amount = env_info["achievements"][
+                    f"make_{craft_goal_object.replace(' ', '_')}"
+                ]
+                done = true_craft_amount == craft_goal_amount
+            else:
+                raise ValueError(f"Unhandled craft goal: {self.language_goal}")
+
+        else:
+            raise ValueError(
+                f"Unhandled language goal for Crafter: {self.language_goal}"
+            )
 
         if done:
             eval_reward += 1
@@ -455,7 +511,7 @@ class LanguageAgent:
                     done, step_reward = self._calculate_babyai_true_reward(info)
                     eval_reward += step_reward
                 elif "crafter" in self.task:
-                    done, step_reward = self._calculate_crafter_true_reward(info)
+                    done, eval_reward = self._calculate_crafter_true_reward(info)
             # (T, H, W, C)
             video_array = np.stack(rgb_obs, axis=0)
             # (T, C, H, W)
