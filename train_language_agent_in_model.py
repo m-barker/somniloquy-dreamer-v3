@@ -3,6 +3,7 @@ import os
 import pathlib
 import sys
 import cv2
+import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Tuple, Union
 
 import wandb
@@ -650,6 +651,72 @@ class LanguageAgent:
                 if display_video:
                     self.play_video(eval_policy_video)
 
+    def _display_image(self, image: np.ndarray) -> None:
+        """
+        Displays the RGB image to the screen
+
+        Args:
+        image (np.ndarray) of shape (H,W,C)
+        """
+        plt.imshow(image)
+        plt.axis("off")  # optional, hides the axes
+        plt.show()
+
+    def play_game_inside_model(self) -> None:
+        """
+        Allows a user to control the agent fully inside of the world model.
+        Useful for debugging.
+        """
+        latent_tensor, starting_latent, obs, no_convert, obs_to_ignore = (
+            self._get_env_starting_state()
+        )
+        latent_state = starting_latent
+        done = False
+        latent_tensors: List[torch.Tensor] = [latent_tensor]
+        image = obs["image"]
+        while not done:
+            self._display_image(image)
+            valid_action = False
+            translation = self._world_model._wm.heads["language"].generate(
+                torch.cat(latent_tensors, dim=0).permute(1, 0, 2),
+                self._world_model._wm.vocab,
+                self._world_model._config.dec_max_length,
+                self._world_model._config.token_sampling_method,
+            )[0]
+            translation = " ".join(
+                [
+                    word
+                    for word in translation.split()
+                    if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                ]
+            )
+            print(f"Translator says this has happened: {translation}")
+            while not valid_action:
+                action_str = input("Please enter an action: ")
+                try:
+                    action_int = int(action_str)
+                    action_arr = np.zeros(self._eval_env.action_space.n)
+                    action_arr[action_int] = 1
+                    # Shape (1,1 N)
+                    action_tensor = torch.tensor(action_arr).unsqueeze(0).unsqueeze(0)
+                    latent_state = self._world_model._wm.dynamics.img_step(
+                        prev_state=latent_state,
+                        prev_action=action_tensor,
+                    )
+                except:
+                    valid_action = False
+
+            latent_tensor = self._world_model._wm.dynamics.get_feat(latent_state)
+            latent_tensors.append(latent_tensor)
+            decoded_image = (
+                self._world_model._wm.heads["decoder"](latent_tensor)["image"]
+                .mode()
+                .detach()
+                .clone()
+            )
+            decoded_image = torch.clip(255 * decoded_image, 0, 255).to(torch.uint8)
+            image = decoded_image[0, 0].detach().cpu().contiguous().numpy().copy()
+
 
 def load_agent():
     """Loads a pre-trained Dreamer world-model"""
@@ -739,12 +806,15 @@ def main():
         else:
             language_goal = config.language_goal
 
-        lang_agent.train(
-            language_goal,
-            int(config.model_steps),
-            logdir,
-            rollout_length=config.imag_horizon,
-        )
+        if sys.argv[-1] == "play":
+            lang_agent.play_game_inside_model()
+        else:
+            lang_agent.train(
+                language_goal,
+                int(config.model_steps),
+                logdir,
+                rollout_length=config.imag_horizon,
+            )
 
 
 if __name__ == "__main__":
