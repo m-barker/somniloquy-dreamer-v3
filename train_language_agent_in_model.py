@@ -1,7 +1,9 @@
+from email.mime import image
 import re
 import os
 import pathlib
 import sys
+
 import cv2
 import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Tuple, Union
@@ -658,9 +660,18 @@ class LanguageAgent:
         Args:
         image (np.ndarray) of shape (H,W,C)
         """
-        plt.imshow(image)
-        plt.axis("off")  # optional, hides the axes
-        plt.show()
+
+        if image.dtype != np.uint8:
+            image = np.clip(image * 255, 0, 255).astype(np.uint8)
+
+        bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        cv2.namedWindow("Image", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+        cv2.imshow("Image", bgr)
+
+        # 30–50 ms wait keeps GUI alive but doesn't block the loop
+        key = cv2.waitKey(30)
+        if key == 27:  # optional: press Esc to close
+            cv2.destroyAllWindows()
 
     def play_game_inside_model(self) -> None:
         """
@@ -677,6 +688,7 @@ class LanguageAgent:
         while not done:
             self._display_image(image)
             valid_action = False
+            print(f"Number of latent tensors so far: {len(latent_tensors)}")
             translation = self._world_model._wm.heads["language"].generate(
                 torch.cat(latent_tensors, dim=0).permute(1, 0, 2),
                 self._world_model._wm.vocab,
@@ -698,18 +710,26 @@ class LanguageAgent:
                     action_arr = np.zeros(self._eval_env.action_space.n)
                     action_arr[action_int] = 1
                     # Shape (1,1 N)
-                    action_tensor = torch.tensor(action_arr).unsqueeze(0).unsqueeze(0)
+                    action_tensor = (
+                        torch.Tensor(action_arr)
+                        .unsqueeze(0)
+                        .to(self._world_model._config.device)
+                    )
                     latent_state = self._world_model._wm.dynamics.img_step(
                         prev_state=latent_state,
                         prev_action=action_tensor,
                     )
-                except:
+                    valid_action = True
+                except Exception as e:
+                    print(f"Invalid action entered: {e}")
                     valid_action = False
 
             latent_tensor = self._world_model._wm.dynamics.get_feat(latent_state)
-            latent_tensors.append(latent_tensor)
+            latent_tensors.append(latent_tensor.unsqueeze(0))
             decoded_image = (
-                self._world_model._wm.heads["decoder"](latent_tensor)["image"]
+                self._world_model._wm.heads["decoder"](latent_tensor.unsqueeze(0))[
+                    "image"
+                ]
                 .mode()
                 .detach()
                 .clone()

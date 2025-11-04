@@ -30,6 +30,7 @@ defaults:
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
   wandb: True
+  play: "no"
 
   # Change these if just learning a dynamics model
   random_actions: False
@@ -41,7 +42,6 @@ defaults:
   fixed_env_seed: -1
 
   model_steps: 1e5
-
 
   simple_narrator: False
   use_learned_reward: True
