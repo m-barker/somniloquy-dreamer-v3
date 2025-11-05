@@ -12,6 +12,8 @@ import wandb
 import numpy as np
 import torch
 from tqdm import tqdm
+from transformers import pipeline
+from sentence_transformers import SentenceTransformer
 
 from tools import (
     recursively_collect_optim_state_dict,
@@ -27,7 +29,7 @@ from somniloquy import (
     load_existing_episodes,
     count_steps,
 )
-from evaluation import get_posterior_state
+from evaluation import get_posterior_state, bleu_metric_from_strings
 
 
 class LanguageAgent:
@@ -182,6 +184,99 @@ class LanguageAgent:
         )  # (num_prefixes, seq_len, batch_size)
 
         return padded, padding_mask
+
+    def _bleu_reward(
+        self, latent_translation: str, threshold: Optional[float] = None
+    ) -> float:
+        """
+        Computes the BLEU score between the language goal and the
+        latent state translation, which is returned as a reward in
+        the range of [0-1].
+
+        Args:
+            latent_translation (str): latent state translation
+
+            threshold (optional, float): Optional float threshold used to only return
+            a non-zero reward if bleu score is above this threshold. Defaults to None.
+        """
+
+        goal_str = self.language_goal
+        bleu_score: torch.Tensor = bleu_metric_from_strings(
+            latent_translation, goal_str
+        )
+        if threshold:
+            if float(bleu_score) < threshold:
+                return 0.0
+        return float(bleu_score)
+
+    def _sentence_embed_reward(
+        self,
+        latent_translation: Union[str, List[str]],
+        embedding_model_name: str = "all-MiniLM-L6-v2",
+        threshold: Optional[float] = None,
+    ) -> List[float]:
+        model = SentenceTransformer(embedding_model_name)
+        goal_embedding = model.encode([self.language_goal])
+        if isinstance(latent_translation, str):
+            latent_translation = [latent_translation]
+        translation_embeddings = model.encode(latent_translation)
+
+        # Shape (1, N) where N is the number of translations
+        similarities = model.similarity(goal_embedding, translation_embeddings)
+        # Shape (N)
+        similarities = similarities.squeeze(0)
+        cosine_scores = similarities.tolist()
+
+        if threshold:
+            cosine_scores = [s if s > threshold else 0.0 for s in cosine_scores]
+
+        return cosine_scores
+
+    def _entailment_model_reward(
+        self,
+        latent_translation: Union[str, List[str]],
+        entailment_model_name: str = "facebook/bart-large-mnli",
+        threshold: Optional[float] = None,
+    ) -> List[float]:
+        """
+        Calculates the degree to which the natural language goal is semantically
+        entailed by the latent state translations, using a pre-trained NLI model.
+
+        Args:
+            latent_translation (Union[str, List[str]]): latent state translations
+            output by Somniloquy
+
+            entailment_model_name (optional, str): Name of the entailment model to
+            use. Must be available on HuggingFace and compatable with the API used
+            in this function. Defaults to "facebook/bart-large-mnli", a 400M parameter
+            model.
+
+            threshold (optional, float): If not None, sets a minimum confidence
+            entailment threshold for non-zero reward. Defaults to None.
+        """
+        nli = pipeline("text-classification", model=entailment_model_name)
+
+        hypothesis = self.language_goal
+
+        if isinstance(latent_translation, str):
+            latent_translation = [latent_translation]
+
+        pairs = [f"{premise} </s><s> {hypothesis}" for premise in latent_translation]
+
+        results = nli(pairs)
+
+        if results:
+            reward = [
+                float(res["score"]) if res["label"] == "ENTAILMENT" else 0.0
+                for res in results
+            ]
+        else:
+            raise ValueError("No entailment results found")
+
+        if threshold:
+            reward = [r if r > threshold else 0.0 for r in reward]
+
+        return reward
 
     def _language_reward(
         self,
