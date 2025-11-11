@@ -288,7 +288,7 @@ class LanguageAgent:
         _,
         imagined_states: Dict[str, torch.Tensor],
         __,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         assert self.language_goal is not None
         # Imagined states are of shape (Time, Batch, Dimension)
         T, B, _ = imagined_states["deter"].shape
@@ -438,6 +438,8 @@ class LanguageAgent:
                     log_name: plan_reward,
                 }
             )
+        if continues is None:
+            return reward
 
         return reward, continues
 
