@@ -424,7 +424,11 @@ class LanguageAgent:
                     )
                 rewards = np.array(rewards)
                 rewards = torch.tensor(rewards.reshape((T, B))).unsqueeze(-1)
+                print(f"Rewards: {rewards}")
+                print(f"Rewards dtype: {rewards.dtype}")
+                print(f"Reward dtype: {reward.dtype}")
                 reward = rewards
+                print(f"Reward dtype: {reward.dtype}")
 
         reward = reward.to(self._world_model._config.device)
         if continues is not None:
