@@ -322,6 +322,16 @@ class LanguageAgent:
                 if self._reward_entailment_method == "substring":
                     if self.language_goal in plan_translation:
                         reward[-1, b] = 1.0
+                elif self._reward_entailment_method == "bleu":
+                    reward[-1, b] = self._bleu_reward(plan_translation)
+                elif self._reward_entailment_method == "embed":
+                    reward[-1, b] = self._sentence_embed_reward(plan_translation)[0]
+                elif self._reward_entailment_method == "nli":
+                    reward[-1, b] = self._entailment_model_reward(plan_translation)[0]
+                else:
+                    raise ValueError(
+                        f"Cannot handle reward entailment method: {self._reward_entailment_method}"
+                    )
 
         elif self._reward_assignment_method in ("once", "all"):
             # Shape (B, T, T, D), (B, T, T)
@@ -365,18 +375,54 @@ class LanguageAgent:
             )  # shape (T, B)
 
             # Reward assignment
-            for batch in range(B):
-                for idx, plan_translation in enumerate(
-                    string_plan_translations_array[:, batch]
-                ):
-                    if self._reward_entailment_method == "substring":
-                        if self.language_goal in plan_translation:
-                            reward[idx][batch] = 1.0
-                            # Reward only the first time the goal is reached
+            if (
+                self._reward_assignment_method == "once"
+                or self._reward_entailment_method == "substring"
+            ):
+                for batch in range(B):
+                    for idx, plan_translation in enumerate(
+                        string_plan_translations_array[:, batch]
+                    ):
+                        r = 0.0
+                        if self._reward_entailment_method == "substring":
+                            if self.language_goal in plan_translation:
+                                reward[idx][batch] = 1.0
+                                # Reward only the first time the goal is reached
+                                if continues is not None:
+                                    continues[idx:, batch] = 0.0
+                                if self._reward_assignment_method == "once":
+                                    break
+                        elif self._reward_entailment_method == "bleu":
+                            r = self._bleu_reward(plan_translation)
+                        elif self._reward_entailment_method == "embed":
+                            r = self._sentence_embed_reward(plan_translation)[0]
+                        elif self._reward_entailment_method == "nli":
+                            r = self._entailment_model_reward(plan_translation)[0]
+                        else:
+                            raise ValueError(
+                                f"Unhandled reward entailment method: {self._reward_entailment_method}"
+                            )
+                        if r > 0.0:
+                            reward[idx][batch] = r
                             if continues is not None:
                                 continues[idx:, batch] = 0.0
-                            if self._reward_assignment_method == "once":
-                                break
+                            break
+            else:
+                # (T, B) -> TxB
+                flattened_translations = string_plan_translations_array.flatten()
+                if self._reward_entailment_method == "embed":
+                    rewards = self._sentence_embed_reward(list(flattened_translations))
+                elif self._reward_entailment_method == "nli":
+                    rewards = self._entailment_model_reward(
+                        list(flattened_translations)
+                    )
+                else:
+                    raise ValueError(
+                        f"Can't batch compute rewards for entailment method: {self._reward_entailment_method}"
+                    )
+                rewards = np.array(rewards)
+                rewards = torch.tensor(rewards.reshape((T, B)))
+                reward = rewards
 
         reward = reward.to(self._world_model._config.device)
         if continues is not None:
