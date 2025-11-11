@@ -715,7 +715,8 @@ class LanguageAgent:
                     log_name: plan_reward,
                 }
             )
-
+        if continues is None:
+            return reward
         return reward, continues
 
     def train(
