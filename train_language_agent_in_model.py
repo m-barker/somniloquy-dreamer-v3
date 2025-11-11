@@ -268,12 +268,13 @@ class LanguageAgent:
         pairs = [f"{premise} </s><s> {hypothesis}" for premise in latent_translation]
 
         results = nli(pairs)
-
+        reward = []
         if results:
-            reward = [
-                float(res["score"]) if res["label"] == "entailment" else 0.0
-                for res in results
-            ]
+            for res in results:
+                if res:
+                    for r in res:
+                        if r["label"] == "entailment":
+                            reward.append(r["score"])
         else:
             raise ValueError("No entailment results found")
 
