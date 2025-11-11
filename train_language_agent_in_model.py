@@ -423,7 +423,7 @@ class LanguageAgent:
                         f"Can't batch compute rewards for entailment method: {self._reward_entailment_method}"
                     )
                 rewards = np.array(rewards)
-                rewards = torch.tensor(rewards.reshape((T, B)))
+                rewards = torch.tensor(rewards.reshape((T, B))).unsqueeze(-1)
                 reward = rewards
 
         reward = reward.to(self._world_model._config.device)
