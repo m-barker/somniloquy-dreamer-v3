@@ -257,6 +257,7 @@ class LanguageAgent:
             "text-classification",
             model=entailment_model_name,
             top_k=None,
+            device=self._world_model._config.device,
         )
 
         hypothesis = self.language_goal
