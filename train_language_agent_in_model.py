@@ -57,7 +57,7 @@ class LanguageAgent:
         """
 
         assert reward_assignment_method in ("all", "once", "final")
-        assert reward_entailment_method in ("substring")
+        assert reward_entailment_method in ("substring", "bleu", "embed", "nli")
 
         self._world_model = world_model
         self._weights_path = weights_path
