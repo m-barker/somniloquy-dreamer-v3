@@ -1,4 +1,3 @@
-from email.mime import image
 import re
 import os
 import pathlib
@@ -254,7 +253,11 @@ class LanguageAgent:
             threshold (optional, float): If not None, sets a minimum confidence
             entailment threshold for non-zero reward. Defaults to None.
         """
-        nli = pipeline("text-classification", model=entailment_model_name)
+        nli = pipeline(
+            "text-classification",
+            model=entailment_model_name,
+            top_k=None,
+        )
 
         hypothesis = self.language_goal
 
@@ -267,7 +270,7 @@ class LanguageAgent:
 
         if results:
             reward = [
-                float(res["score"]) if res["label"] == "ENTAILMENT" else 0.0
+                float(res["score"]) if res["label"] == "entailment" else 0.0
                 for res in results
             ]
         else:
