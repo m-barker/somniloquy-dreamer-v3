@@ -1881,11 +1881,10 @@ def batchify_translator_input(
                     state_history = []
                 latent_sequence = state_history + [latent_states[b, t]]
                 latent_sequence_tensor = torch.stack(latent_sequence)
-                print(f"Latent sequence tensor shape: {latent_sequence_tensor.shape}")
                 latent_tensor = torch.zeros((batch_length, dim))
                 latent_tensor[: len(state_history) + 1] = latent_sequence_tensor
-                padding_mask = torch.ones((batch_length))
-                padding_mask[: len(state_history) + 1] = 0.0
+                padding_mask = torch.ones((batch_length), dtype=torch.bool)
+                padding_mask[: len(state_history) + 1] = False
 
                 latent_sequences.append(latent_tensor)
                 padding_masks.append(padding_mask)
