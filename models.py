@@ -1,3 +1,4 @@
+import time
 from typing import Tuple, List, Optional, Dict, Union
 import copy
 from copy import deepcopy
@@ -308,7 +309,7 @@ class WorldModel(nn.Module):
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: predicted narrations tokens,
             ground-truth narration tokens
         """
-
+        start = time.perf_counter()
         narrations = tools.generate_batch_narrations(
             self.narrator,
             narration_data,
@@ -319,6 +320,8 @@ class WorldModel(nn.Module):
             data["is_first"],
             config=self._config,
         )
+        end = time.perf_counter()
+        print(f"Narration generation time: {end - start:.6f} seconds")
         if len(narrations) > 2:
             narrations = narrations.reshape(-1, self._narration_max_dec_seq)
         # Shape (batch, seq_len, latent_state_dim)
@@ -326,19 +329,25 @@ class WorldModel(nn.Module):
         feat = feat if language_grads else feat.detach()
 
         if not baseline:
+            start = time.perf_counter()
             latent_sequences, padding_masks = tools.batchify_translator_input(
                 feat, data["is_first"], self._narration_max_enc_seq, self.device
             )  # type: ignore
+            end = time.perf_counter()
+            print(f"Latent batch generation time: {end - start:.6f} seconds")
 
             latent_sequences = (
                 latent_sequences if language_grads else latent_sequences.detach()
             )
+            start = time.perf_counter()
             pred = self.heads["language"].forward(
                 latent_sequences,
                 narrations[:, :-1],
                 generate_mask=True,
                 src_mask=padding_masks,
             )
+            end = time.perf_counter()
+            print(f"Transformer forward time taken: {end - start:.6f} seconds")
         else:
             latent_sequences, padding_masks, actions = tools.batchify_translator_input(
                 feat,
