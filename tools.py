@@ -1397,7 +1397,10 @@ def generate_batch_narrations(
                     batch_length,
                 )
                 narrations.append(narration)
+        start = time.perf_counter()
         narration_tokens = word_tokenise_text(narrations, vocab, max_narration_length)
+        end = time.perf_counter()
+        print(f"Word tokenisation time: {end - start:.6f} seconds")
         return torch.tensor(narration_tokens, dtype=torch.long).to(device)
 
     for batch_idx in range(batch_size):
