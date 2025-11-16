@@ -1874,6 +1874,52 @@ def batchify_translator_input(
     batch_size, batch_length, dim = latent_states.shape
 
     if seq_length == -1:
+        total_sequences = batch_size * batch_length
+        latent_state_batches = torch.zeros(
+            (total_sequences, batch_length, dim), device=device
+        )
+        padding_mask_batches = torch.ones(
+            (total_sequences, batch_length), dtype=torch.bool, device=device
+        )
+
+        # [batch, time_step, position_in_sequence, dim]
+        latent_state_batches_4d = latent_state_batches.view(
+            batch_size, batch_length, batch_length, dim
+        )
+        # [batch, time_step, position_in_sequence]
+        padding_mask_batches_3d = padding_mask_batches.view(
+            batch_size, batch_length, batch_length
+        )
+
+        # Per-batch rolling history buffer (stores current segment)
+        history = torch.empty((batch_size, batch_length, dim), device=device)
+        # current_len[b] = number of valid states in history[b]
+        current_len = torch.zeros(batch_size, dtype=torch.long, device=device)
+
+        # Positions 0..batch_length-1 (used to build masks)
+        positions = torch.arange(batch_length, device=device).view(1, batch_length)
+        batch_indices = torch.arange(batch_size, device=device)
+
+        for t in range(batch_length):
+            reset_t = is_first_indices[:, t].bool()
+            current_len[reset_t] = 0
+
+            write_indices = current_len.clone()  # shape (batch_size,)
+            history[batch_indices, write_indices] = latent_states[:, t]
+
+            # Now we have one more item in history
+            current_len = current_len + 1  # len >= 1 at this point
+
+            #    mask_valid[b, j] = True if j < current_len[b]
+            mask_valid = positions < current_len.view(batch_size, 1)  # (B, T)
+
+            seq_t = history * mask_valid.unsqueeze(-1)  # (B, T, D)
+
+            latent_state_batches_4d[:, t, :, :] = seq_t
+            padding_mask_batches_3d[:, t, :] = ~mask_valid  # True = padding
+
+        return latent_state_batches.to(device), padding_mask_batches.to(device)
+
         for b in range(batch_size):
             state_history: List[torch.Tensor] = []
             for t in range(batch_length):
