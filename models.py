@@ -321,7 +321,7 @@ class WorldModel(nn.Module):
             config=self._config,
         )
         end = time.perf_counter()
-        print(f"Narration generation time: {end - start:.6f} seconds")
+        # print(f"Narration generation time: {end - start:.6f} seconds")
         if len(narrations) > 2:
             narrations = narrations.reshape(-1, self._narration_max_dec_seq)
         # Shape (batch, seq_len, latent_state_dim)
@@ -334,7 +334,7 @@ class WorldModel(nn.Module):
                 feat, data["is_first"], self._narration_max_enc_seq, self.device
             )  # type: ignore
             end = time.perf_counter()
-            print(f"Latent batch generation time: {end - start:.6f} seconds")
+            # print(f"Latent batch generation time: {end - start:.6f} seconds")
 
             latent_sequences = (
                 latent_sequences if language_grads else latent_sequences.detach()
@@ -347,7 +347,7 @@ class WorldModel(nn.Module):
                 src_mask=padding_masks,
             )
             end = time.perf_counter()
-            print(f"Transformer forward time taken: {end - start:.6f} seconds")
+            # print(f"Transformer forward time taken: {end - start:.6f} seconds")
         else:
             latent_sequences, padding_masks, actions = tools.batchify_translator_input(
                 feat,
@@ -570,7 +570,7 @@ class WorldModel(nn.Module):
         # image (batch_size, batch_length, h, w, ch)
         # reward (batch_size, batch_length)
         # discount (batch_size, batch_length)
-
+        start = time.perf_counter()
         narration_keys = self._config.narrator["narration_key"]
         narration_data = self._process_narration_data(data)
 
@@ -603,8 +603,11 @@ class WorldModel(nn.Module):
         )
         if extra_reward_data is not None:
             data.update(extra_reward_data)
+        end = time.perf_counter()
+        print(f"Pre-processing time: {end - start:.6f} seconds")
         with tools.RequiresGrad(self):
             with torch.cuda.amp.autocast(self._use_amp):
+                start = time.perf_counter()
                 embed = self.encoder(data)
                 post, prior = self.dynamics.observe(
                     embed, data["action"], data["is_first"]
@@ -615,10 +618,13 @@ class WorldModel(nn.Module):
                 kl_loss, kl_value, dyn_loss, rep_loss = self.dynamics.kl_loss(
                     post, prior, kl_free, dyn_scale, rep_scale
                 )
+                end = time.perf_counter()
+                print(f"World model time: {end - start:.6f} seconds")
                 assert kl_loss.shape == embed.shape[:2], kl_loss.shape
                 preds = {}
                 for name, head in self.heads.items():
                     if name == "language":
+                        start = time.perf_counter()
                         pred, narrations = self._get_language_prediction(
                             data,
                             post,
@@ -626,6 +632,8 @@ class WorldModel(nn.Module):
                             language_grads=self._config.language_grads,
                             baseline=self._config.translation_baseline,
                         )
+                        end = time.perf_counter()
+                        print(f"Translation time: {end - start:.6f} seconds")
                     else:
                         grad_head = name in self._config.grad_heads
                         # Shape (batch, seq_len, latent_state_dim)
@@ -640,9 +648,12 @@ class WorldModel(nn.Module):
                 losses = {}
                 for name, pred in preds.items():
                     if name == "language":
+                        start = time.perf_counter()
                         loss = tools.narration_loss(
                             pred, narrations[:, 1:], self._language_loss_agg
                         )
+                        end = time.perf_counter()
+                        print(f"Translation loss time: {end - start:.6f} seconds")
                         losses[name] = loss * self._scales["language"]
                     else:
                         loss = -pred.log_prob(data[name])
@@ -656,20 +667,23 @@ class WorldModel(nn.Module):
                 model_loss = sum(scaled.values()) + kl_loss
 
             if self._config.enable_language:
-                # mean of language loss is already taken
-                if self._step % self._grad_debug_every == 0:
-                    scaled_losses = {k: torch.mean(v) for k, v in scaled.items()}
-                    scaled_losses["kl"] = torch.mean(kl_loss)
-                    scaled_losses["language"] = losses["language"]
-                    metrics = self._model_opt(
-                        scaled_losses,
-                        self,
-                    )
-                else:
-                    metrics = self._model_opt.single_update(
-                        torch.mean(model_loss) + losses["language"],
-                        self.parameters(),
-                    )
+                # # mean of language loss is already taken
+                # if self._step % self._grad_debug_every == 0:
+                #     scaled_losses = {k: torch.mean(v) for k, v in scaled.items()}
+                #     scaled_losses["kl"] = torch.mean(kl_loss)
+                #     scaled_losses["language"] = losses["language"]
+                #     metrics = self._model_opt(
+                #         scaled_losses,
+                #         self,
+                #     )
+                # else:
+                start = time.perf_counter()
+                metrics = self._model_opt.single_update(
+                    torch.mean(model_loss) + losses["language"],
+                    self.parameters(),
+                )
+                end = time.perf_counter()
+                print(f"Weight update time: {end - start:.6f} seconds")
             else:
                 metrics = self._model_opt(
                     torch.mean(model_loss),
