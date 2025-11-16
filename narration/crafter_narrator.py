@@ -57,11 +57,7 @@ class CrafterNarrator:
         Returns:
             str: The objects seen by the player.
         """
-        object_ids_seen = set()
-        for obs in observations:
-            for row in obs:
-                for object_id in row:
-                    object_ids_seen.add(object_id)
+        object_ids_seen = np.unique(np.stack(observations))
         objects_seen = [k for k, v in self.OBJECT_IDS.items() if v in object_ids_seen]
         # sort the objects alphabetically
         objects_seen.sort()
@@ -276,61 +272,36 @@ class CrafterNarrator:
             str: A string describing the achievements that the player earned.
         """
 
+        # Convert list-of-dicts => dict-of-lists for vectorized diff
+        keys = achievement_obs_history[0].keys()
+        T = len(achievement_obs_history)
+
+        # Build an array of shape (T, K)
+        import numpy as np
+
+        arr = np.array([[h[k] for k in keys] for h in achievement_obs_history])
+        diffs = arr[1:] - arr[:-1]  # shape (T-1, K)
+
+        # Count positive diffs for each key
+        positive_counts = (diffs > 0).sum(0)
+
+        # Map names to output strings
+        map_name = {
+            "defeat_skeleton": "I will fight and kill {} skeletons. ",
+            "defeat_zombie": "I will fight and kill {} zombies. ",
+            "eat_cow": "I will eat {} cows. ",
+            "eat_plant": "I will eat {} plants. ",
+            "place_table": "I will place {} tables. ",
+            "place_furnace": "I will place {} furnaces. ",
+            "place_plant": "I will place {} plants. ",
+            "place_stone": "I will place {} stones. ",
+        }
+
         achievement_str = ""
 
-        defeated_skeleton_count = 0
-        defeated_zombie_count = 0
-        cow_eaten_count = 0
-        plant_eaten_count = 0
-        placed_table_count = 0
-        placed_furnace_count = 0
-        placed_plant_count = 0
-        placed_stone_count = 0
-
-        for t in range(1, len(achievement_obs_history)):
-            for i, achievement in enumerate(achievement_obs_history[t]):
-                achievement_change = (
-                    achievement_obs_history[t][achievement]
-                    - achievement_obs_history[t - 1][achievement]
-                )
-                if achievement_change > 0:
-                    if achievement == "defeat_skeleton":
-                        defeated_skeleton_count += 1
-                    elif achievement == "defeat_zombie":
-                        defeated_zombie_count += 1
-                    elif achievement == "eat_cow":
-                        cow_eaten_count += 1
-                    elif achievement == "eat_plant":
-                        plant_eaten_count += 1
-                    elif achievement == "place_table":
-                        placed_table_count += 1
-                    elif achievement == "place_furnace":
-                        placed_furnace_count += 1
-                    elif achievement == "place_plant":
-                        placed_plant_count += 1
-                    elif achievement == "place_stone":
-                        placed_stone_count += 1
-
-        if defeated_skeleton_count > 0:
-            achievement_str += (
-                f"I will fight and kill {defeated_skeleton_count} skeletons. "
-            )
-        if defeated_zombie_count > 0:
-            achievement_str += (
-                f"I will fight and kill {defeated_zombie_count} zombies. "
-            )
-        if cow_eaten_count > 0:
-            achievement_str += f"I will eat {cow_eaten_count} cows. "
-        if plant_eaten_count > 0:
-            achievement_str += f"I will eat {plant_eaten_count} plants. "
-        if placed_table_count > 0:
-            achievement_str += f"I will place {placed_table_count} tables. "
-        if placed_furnace_count > 0:
-            achievement_str += f"I will place {placed_furnace_count} furnaces. "
-        if placed_plant_count > 0:
-            achievement_str += f"I will place {placed_plant_count} plants. "
-        if placed_stone_count > 0:
-            achievement_str += f"I will place {placed_stone_count} stones. "
+        for key, count in zip(keys, positive_counts):
+            if count > 0:
+                achievement_str += map_name[key].format(count)
 
         return achievement_str
 
@@ -356,27 +327,12 @@ class CrafterNarrator:
         achievement_obs = observations["achievements"]
 
         narration_str = ""
-        start = time.perf_counter()
-        narration_str += self._get_seen_objects(occupancy_observations) + " "  # type: ignore
-        end = time.perf_counter()
-        print(f"Seen objects time: {end - start:.6f} seconds")
-        start = time.perf_counter()
+        narration_str += self._get_seen_objects(occupancy_observations) + " "  # type: ignor
         narration_str += self._get_harvested_str(player_inventory_obs) + " "  # type: ignore
-        end = time.perf_counter()
-        print(f"Harvest string time: {end - start:.6f} seconds")
-        start = time.perf_counter()
         narration_str += self._get_crafted_str(player_inventory_obs) + " "  # type: ignore
-        end = time.perf_counter()
-        print(f"Crafted string time: {end - start:.6f} seconds")
-        start = time.perf_counter()
         narration_str += self._get_achievement_str(achievement_obs)  # type: ignore
-        end = time.perf_counter()
-        print(f"Achievement string time: {end - start:.6f} seconds")
-        start = time.perf_counter()
         narration_str += (
             self._get_vitals_str(player_inventory_obs, occupancy_observations) + " "
         )  # type: ignore
-        end = time.perf_counter()
-        print(f"Vital string time: {end - start:.6f} seconds")
 
         return narration_str
