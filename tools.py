@@ -1419,7 +1419,7 @@ def generate_batch_narrations(
 
         # Build arguments for workers
         job_args = [
-            (b, start, end, config.task, single_batches[b], batch_length)
+            (narrator, b, start, end, config.task, single_batches[b], batch_length)
             for (b, start, end) in jobs
         ]
 
