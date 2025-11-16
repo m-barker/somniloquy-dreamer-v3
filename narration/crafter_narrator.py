@@ -1,3 +1,4 @@
+import time
 from typing import List, Union, Dict
 
 import numpy as np
@@ -67,7 +68,6 @@ class CrafterNarrator:
 
         object_str = "I will see "
         for i, obj in enumerate(objects_seen):
-
             if i == len(objects_seen) - 1 and len(objects_seen) > 1:
                 object_str += f"and {obj}."
             else:
@@ -356,10 +356,27 @@ class CrafterNarrator:
         achievement_obs = observations["achievements"]
 
         narration_str = ""
+        start = time.perf_counter()
         narration_str += self._get_seen_objects(occupancy_observations) + " "  # type: ignore
+        end = time.perf_counter()
+        print(f"Seen objects time: {end - start:.6f} seconds")
+        start = time.perf_counter()
         narration_str += self._get_harvested_str(player_inventory_obs) + " "  # type: ignore
+        end = time.perf_counter()
+        print(f"Harvest string time: {end - start:.6f} seconds")
+        start = time.perf_counter()
         narration_str += self._get_crafted_str(player_inventory_obs) + " "  # type: ignore
+        end = time.perf_counter()
+        print(f"Crafted string time: {end - start:.6f} seconds")
+        start = time.perf_counter()
         narration_str += self._get_achievement_str(achievement_obs)  # type: ignore
-        narration_str += self._get_vitals_str(player_inventory_obs, occupancy_observations) + " "  # type: ignore
+        end = time.perf_counter()
+        print(f"Achievement string time: {end - start:.6f} seconds")
+        start = time.perf_counter()
+        narration_str += (
+            self._get_vitals_str(player_inventory_obs, occupancy_observations) + " "
+        )  # type: ignore
+        end = time.perf_counter()
+        print(f"Vital string time: {end - start:.6f} seconds")
 
         return narration_str

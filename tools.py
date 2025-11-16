@@ -1424,31 +1424,23 @@ def generate_batch_narrations(
         is_first_indices = is_first_indices.detach().cpu().numpy()
 
     if obs_per_narration == -1:
-        if isinstance(observations, dict):
-            per_batch_obs = [
-                {key: value[b : b + 1] for key, value in observations.items()}
-                for b in range(batch_size)
-            ]
-        else:
-            per_batch_obs = [observations[b : b + 1] for b in range(batch_size)]
-
-        # Build batch-level jobs
-        job_args = [
-            (
-                narrator,
-                config.task,
-                per_batch_obs[b],
-                is_first_indices[b],
-                batch_length,
-            )
-            for b in range(batch_size)
-        ]
-
-        # Parallel narrations
-        with ProcessPoolExecutor(max_workers=28) as executor:
-            batch_narrations = list(executor.map(narrate_whole_batch, job_args))
-        narrations = [n for batch in batch_narrations for n in batch]
-        print(f"Number of narrations: {len(narrations)}")
+        narrations = []
+        for b in range(batch_size):
+            start_timestep = 0
+            for t in range(batch_length):
+                if is_first_indices[b, t] == 1:
+                    start_timestep = t
+                narration = process_narration_batch(
+                    observations,
+                    narrator,
+                    b,
+                    start_timestep,
+                    t + 1,
+                    config.task,
+                    batch_size,
+                    batch_length,
+                )
+                narrations.append(narration)
 
         narration_tokens = word_tokenise_text(narrations, vocab, max_narration_length)
         return torch.tensor(narration_tokens, dtype=torch.long).to(device)
