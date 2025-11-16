@@ -850,6 +850,7 @@ def compute_translation_metrics(
     task_name: str,
     remove_punc: bool = True,
     lower_case: bool = True,
+    metrics: List[str] = ["bleu"],
 ) -> Dict[str, float]:
     """Computes a multitude of evaluation metrics between the generated translation
     and the ground-truth translation. The following metrics are computed:
@@ -901,64 +902,76 @@ def compute_translation_metrics(
     generated_translation_no_stopwords = " ".join(generated_translation_no_stopwords)
     true_translation_no_stopwords = " ".join(true_translation_no_stopwords)
 
-    # ----- BLEU SCORE --------
-    try:
-        translation_metrics["bleu_score"] = float(
-            bleu_metric_from_strings(
-                generated_translation,
-                true_translation,
+    if "bleu" in metrics:
+        # ----- BLEU SCORE --------
+        try:
+            translation_metrics["bleu_score"] = float(
+                bleu_metric_from_strings(
+                    generated_translation,
+                    true_translation,
+                )
             )
-        )
-    except ValueError:
-        translation_metrics["bleu_score"] = 0.0
-    try:
-        translation_metrics["bleu_score_no_stopwords"] = float(
-            bleu_metric_from_strings(
-                generated_translation_no_stopwords,
-                true_translation_no_stopwords,
+        except ValueError:
+            translation_metrics["bleu_score"] = 0.0
+        try:
+            translation_metrics["bleu_score_no_stopwords"] = float(
+                bleu_metric_from_strings(
+                    generated_translation_no_stopwords,
+                    true_translation_no_stopwords,
+                )
             )
+        except ValueError:
+            translation_metrics["bleu_score_no_stopwords"] = 0.0
+    if "meteor" in metrics:
+        # ----- METEOR SCORE --------
+        translation_metrics["meteor"] = compute_meteor_score(
+            generated_translation, true_translation
         )
-    except ValueError:
-        translation_metrics["bleu_score_no_stopwords"] = 0.0
-    # ----- METEOR SCORE --------
-    translation_metrics["meteor"] = compute_meteor_score(
-        generated_translation, true_translation
-    )
-    translation_metrics["meteor_no_stopwords"] = compute_meteor_score(
-        generated_translation_no_stopwords, true_translation_no_stopwords
-    )
-    # ----- ROUGE SCORE --------
-    rouge_scores = compute_rouge_score(generated_translation, true_translation)
-    rouge_scores_no_stopwords = compute_rouge_score(
-        generated_translation_no_stopwords, true_translation_no_stopwords
-    )
-    rouge_scores_no_stopwords = {
-        f"{k}_no_stopwords": v for k, v in rouge_scores_no_stopwords.items()
-    }
+        translation_metrics["meteor_no_stopwords"] = compute_meteor_score(
+            generated_translation_no_stopwords, true_translation_no_stopwords
+        )
+    if "rouge" in metrics:
+        # ----- ROUGE SCORE --------
+        rouge_scores = compute_rouge_score(generated_translation, true_translation)
+        rouge_scores_no_stopwords = compute_rouge_score(
+            generated_translation_no_stopwords, true_translation_no_stopwords
+        )
+        rouge_scores_no_stopwords = {
+            f"{k}_no_stopwords": v for k, v in rouge_scores_no_stopwords.items()
+        }
 
-    translation_metrics.update(rouge_scores)
-    translation_metrics.update(rouge_scores_no_stopwords)
-    # ----- Word Error Rate --------
-    translation_metrics["wer"] = float(
-        calculate_wer(generated_translation, true_translation)
-    )
-    translation_metrics["wer_no_stopwords"] = float(
-        calculate_wer(generated_translation_no_stopwords, true_translation_no_stopwords)
-    )
-    # ----- Translation Edit Rate --------
-    translation_metrics["ter"] = float(
-        compute_ter(generated_translation, true_translation)
-    )
-    translation_metrics["ter_no_stopwords"] = float(
-        compute_ter(generated_translation_no_stopwords, true_translation_no_stopwords)
-    )
-    # ----- chrF SCORE --------
-    translation_metrics["chrf"] = float(
-        compute_chrf(generated_translation, true_translation)
-    )
-    translation_metrics["chrf_no_stopwords"] = float(
-        compute_chrf(generated_translation_no_stopwords, true_translation_no_stopwords)
-    )
+        translation_metrics.update(rouge_scores)
+        translation_metrics.update(rouge_scores_no_stopwords)
+    if "wer" in metrics:
+        # ----- Word Error Rate --------
+        translation_metrics["wer"] = float(
+            calculate_wer(generated_translation, true_translation)
+        )
+        translation_metrics["wer_no_stopwords"] = float(
+            calculate_wer(
+                generated_translation_no_stopwords, true_translation_no_stopwords
+            )
+        )
+    if "ter" in metrics:
+        # ----- Translation Edit Rate --------
+        translation_metrics["ter"] = float(
+            compute_ter(generated_translation, true_translation)
+        )
+        translation_metrics["ter_no_stopwords"] = float(
+            compute_ter(
+                generated_translation_no_stopwords, true_translation_no_stopwords
+            )
+        )
+    if "chrf" in metrics:
+        # ----- chrF SCORE --------
+        translation_metrics["chrf"] = float(
+            compute_chrf(generated_translation, true_translation)
+        )
+        translation_metrics["chrf_no_stopwords"] = float(
+            compute_chrf(
+                generated_translation_no_stopwords, true_translation_no_stopwords
+            )
+        )
 
     return translation_metrics
 
@@ -1440,11 +1453,13 @@ def evaluate_rollouts(
                     imagined_plan_translation,
                     actual_narration,
                     config.task,
+                    metrics=config.translation_metrics,
                 )
                 reconstructed_translation_metrics = compute_translation_metrics(
                     reconstructed_plan_translation,
                     actual_narration,
                     config.task,
+                    metrics=config.translation_metrics,
                 )
 
                 update_running_metrics(

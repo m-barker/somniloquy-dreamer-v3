@@ -51,13 +51,15 @@ defaults:
   multiple_reward_heads: False
 
   # Translation Evaluation
-  save_plots: False
-  save_translations: False
+  save_plots: True
+  save_translations: True
   n_translation_eval_episodes: 15
   eval_trajectory_length: 15
   n_consecutive_plans: -1 # -1 means whole episode
   stochastic_env: False
   n_stochastic_plan_samples: 30
+  # Can contain any of "bleu", "meteor" "rogue" "ter" "wer" "chrf"
+  translation_metrics: ["bleu"]
 
   use_bert_transformer: True
 
