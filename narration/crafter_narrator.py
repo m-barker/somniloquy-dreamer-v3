@@ -300,7 +300,7 @@ class CrafterNarrator:
         achievement_str = ""
 
         for key, count in zip(keys, positive_counts):
-            if count > 0:
+            if count > 0 and key in map_name.keys():
                 achievement_str += map_name[key].format(count)
 
         return achievement_str
