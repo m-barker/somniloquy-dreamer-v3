@@ -9,6 +9,8 @@ import time
 import random
 import json
 from typing import List, Union, Optional, Tuple, Dict
+from concurrent.futures import ProcessPoolExecutor
+import copy
 import numpy as np
 
 import torch
@@ -1345,6 +1347,22 @@ def word_tokenise_text(
     return np.array(tokenised_text, dtype=np.int32)
 
 
+def narrate_worker(args):
+    narrator, b, start, end, task, batch, batch_length = args
+
+    local_narrator = copy.deepcopy(narrator)
+    return process_narration_batch(
+        batch,
+        local_narrator,
+        0,
+        start,
+        end,
+        task,
+        1,
+        batch_length,
+    )
+
+
 def generate_batch_narrations(
     narrator,
     observations: Union[np.ndarray, torch.Tensor, Dict],
@@ -1380,27 +1398,37 @@ def generate_batch_narrations(
         is_first_indices = is_first_indices.detach().cpu().numpy()
 
     if obs_per_narration == -1:
+        # Pre-slice batches so workers only receive small payloads
+        if isinstance(observations, dict):
+            single_batches = []
+            for b in range(batch_size):
+                single_batches.append(
+                    {key: value[b : b + 1] for key, value in observations.items()}
+                )
+        else:
+            single_batches = [observations[b : b + 1] for b in range(batch_size)]
         narrations = []
+
+        jobs = []
         for b in range(batch_size):
             start_timestep = 0
             for t in range(batch_length):
                 if is_first_indices[b, t] == 1:
                     start_timestep = t
-                narration = process_narration_batch(
-                    observations,
-                    narrator,
-                    b,
-                    start_timestep,
-                    t + 1,
-                    config.task,
-                    batch_size,
-                    batch_length,
-                )
-                narrations.append(narration)
-        start = time.perf_counter()
+                jobs.append((b, start_timestep, t + 1))
+
+        # Build arguments for workers
+        job_args = [
+            (b, start, end, config.task, single_batches[b], batch_length)
+            for (b, start, end) in jobs
+        ]
+
+        # Parallel narrations
+        with ProcessPoolExecutor(max_workers=None) as executor:
+            narrations = list(executor.map(narrate_worker, job_args))
+        print(f"Number of narrations: {len(narrations)}")
+
         narration_tokens = word_tokenise_text(narrations, vocab, max_narration_length)
-        end = time.perf_counter()
-        print(f"Word tokenisation time: {end - start:.6f} seconds")
         return torch.tensor(narration_tokens, dtype=torch.long).to(device)
 
     for batch_idx in range(batch_size):
