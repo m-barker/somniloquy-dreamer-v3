@@ -171,7 +171,7 @@ defaults:
       out_head_dim: 256,
       activation: "relu",
       loss_scale: 1.0,
-      loss_agg: "mean",
+      loss_agg: "sum",
     }
   dyn_scale: 1.0
   rep_scale: 0.1
@@ -259,7 +259,7 @@ crafter-language:
   enc_max_length: 16
   dec_max_length: 150
   vocab_path: vocab/crafter.json
-  use_bert_transformer: True,
+  use_bert_transformer: True
   narrator: { narration_key: ["semantic", "inventory", "achievements"] }
   no_convert_list: ["semantic", "inventory", "achievements"]
   actor: { dist: "onehot", std: "none" }
