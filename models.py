@@ -556,9 +556,9 @@ class WorldModel(nn.Module):
         narration_keys = self._config.narrator["narration_key"]
 
         if type(narration_keys) is list:
-            narration_data = {k: deepcopy(data[k]) for k in narration_keys}
+            narration_data = {k: data[k].copy() for k in narration_keys}
         else:
-            narration_data = deepcopy(data[narration_keys])
+            narration_data = data[narration_keys].copy()
         if type(narration_data) is dict:
             if len(narration_data.keys()) == 1:  # type: ignore
                 narration_data = narration_data[list(narration_data.keys())[0]]  # type: ignore
@@ -715,6 +715,48 @@ class WorldModel(nn.Module):
 
     # this function is called during both rollout and training
     def preprocess(self, obs, keys_to_ignore: Optional[List[str]] = None):
+        ignore = set(keys_to_ignore or [])
+
+        # Convert image first (GPU conversion done only once)
+        img = obs["image"]
+        img = torch.as_tensor(img, device=self.device, dtype=torch.float32) / 255.0
+
+        # Convert discount once
+        if "discount" in obs:
+            discount = torch.as_tensor(
+                obs["discount"], device=self.device, dtype=torch.float32
+            ).unsqueeze(-1)
+            discount *= self._config.discount
+        else:
+            discount = None
+
+        is_first = torch.as_tensor(
+            obs["is_first"], device=self.device, dtype=torch.float32
+        )
+        is_terminal = torch.as_tensor(
+            obs["is_terminal"], device=self.device, dtype=torch.float32
+        )
+
+        # cont = 1 - terminal
+        cont = (1.0 - is_terminal).unsqueeze(-1)
+
+        out = {
+            "image": img,
+            "is_first": is_first,
+            "is_terminal": is_terminal,
+            "cont": cont,
+        }
+
+        if discount is not None:
+            out["discount"] = discount
+
+        # Convert all remaining keys in **one compact loop**
+        for k, v in obs.items():
+            if k in out or k in ignore:
+                continue
+            out[k] = torch.as_tensor(v, device=self.device)
+
+        return out
         ignore = keys_to_ignore or []
         obs = obs.copy()
         obs["image"] = torch.Tensor(obs["image"]) / 255.0
