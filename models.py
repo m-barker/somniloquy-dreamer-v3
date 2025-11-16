@@ -318,7 +318,9 @@ class WorldModel(nn.Module):
             self.device,
             data["is_first"],
             config=self._config,
-        ).reshape(-1, self._narration_max_dec_seq)
+        )
+        if len(narrations) > 2:
+            narrations = narrations.reshape(-1, self._narration_max_dec_seq)
         # Shape (batch, seq_len, latent_state_dim)
         feat = self.dynamics.get_feat(post)
         feat = feat if language_grads else feat.detach()

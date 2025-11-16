@@ -1379,6 +1379,27 @@ def generate_batch_narrations(
     if type(is_first_indices) == torch.Tensor:
         is_first_indices = is_first_indices.detach().cpu().numpy()
 
+    if obs_per_narration == -1:
+        narrations = []
+        for b in range(batch_size):
+            start_timestep = 0
+            for t in range(batch_length):
+                if is_first_indices[b, t] == 1:
+                    start_timestep = t
+                narration = process_narration_batch(
+                    observations,
+                    narrator,
+                    b,
+                    start_timestep,
+                    t + 1,
+                    config.task,
+                    batch_size,
+                    batch_length,
+                )
+                narrations.append(narration)
+        narration_tokens = word_tokenise_text(narrations, vocab, max_narration_length)
+        return torch.tensor(narration_tokens, dtype=torch.long).to(device)
+
     for batch_idx in range(batch_size):
         batch_narrations: List[str] = []
         is_first_batch = is_first_indices[batch_idx]
@@ -1850,7 +1871,28 @@ def batchify_translator_input(
         actions = actions[:, 1:]
         action_sequences: List[torch.Tensor] = []
 
-    batch_size, batch_length, _ = latent_states.shape
+    batch_size, batch_length, dim = latent_states.shape
+
+    if seq_length == -1:
+        for b in range(batch_size):
+            state_history: List[torch.Tensor] = []
+            for t in range(batch_length):
+                if is_first_indices[b, t] == 1:
+                    state_history = []
+                latent_sequence = state_history + [latent_states[b, t]]
+                latent_sequence_tensor = torch.stack(latent_sequence)
+                print(f"Latent sequence tensor shape: {latent_sequence_tensor.shape}")
+                latent_tensor = torch.zeros((batch_length, dim))
+                latent_tensor[: len(state_history) + 1] = latent_sequence_tensor
+                padding_mask = torch.ones((batch_length))
+                padding_mask[: len(state_history) + 1] = 0.0
+
+                latent_sequences.append(latent_tensor)
+                padding_masks.append(padding_mask)
+                state_history.append(latent_states[b, t])
+        return torch.stack(latent_sequences).to(device), torch.stack(padding_masks).to(
+            device
+        )
 
     for batch_idx in range(batch_size):
         is_first_batch = is_first_indices[batch_idx].detach().cpu().numpy()
