@@ -182,20 +182,24 @@ class Dreamer(nn.Module):
 
     def _train(self, data):
         metrics = {}
-        start = time.perf_counter()
+        start_time = time.perf_counter()
         post, context, mets = self._wm._train(data, self._step)
-        end = time.perf_counter()
-        print(f"World model training for one batch took: {end - start:.6f} seconds")
+        end_time = time.perf_counter()
+        print(
+            f"World model training for one batch took: {end_time - start_time:.6f} seconds"
+        )
         metrics.update(mets)
         start = post
         reward = lambda f, s, a: self._wm.heads["reward"](
             self._wm.dynamics.get_feat(s)
         ).mode()
         if not self._random_actions:
-            start = time.perf_counter()
+            start_time = time.perf_counter()
             metrics.update(self._task_behavior._train(start, reward)[-1])
-            end = time.perf_counter()
-            print(f"Policy training for one batch took: {end - start:.6f} seconds")
+            end_time = time.perf_counter()
+            print(
+                f"Policy training for one batch took: {end_time - start_time:.6f} seconds"
+            )
         if self._config.expl_behavior != "greedy":
             mets = self._expl_behavior.train(start, context, data)[-1]
             metrics.update({"expl_" + key: value for key, value in mets.items()})
