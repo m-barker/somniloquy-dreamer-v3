@@ -500,148 +500,67 @@ def save_episodes(directory: pathlib.PurePath, episodes: dict) -> bool:
 
 
 def from_generator(generator, batch_size):
-    first = next(generator)
-    keys = list(first.keys())
-    seq_len = len(next(iter(first.values())))
-    shapes = {k: first[k].shape[1:] for k in keys}
-    dtypes = {k: first[k].dtype for k in keys}
-
-    buffer = [first]
-
     while True:
-        while len(buffer) < batch_size:
-            buffer.append(next(generator))
-
-        batch = {
-            k: np.zeros((batch_size, seq_len, *shapes[k]), dtype=dtypes[k])
-            for k in keys
-        }
-
-        for i in range(batch_size):
-            for k in keys:
-                batch[k][i] = buffer[i][k]
-
-        buffer = []
-
-        yield batch
-
-    # while True:
-    #     batch = []
-    #     for _ in range(batch_size):
-    #         batch.append(next(generator))
-    #     data = {}
-    #     for key in batch[0].keys():
-    #         data[key] = []
-    #         for i in range(batch_size):
-    #             data[key].append(batch[i][key])
-    #         data[key] = np.stack(data[key], 0)
-    #     yield data
+        batch = []
+        for _ in range(batch_size):
+            batch.append(next(generator))
+        data = {}
+        for key in batch[0].keys():
+            data[key] = []
+            for i in range(batch_size):
+                data[key].append(batch[i][key])
+            data[key] = np.stack(data[key], 0)
+        yield data
 
 
 def sample_episodes(episodes, length, seed=0):
-    rng = np.random.RandomState(seed)
-
+    np_random = np.random.RandomState(seed)
     while True:
-        # Recompute sampling distribution every iteration
-        # (required because replay buffer changes over time)
-        episode_list = list(episodes.values())
-        keys = [k for k in episode_list[0].keys() if "log_" not in k]
-
-        episode_lengths = np.array(
-            [len(ep[keys[0]]) for ep in episode_list], dtype=np.int32
+        size = 0
+        ret = None
+        p = np.array(
+            [len(next(iter(episode.values()))) for episode in episodes.values()]
         )
-
-        # Filter out episodes that are too short
-        valid = episode_lengths >= 2
-        episode_list = [ep for ep, ok in zip(episode_list, valid) if ok]
-        episode_lengths = episode_lengths[valid]
-
-        # Renormalize sampling probabilities
-        p = episode_lengths / episode_lengths.sum()
-
-        # Preallocate output
-        ret = {
-            k: np.zeros(
-                (length, *np.asarray(episode_list[0][k]).shape[1:]),
-                dtype=np.asarray(episode_list[0][k]).dtype,
-            )
-            for k in keys
-        }
-
-        filled = 0
-
-        while filled < length:
-            # Sample an episode proportional to its length
-            ep = rng.choice(episode_list, p=p)
-            total = len(ep[keys[0]])
-            remaining = length - filled
-
-            # First segment: start at random index inside the episode
-            if filled == 0:
-                start = rng.randint(0, total - 1)
+        p = p / np.sum(p)
+        while size < length:
+            episode = np_random.choice(list(episodes.values()), p=p)
+            total = len(next(iter(episode.values())))
+            # make sure at least one transition included
+            if total < 2:
+                continue
+            if not ret:
+                index = int(np_random.randint(0, total - 1))
+                ret = {
+                    k: v[index : min(index + length, total)].copy()
+                    for k, v in episode.items()
+                    if "log_" not in k
+                }
+                if "is_first" in ret:
+                    ret["is_first"][0] = True
             else:
-                start = 0
-
-            end = min(start + remaining, total)
-            cnt = end - start
-
-            for k in keys:
-                ret[k][filled : filled + cnt] = ep[k][start:end]
-
-            if "is_first" in ret:
-                ret["is_first"][filled] = True
-
-            filled += cnt
-
+                # 'is_first' comes after 'is_last'
+                index = 0
+                possible = length - size
+                try:
+                    ret = {
+                        k: np.append(
+                            ret[k],
+                            v[index : min(index + possible, total)].copy(),
+                            axis=0,
+                        )
+                        for k, v in episode.items()
+                        if "log_" not in k
+                    }
+                except ValueError:
+                    for k, v in episode.items():
+                        print(f"KEY {k}")
+                        for value in v:
+                            print(f"VALUE SHAPE {value.shape}")
+                    raise ValueError
+                if "is_first" in ret:
+                    ret["is_first"][size] = True
+            size = len(next(iter(ret.values())))
         yield ret
-
-    # np_random = np.random.RandomState(seed)
-    # while True:
-    #     size = 0
-    #     ret = None
-    #     p = np.array(
-    #         [len(next(iter(episode.values()))) for episode in episodes.values()]
-    #     )
-    #     p = p / np.sum(p)
-    #     while size < length:
-    #         episode = np_random.choice(list(episodes.values()), p=p)
-    #         total = len(next(iter(episode.values())))
-    #         # make sure at least one transition included
-    #         if total < 2:
-    #             continue
-    #         if not ret:
-    #             index = int(np_random.randint(0, total - 1))
-    #             ret = {
-    #                 k: v[index : min(index + length, total)].copy()
-    #                 for k, v in episode.items()
-    #                 if "log_" not in k
-    #             }
-    #             if "is_first" in ret:
-    #                 ret["is_first"][0] = True
-    #         else:
-    #             # 'is_first' comes after 'is_last'
-    #             index = 0
-    #             possible = length - size
-    #             try:
-    #                 ret = {
-    #                     k: np.append(
-    #                         ret[k],
-    #                         v[index : min(index + possible, total)].copy(),
-    #                         axis=0,
-    #                     )
-    #                     for k, v in episode.items()
-    #                     if "log_" not in k
-    #                 }
-    #             except ValueError:
-    #                 for k, v in episode.items():
-    #                     print(f"KEY {k}")
-    #                     for value in v:
-    #                         print(f"VALUE SHAPE {value.shape}")
-    #                 raise ValueError
-    #             if "is_first" in ret:
-    #                 ret["is_first"][size] = True
-    #         size = len(next(iter(ret.values())))
-    #     yield ret
 
 
 def load_episodes(directory, limit=None, reverse=True):
