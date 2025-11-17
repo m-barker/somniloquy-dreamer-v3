@@ -506,10 +506,7 @@ def from_generator(generator, batch_size):
             batch.append(next(generator))
         data = {}
         for key in batch[0].keys():
-            data[key] = []
-            for i in range(batch_size):
-                data[key].append(batch[i][key])
-            data[key] = np.stack(data[key], 0)
+            data[key] = np.stack([sample[key] for sample in batch], axis=0)
         yield data
 
 
@@ -522,6 +519,7 @@ def sample_episodes(episodes, length, seed=0):
             [len(next(iter(episode.values()))) for episode in episodes.values()]
         )
         p = p / np.sum(p)
+
         while size < length:
             episode = np_random.choice(list(episodes.values()), p=p)
             total = len(next(iter(episode.values())))
@@ -533,7 +531,7 @@ def sample_episodes(episodes, length, seed=0):
                 ret = {
                     k: v[index : min(index + length, total)].copy()
                     for k, v in episode.items()
-                    if "log_" not in k
+                    if ("log_" not in k) and ("high_res_image" not in k)
                 }
                 if "is_first" in ret:
                     ret["is_first"][0] = True
@@ -542,15 +540,19 @@ def sample_episodes(episodes, length, seed=0):
                 index = 0
                 possible = length - size
                 try:
-                    ret = {
-                        k: np.append(
-                            ret[k],
-                            v[index : min(index + possible, total)].copy(),
-                            axis=0,
-                        )
-                        for k, v in episode.items()
-                        if "log_" not in k
-                    }
+                    for k, v in episode.items():
+                        if "log_" in k or "high_res_image" in k:
+                            continue
+                        ret[k].extend(v[index : min(index + possible, total)].copy())
+                    # ret = {
+                    #     k: np.append(
+                    #         ret[k],
+                    #         v[index : min(index + possible, total)].copy(),
+                    #         axis=0,
+                    #     )
+                    #     for k, v in episode.items()
+                    #     if "log_" not in k
+                    # }
                 except ValueError:
                     for k, v in episode.items():
                         print(f"KEY {k}")
