@@ -1,3 +1,4 @@
+import time
 import argparse
 import functools
 import os
@@ -101,7 +102,10 @@ class Dreamer(nn.Module):
                 else self._should_train(step)
             )
             for _ in range(steps):
+                train_start = time.perf_counter()
                 self._train(next(self._dataset))
+                train_end = time.perf_counter()
+                print(f"One training batch took: {train_end - train_start:.6f} seconds")
                 self._update_count += 1
                 self._metrics["update_count"] = self._update_count
             if self._should_log(step):

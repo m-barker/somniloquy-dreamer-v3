@@ -269,6 +269,7 @@ def simulate(
             # agent_state is tuple (latent, action), where latent is the latent dict and
             # action is a dict of action, logprob
             action, agent_state = agent(obs, done, agent_state)
+            start_time = time.perf_counter()
             if isinstance(action, dict):
                 action = [
                     {k: np.array(action[k][i].detach().cpu()) for k in action}
@@ -383,6 +384,10 @@ def simulate(
             while len(cache) > 1:
                 # FIFO
                 cache.popitem(last=False)  # type: ignore
+        end_time = time.perf_counter()
+        print(
+            f"Stepping environments and adding to cache took: {end_time - start_time:.6f} seconds"
+        )
     return (step - steps, episode - episodes, done, length, obs, agent_state, reward)
 
 

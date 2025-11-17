@@ -604,7 +604,7 @@ class WorldModel(nn.Module):
         if extra_reward_data is not None:
             data.update(extra_reward_data)
         end = time.perf_counter()
-        print(f"Pre-processing time: {end - start:.6f} seconds")
+        # print(f"Pre-processing time: {end - start:.6f} seconds")
         with tools.RequiresGrad(self):
             with torch.cuda.amp.autocast(self._use_amp):
                 start = time.perf_counter()
@@ -619,7 +619,7 @@ class WorldModel(nn.Module):
                     post, prior, kl_free, dyn_scale, rep_scale
                 )
                 end = time.perf_counter()
-                print(f"World model time: {end - start:.6f} seconds")
+                # print(f"World model time: {end - start:.6f} seconds")
                 assert kl_loss.shape == embed.shape[:2], kl_loss.shape
                 preds = {}
                 for name, head in self.heads.items():
@@ -633,7 +633,7 @@ class WorldModel(nn.Module):
                             baseline=self._config.translation_baseline,
                         )
                         end = time.perf_counter()
-                        print(f"Translation time: {end - start:.6f} seconds")
+                        # print(f"Translation time: {end - start:.6f} seconds")
                     else:
                         grad_head = name in self._config.grad_heads
                         # Shape (batch, seq_len, latent_state_dim)
@@ -653,7 +653,7 @@ class WorldModel(nn.Module):
                             pred, narrations[:, 1:], self._language_loss_agg
                         )
                         end = time.perf_counter()
-                        print(f"Translation loss time: {end - start:.6f} seconds")
+                        # print(f"Translation loss time: {end - start:.6f} seconds")
                         losses[name] = loss * self._scales["language"]
                     else:
                         loss = -pred.log_prob(data[name])
@@ -683,7 +683,7 @@ class WorldModel(nn.Module):
                     self.parameters(),
                 )
                 end = time.perf_counter()
-                print(f"Weight update time: {end - start:.6f} seconds")
+                # print(f"Weight update time: {end - start:.6f} seconds")
             else:
                 metrics = self._model_opt(
                     torch.mean(model_loss),
