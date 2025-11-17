@@ -203,11 +203,16 @@ class Dreamer(nn.Module):
         if self._config.expl_behavior != "greedy":
             mets = self._expl_behavior.train(start, context, data)[-1]
             metrics.update({"expl_" + key: value for key, value in mets.items()})
+        start_time = time.perf_counter()
         for name, value in metrics.items():
             if not name in self._metrics.keys():
                 self._metrics[name] = [value]
             else:
                 self._metrics[name].append(value)
+        end_time = time.perf_counter()
+        print(
+            f"Metric update time for one batch took: {end_time - start_time:.6f} seconds"
+        )
 
 
 def count_steps(folder):
