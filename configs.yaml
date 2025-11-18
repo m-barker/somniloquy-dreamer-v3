@@ -30,6 +30,7 @@ defaults:
   conditional_policy_attempts: 15
   conditional_epsilon: 0.1
   wandb: True
+  wandb_run_name: "somniloquy"
   play: "no"
 
   # Change these if just learning a dynamics model
