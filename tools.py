@@ -953,24 +953,6 @@ class Optimizer:
         self._scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     def single_update(self, loss, params, retain_graph=True):
-        metrics = {}
-        self._opt.zero_grad(set_to_none=True)
-
-        # backward
-        scaled_loss = self._scaler.scale(loss)
-        scaled_loss.backward()
-
-        # unscale + clip
-        self._scaler.unscale_(self._opt)
-        norm = torch.nn.utils.clip_grad_norm_(
-            self._opt.param_groups[0]["params"], self._clip
-        )
-
-        self._scaler.step(self._opt)
-        self._scaler.update()
-
-        metrics[f"{self._name}_grad_norm"] = norm.item()
-        return metrics
         assert len(loss.shape) == 0, loss.shape
         metrics = {}
         metrics[f"{self._name}_loss"] = loss.detach().cpu().numpy()
