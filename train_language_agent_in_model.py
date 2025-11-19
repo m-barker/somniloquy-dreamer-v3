@@ -66,6 +66,10 @@ class LanguageAgent:
 
         self.rewards = []
 
+        self._reward_cache: Dict[str, float] = {}
+        self._sentence_embed_model = None
+        self._goal_embedding = None
+        self._nli_model = None
         # If true, uses the learned reward head for the given natural
         # language goal. Used for comparison with language reward
         self._use_learned_reward = use_learned_reward
@@ -214,22 +218,44 @@ class LanguageAgent:
         embedding_model_name: str = "all-MiniLM-L6-v2",
         threshold: Optional[float] = None,
     ) -> List[float]:
-        model = SentenceTransformer(embedding_model_name)
-        goal_embedding = model.encode([self.language_goal])
+        if self._sentence_embed_model is None:
+            self._sentence_embed_model = SentenceTransformer(embedding_model_name)
+        if self._goal_embedding is None:
+            self._goal_embedding = self._sentence_embed_model.encode(
+                [self.language_goal]
+            )
         if isinstance(latent_translation, str):
             latent_translation = [latent_translation]
-        translation_embeddings = model.encode(latent_translation)
 
-        # Shape (1, N) where N is the number of translations
-        similarities = model.similarity(goal_embedding, translation_embeddings)
-        # Shape (N)
-        similarities = similarities.squeeze(0)
-        cosine_scores = similarities.tolist()
+        new_translations = []
+        # Initialise rewards to 0.0
+        reward = [0.0 for _ in latent_translation]
+        for idx, t in enumerate(latent_translation):
+            if t in self._reward_cache:
+                reward[idx] = self._reward_cache[t]
+            else:
+                new_translations.append((idx, t))
 
-        if threshold:
-            cosine_scores = [s if s > threshold else 0.0 for s in cosine_scores]
+        if len(new_translations) > 0:
+            translation_embeddings = self._sentence_embed_model.encode(
+                [x[1] for x in new_translations]
+            )
+            # Shape (1, N) where N is the number of translations
+            similarities = self._sentence_embed_model.similarity(
+                self._goal_embedding, translation_embeddings
+            )
+            # Shape (N)
+            similarities = similarities.squeeze(0)
+            cosine_scores = similarities.tolist()
 
-        return cosine_scores
+            if threshold:
+                cosine_scores = [s if s > threshold else 0.0 for s in cosine_scores]
+
+            for idx, score in enumerate(cosine_scores):
+                reward[new_translations[idx][0]] = score
+                self._reward_cache[new_translations[idx][1]] = score
+
+        return reward
 
     def _entailment_model_reward(
         self,
@@ -253,33 +279,48 @@ class LanguageAgent:
             threshold (optional, float): If not None, sets a minimum confidence
             entailment threshold for non-zero reward. Defaults to None.
         """
-        nli = pipeline(
-            "text-classification",
-            model=entailment_model_name,
-            top_k=None,
-            device=self._world_model._config.device,
-        )
+        if self._nli_model is None:
+            self._nli_model = pipeline(
+                "text-classification",
+                model=entailment_model_name,
+                top_k=None,
+                device=self._world_model._config.device,
+            )
 
         hypothesis = self.language_goal
 
         if isinstance(latent_translation, str):
             latent_translation = [latent_translation]
 
-        pairs = [f"{premise} </s><s> {hypothesis}" for premise in latent_translation]
+        new_translations = []
+        # Initialise rewards to 0.0
+        reward = [0.0 for _ in latent_translation]
+        for idx, t in enumerate(latent_translation):
+            if t in self._reward_cache:
+                reward[idx] = self._reward_cache[t]
+            else:
+                new_translations.append((idx, t))
 
-        results = nli(pairs)
-        reward = []
-        if results:
-            for res in results:
-                if res:
-                    for r in res:
-                        if r["label"] == "entailment":
-                            reward.append(r["score"])
-        else:
-            raise ValueError("No entailment results found")
+        if len(new_translations) > 0:
+            pairs = [
+                f"{premise[1]} </s><s> {hypothesis}" for premise in new_translations
+            ]
 
-        if threshold:
-            reward = [r if r > threshold else 0.0 for r in reward]
+            results = self._nli_model(pairs)
+            if results:
+                for idx, res in enumerate(results):
+                    if res:
+                        for r in res:
+                            if r["label"] == "entailment":
+                                reward[new_translations[idx][0]] = r["score"]
+                                self._reward_cache[new_translations[idx][1]] = r[
+                                    "score"
+                                ]
+            else:
+                raise ValueError("No entailment results found")
+
+            if threshold:
+                reward = [r if r > threshold else 0.0 for r in reward]
 
         return reward
 
