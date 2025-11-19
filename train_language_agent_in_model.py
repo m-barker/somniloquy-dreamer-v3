@@ -82,7 +82,10 @@ class LanguageAgent:
 
         self.task = task
 
-        self._manually_calculate_continues = reward_assignment_method == "once"
+        self._manually_calculate_continues = (
+            reward_assignment_method == "once"
+            and reward_entailment_method == "substring"
+        )
 
         self._initialise_wm()
 
@@ -427,6 +430,8 @@ class LanguageAgent:
                         string_plan_translations_array[:, batch]
                     ):
                         r = 0.0
+                        best_r = 0.0
+                        best_idx = 0
                         if self._reward_entailment_method == "substring":
                             if self.language_goal in plan_translation:
                                 reward[idx][batch] = 1.0
@@ -445,11 +450,11 @@ class LanguageAgent:
                             raise ValueError(
                                 f"Unhandled reward entailment method: {self._reward_entailment_method}"
                             )
-                        if r > 0.0:
-                            reward[idx][batch] = r
-                            if continues is not None:
-                                continues[idx:, batch] = 0.0
-                            break
+                        if r > best_r:
+                            best_r = r
+                            best_idx = idx
+                    if self._reward_entailment_method != "substring":
+                        reward[best_idx][batch] = best_r
             else:
                 # (T, B) -> TxB
                 flattened_translations = string_plan_translations_array.flatten()
