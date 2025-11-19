@@ -710,9 +710,12 @@ class LanguageAgent:
                     )
                     eval_reward += step_reward
                 elif "crafter" in self.task:
-                    goal_achieved, eval_reward = self._calculate_crafter_true_reward(
-                        info
-                    )
+                    try:
+                        goal_achieved, eval_reward = (
+                            self._calculate_crafter_true_reward(info)
+                        )
+                    except ValueError:
+                        goal_achieved = False
                 done = done or goal_achieved
             # (T, H, W, C)
             video_array = np.stack(rgb_obs, axis=0)
