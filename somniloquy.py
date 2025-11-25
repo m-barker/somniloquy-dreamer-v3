@@ -375,6 +375,7 @@ def make_env(config, mode, id):
             terminate=config.env_terminate,
             fixed_env=fixed_env,
             fixed_seed=fixed_env_seed,
+            full_obs=config.full_obs,
         )
     else:
         raise NotImplementedError(suite)
