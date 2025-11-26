@@ -377,6 +377,15 @@ def make_env(config, mode, id):
             fixed_seed=fixed_env_seed,
             full_obs=config.full_obs,
         )
+    elif suite == "safetygymnasium":
+        import envs.safety_gymnasium_env as safety_gymnasium_env
+
+        env = safety_gymnasium_env.SafeNavigationWrapper(
+            task_name=task,
+            image_size=config.size,
+            seed=config.seed,
+            max_steps=config.time_limit,
+        )
     else:
         raise NotImplementedError(suite)
     env = wrappers.TimeLimit(env, config.time_limit)
