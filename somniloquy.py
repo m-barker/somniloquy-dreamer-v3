@@ -105,13 +105,9 @@ class Dreamer(nn.Module):
                 data_start = time.perf_counter()
                 data = next(self._dataset)
                 data_end = time.perf_counter()
-                print(
-                    f"Sampling one replay buffer batch took: {data_end - data_start:.6f} seconds"
-                )
                 train_start = time.perf_counter()
                 self._train(data)
                 train_end = time.perf_counter()
-                print(f"One training batch took: {train_end - train_start:.6f} seconds")
                 self._update_count += 1
                 self._metrics["update_count"] = self._update_count
             if self._should_log(step):
@@ -191,9 +187,6 @@ class Dreamer(nn.Module):
         start_time = time.perf_counter()
         post, context, mets = self._wm._train(data, self._step)
         end_time = time.perf_counter()
-        print(
-            f"World model training for one batch took: {end_time - start_time:.6f} seconds"
-        )
         metrics.update(mets)
         start = post
         reward = lambda f, s, a: self._wm.heads["reward"](
@@ -203,9 +196,6 @@ class Dreamer(nn.Module):
             start_time = time.perf_counter()
             metrics.update(self._task_behavior._train(start, reward)[-1])
             end_time = time.perf_counter()
-            print(
-                f"Policy training for one batch took: {end_time - start_time:.6f} seconds"
-            )
         if self._config.expl_behavior != "greedy":
             mets = self._expl_behavior.train(start, context, data)[-1]
             metrics.update({"expl_" + key: value for key, value in mets.items()})

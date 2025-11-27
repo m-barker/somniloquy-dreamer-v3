@@ -1426,6 +1426,24 @@ crafter-language-100m-train-language-agent:
   # False, as now we are learning a policy in the world model
   random_actions: False
 
+safetygymnasium-12m:
+  task: safetygymnasium_SafetyPointGoal2-v0
+  steps: 1e7
+  action_repeat: 1
+  envs: 1
+  eval_episode_num: 1
+  eval_every: 5000
+  train_ratio: 512
+  video_pred_log: true
+  log_every: 100
+  enable_language: false
+  encoder: { cnn_depth: 16 }
+  decoder: { cnn_depth: 16 }
+  dyn_hidden: 256
+  dyn_deter: 2048
+  units: 256
+
+
 debug:
   debug: True
   pretrain: 1

@@ -685,7 +685,7 @@ class WorldModel(nn.Module):
                 end = time.perf_counter()
                 # print(f"Weight update time: {end - start:.6f} seconds")
             else:
-                metrics = self._model_opt(
+                metrics = self._model_opt.single_update(
                     torch.mean(model_loss),
                     self.parameters(),
                 )

@@ -380,9 +380,6 @@ def simulate(
                                 )
                             eval_done = True
             end_time = time.perf_counter()
-            print(
-                f"Stepping environment and adding to cache took: {end_time - start_time:.6f} seconds"
-            )
         if is_eval:
             # keep only last item for saving memory. this cache is used for video_pred later
             while len(cache) > 1:
