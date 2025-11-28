@@ -1312,9 +1312,8 @@ babyai-language-100m-multiple-reward-heads-train-agent:
   language_grads: True
 
   # Network specification
-  decoder: { cnn_sigmoid: True }
   actor: { dist: "onehot", std: "none" }
-  translator_head: { loss_scale: 10.0, loss_agg: "sum" }
+  translator_head: { loss_scale: 1.0, loss_agg: "sum" }
   use_bert_transformer: True
 
   narrator: { narration_key: ["occupancy_grid", "agent_direction"] }
