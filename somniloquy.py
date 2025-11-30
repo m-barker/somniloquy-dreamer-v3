@@ -36,6 +36,7 @@ from narration.minigrd_narrator import (
 )
 from narration.safetygym_narrator import IslandNavigationNarrator
 from narration.ai2thor_narrator import CookEggNarrator
+from narration.safety_gymnasium_narrator import SafetyGymnasiumNavigationNarrator
 from evaluation import (
     sample_rollouts,
     evaluate_rollouts,
@@ -241,6 +242,8 @@ def configure_narrator(config):
     elif "babyai" in config.task:
         simple = config.simple_narrator
         narrator = BabyAIGoToLocNarrator(simple_narrator=simple)
+    elif "safetygymnasium" in config.task:
+        narrator = SafetyGymnasiumNavigationNarrator()
     else:
         raise ValueError(f"{config.task} has no valid narrator")
 
