@@ -41,4 +41,6 @@
     "stop": 39,
     "colliding": 40,
     "collision": 41
+    "decrease": 42,
+    "increase": 43,
 }
