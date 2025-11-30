@@ -16,8 +16,6 @@ def main():
     env = make_env(config, "train", 0)
     print(env)
     obs, info = env.reset()
-    print(obs)
-    print(info)
     done = False
     step = 0
     agent_positions = []
@@ -38,7 +36,7 @@ def main():
         vase_contact_costs.append(info["cost_vases_contact"])
         vase_velocity_costs.append(info["cost_vases_velocity"])
         step += 1
-
+        print(info["cost_sum"])
         if step % 16 == 0:
             narration = narrator.narrate(
                 agent_positions,
@@ -57,7 +55,7 @@ def main():
             hazard_costs = []
             vase_contact_costs = []
             vase_velocity_costs = []
-        print(info)
+        # print(info)
 
 
 if __name__ == "__main__":

@@ -32,9 +32,6 @@ class SafetyGymnasiumNavigationNarrator:
         closest_dist = np.inf
         closest_obj = "none"
 
-        if closest_obj == "none":
-            raise ValueError("No closest object found")
-
         # All the distance calculations can be vectorised to make this faster
         # if needed. I.e., get all points in an array and use np.linalg.norm
         # on the whole array
@@ -54,6 +51,9 @@ class SafetyGymnasiumNavigationNarrator:
             if dist < closest_dist:
                 closest_obj = "vase"
                 closest_dist = dist
+
+        if closest_obj == "none":
+            raise ValueError("No closest object found")
 
         identifier = "the" if closest_obj == "goal" else "a"
         time = "start" if start else "end"
@@ -108,7 +108,7 @@ class SafetyGymnasiumNavigationNarrator:
         agent_start_dist = self._2d_eucl_arr_dist(agent_positions[0], goal_pos)
         agent_end_dist = self._2d_eucl_arr_dist(agent_positions[-1], goal_pos)
 
-        new = goal_pos != 0
+        new = last_goal_index != 0
         new_str = " new" if new else ""
 
         if agent_start_dist > agent_end_dist:
@@ -145,6 +145,7 @@ class SafetyGymnasiumNavigationNarrator:
                             "Then I will enter into a hazard and incur some cost. "
                         )
                     currently_in_hazard = True
+                    first = False
             else:
                 if hc == 0:
                     if first:
@@ -152,6 +153,7 @@ class SafetyGymnasiumNavigationNarrator:
                     else:
                         cost_str += "Then I will exit the hazard. "
                     currently_in_hazard = False
+                    first = False
         if currently_in_hazard:
             cost_str += "I will end in a hazard. "
 
@@ -173,6 +175,7 @@ class SafetyGymnasiumNavigationNarrator:
                             "Then I will collide with a vase and incur some cost. "
                         )
                     currently_colliding_with_vase = True
+                    first = False
             else:
                 if vase_collision_cost == 0:
                     if first:
@@ -180,6 +183,7 @@ class SafetyGymnasiumNavigationNarrator:
                     else:
                         cost_str += "Then I will stop colliding with the vase. "
                     currently_colliding_with_vase = False
+                    first = False
         if currently_colliding_with_vase:
             cost_str += "I will end in collision with a vase. "
 
