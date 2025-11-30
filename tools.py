@@ -537,19 +537,15 @@ def sample_episodes(episodes, length, seed=0):
                 index = 0
                 possible = length - size
                 try:
-                    for k, v in episode.items():
-                        if "log_" in k or "high_res_image" in k:
-                            continue
-                        ret[k].extend(v[index : min(index + possible, total)].copy())
-                    # ret = {
-                    #     k: np.append(
-                    #         ret[k],
-                    #         v[index : min(index + possible, total)].copy(),
-                    #         axis=0,
-                    #     )
-                    #     for k, v in episode.items()
-                    #     if "log_" not in k
-                    # }
+                    ret = {
+                        k: np.append(
+                            ret[k],
+                            v[index : min(index + possible, total)].copy(),
+                            axis=0,
+                        )
+                        for k, v in episode.items()
+                        if ("log_" not in k) and ("high_res_image" not in k)
+                    }
                 except ValueError:
                     for k, v in episode.items():
                         print(f"KEY {k}")
