@@ -1498,6 +1498,7 @@ safetygymnasium-100m-language:
   enable_language: True
 
   narrator: {narration_key: ["agent_pos", "goal_pos", "hazards_pos", "vases_pos", "cost_hazards", "cost_vases_contact", "cost_vases_velocity"]}
+  no_convert_list: ["agent_pos", "goal_pos", "hazards_pos", "vases_pos", "cost_hazards", "cost_vases_contact", "cost_vases_velocity"]
   dec_max_length: 200
   enc_max_length: 16
   use_bert_transformer: true
