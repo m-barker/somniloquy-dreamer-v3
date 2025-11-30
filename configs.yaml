@@ -1485,6 +1485,25 @@ safetygymnasium-12m:
   dyn_deter: 2048
   units: 256
 
+safetygymnasium-100m-language:
+  task: safetygymnasium_SafetyPointGoal2-v0
+  steps: 1e7
+  action_repeat: 1
+  envs: 1
+  eval_episode_num: 1
+  eval_every: 10000
+  train_ratio: 512
+  video_pred_log: true
+  log_every: 100
+  enable_language: True
+
+  narrator: {narration_key: ["agent_pos", "goal_pos", "hazards_pos", "vases_pos", "cost_hazards", "cost_vases_contact", "cost_vases_velocity"]}
+  dec_max_length: 200
+  use_bert_transformer: true
+  vocab_path: vocab/safety_gymnasium_nav.json
+  n_translation_eval_episodes: 3
+
+
 
 debug:
   debug: True

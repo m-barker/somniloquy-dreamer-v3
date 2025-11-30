@@ -191,14 +191,15 @@ class SafetyGymnasiumNavigationNarrator:
 
     def narrate(
         self,
-        agent_positions: List[np.ndarray],
-        goal_positions: List[np.ndarray],
-        hazard_positions: List[List[np.ndarray]],
-        vase_positions: List[List[np.ndarray]],
-        hazard_costs: List[float],
-        vase_contact_costs: List[float],
-        vase_velocity_costs: List[float],
+        narration_data,
     ) -> str:
+        agent_positions = narration_data["agent_pos"]
+        goal_positions = narration_data["goal_pos"]
+        hazard_positions = narration_data["hazards_pos"]
+        vase_positions = narration_data["vases_pos"]
+        hazard_costs = narration_data["cost_hazards"]
+        vase_contact_costs = narration_data["cost_vases_contact"]
+        vase_velocity_costs = narration_data["cost_vases_velocity"]
         narration_str = ""
         narration_str += self._get_static_dist_str(
             True,
