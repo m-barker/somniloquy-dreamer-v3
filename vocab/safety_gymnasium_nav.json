@@ -42,5 +42,7 @@
     "colliding": 40,
     "collision": 41,
     "decrease": 42,
-    "increase": 43
+    "increase": 43,
+    "enter": 44,
+    "into": 45
 }
