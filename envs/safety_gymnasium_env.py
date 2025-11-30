@@ -1,5 +1,7 @@
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 import safety_gymnasium
+from safety_gymnasium.builder import BaseTask, Builder
+from safety_gymnasium.tasks.safe_navigation.goal.goal_level2 import GoalLevel2
 import gymnasium as gym
 import numpy as np
 import cv2
@@ -51,7 +53,10 @@ class SafeNavigationWrapper:
             seed [int, optional]: seed used for environment randomness. Defaults to 42.
         """
 
-        self.env = safety_gymnasium.make(task_name, render_mode="rgb_array")
+        env = safety_gymnasium.make(task_name, render_mode="rgb_array")
+        # assert isinstance(env, Builder), type(env)
+        self.env: Builder = env
+        self.task: BaseTask = self.env.task
         self._max_steps = max_steps
         self._img_size = image_size
         self._seed = seed
@@ -79,9 +84,12 @@ class SafeNavigationWrapper:
         Returns obs, info
         """
         obs, info = self.env.reset()
-        rgb_image = self.env.render()
-        assert isinstance(rgb_image, np.ndarray)
-        rgb_image = self._resize_image(rgb_image)
+        agent_pos, goal_pos, hazards_pos, vases_pos = self._get_position_data()
+
+        high_res_image = self.env.render()
+        assert isinstance(high_res_image, np.ndarray)
+        rgb_image = self._resize_image(high_res_image)
+
         self._step = 0
 
         return (
@@ -89,9 +97,46 @@ class SafeNavigationWrapper:
                 "image": rgb_image,
                 "is_terminal": False,
                 "is_first": True,
+                "high_res_image": high_res_image,
             },
-            {},
+            {
+                "agent_pos": agent_pos,
+                "goal_pos": goal_pos,
+                "hazards_pos": hazards_pos,
+                "vases_pos": vases_pos,
+                "cost_hazards": 0.0,
+                "cost_vases_contact": 0.0,
+                "cost_vases_velocity": 0.0,
+                "cost_sum": 0.0,
+            },
         )
+
+    def _get_position_data(
+        self,
+    ) -> Tuple[np.ndarray, np.ndarray, List[np.ndarray], List[np.ndarray]]:
+        """ """
+        obstacle_list = self.task._obstacles
+        goal = [x for x in obstacle_list if x.name == "goal"]
+        assert len(goal) == 1, f"More than one goal found {goal}"
+        goal = goal[0]
+
+        hazards = [x for x in obstacle_list if x.name == "hazards"]
+        assert len(hazards) == 1, f"More than one set of hazards found {hazards}"
+        hazards = hazards[0]
+        vases = [x for x in obstacle_list if x.name == "vases"]
+        assert len(vases) == 1, f"More than one set of vases found {vases}"
+        vases = vases[0]
+
+        goal_pos = goal.pos
+        hazards_pos = hazards.pos
+        vases_pos = vases.pos
+
+        assert isinstance(hazards_pos, List)
+        assert isinstance(vases_pos, List)
+
+        agent_pos = goal.agent.pos
+
+        return agent_pos, goal_pos, hazards_pos, vases_pos
 
     def step(self, action) -> Tuple[Dict, float, bool, Dict]:
         """
@@ -101,24 +146,33 @@ class SafeNavigationWrapper:
         """
 
         obs, reward, cost, terminated, truncated, info = self.env.step(action)
+        agent_pos, goal_pos, hazards_pos, vases_pos = self._get_position_data()
+
         self._step += 1
         if self._step >= self._max_steps:
             truncated = True
         done = bool(terminated or truncated)
 
-        rgb_image = self.env.render()
-        assert isinstance(rgb_image, np.ndarray)
-        rgb_image = self._resize_image(rgb_image)
+        high_res_image = self.env.render()
+        assert isinstance(high_res_image, np.ndarray)
+        rgb_image = self._resize_image(high_res_image)
 
         return (
             {
                 "image": rgb_image,
                 "is_terminal": terminated,
                 "is_first": False,
+                "high_res_image": high_res_image,
             },
             float(reward),
             done,
-            {},
+            {
+                "agent_pos": agent_pos,
+                "goal_pos": goal_pos,
+                "hazards_pos": hazards_pos,
+                "vases_pos": vases_pos,
+                **info,
+            },
         )
 
 
