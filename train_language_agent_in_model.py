@@ -785,7 +785,7 @@ class LanguageAgent:
         start_state: Optional[Dict] = None,
         save_every: int = 500,
         eval_every: int = 500,
-        n_eval_episodes: int = 10,
+        n_eval_episodes: int = 1,
         display_video: bool = False,
     ) -> None:
         language_goal = language_goal.lower()
