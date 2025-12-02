@@ -44,6 +44,7 @@ class LanguageAgent:
         weights_path: str,
         eval_env,
         task: str,
+        train_dataset,
         wandb_run=None,
         use_learned_reward: bool = False,
         reward_assignment_method: str = "final",
@@ -65,6 +66,7 @@ class LanguageAgent:
         self._wandb_run = wandb_run
 
         self.rewards = []
+        self.train_dataset = train_dataset
 
         self._reward_cache: Dict[str, float] = {}
         self._sentence_embed_model = None
@@ -794,20 +796,29 @@ class LanguageAgent:
             # If None, make it the starting latent of the environment from the initial observation
             with torch.no_grad():
                 if start_state is None:
-                    _, start_state, _, _, _ = self._get_env_starting_state()
-                # Batchify the start state so we can compute multiple model rollouts for training
-                # the policy
-                # Start state is a dictionary whose keys are of shape (Batch, *Dimension)
-                start_state_batched = {}
-                for k, v in start_state.items():
-                    start_state_batched[k] = (
-                        v.repeat(batch_size, 1).detach()
-                        if len(v.shape) == 2
-                        else v.repeat(batch_size, 1, 1).detach()
+                    # Sample a batch from the replay buffer
+                    data_sample = next(self.train_dataset)
+                    processed_data = self._world_model._wm.preprocess(data_sample)
+                    embed = self._world_model._wm.encoder(processed_data)
+                    post, _ = self._world_model._wm.dynamics.observe(
+                        embed, processed_data["action"], processed_data["is_first"]
                     )
-                # Add empty time dimension
-                for k, v in start_state_batched.items():
-                    start_state_batched[k] = v.unsqueeze(0)
+                    start_state = post
+
+                #     _, start_state, _, _, _ = self._get_env_starting_state()
+                # # Batchify the start state so we can compute multiple model rollouts for training
+                # # the policy
+                # # Start state is a dictionary whose keys are of shape (Batch, *Dimension)
+                # start_state_batched = {}
+                # for k, v in start_state.items():
+                #     start_state_batched[k] = (
+                #         v.repeat(batch_size, 1).detach()
+                #         if len(v.shape) == 2
+                #         else v.repeat(batch_size, 1, 1).detach()
+                #     )
+                # # Add empty time dimension
+                # for k, v in start_state_batched.items():
+                #     start_state_batched[k] = v.unsqueeze(0)
 
             if self._use_learned_reward:
                 self._reward_head_name = ""
@@ -828,7 +839,7 @@ class LanguageAgent:
                 reward_func = self._language_reward
 
             self._world_model._task_behavior._train(
-                start_state_batched,
+                start_state,
                 reward_func,
                 reward_returns_continue=self._manually_calculate_continues,
             )  # type: ignore
@@ -976,21 +987,24 @@ def load_agent():
         train_dataset,
     ).to(config.device)
 
-    return config, agent, eval_env, run, logdir
+    print(f"Replay buffer loaded with {step} steps")
+
+    return config, agent, eval_env, run, logdir, train_dataset
 
 
 def main():
-    config, agent, eval_env, run, logdir = load_agent()
+    config, agent, eval_env, run, logdir, train_dataset = load_agent()
     reward_assignment_method = config.reward_assignment_method
     reward_entailment_method = config.reward_entailment_method
     if sys.argv[-1] == "instruct":
         while True:
-            config, agent, eval_env, run, logdir = load_agent()
+            config, agent, eval_env, run, logdir, train_dataset = load_agent()
             lang_agent = LanguageAgent(
                 agent,
                 config.checkpoint,
                 eval_env,
                 config.task,
+                train_dataset,
                 run,
                 use_learned_reward=config.use_learned_reward,
                 reward_assignment_method=reward_assignment_method,
@@ -1013,6 +1027,7 @@ def main():
             config.checkpoint,
             eval_env,
             config.task,
+            train_dataset,
             run,
             use_learned_reward=config.use_learned_reward,
             reward_assignment_method=reward_assignment_method,

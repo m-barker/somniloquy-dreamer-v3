@@ -514,6 +514,9 @@ def setup(config: argparse.Namespace) -> Tuple[argparse.Namespace, pathlib.Path]
     config.time_limit //= config.action_repeat
 
     print("Logdir", logdir)
+    if isinstance(config.traindir, str):
+        config.traindir = pathlib.Path(config.traindir).expanduser()
+    print(f"Traindir: {config.traindir}")
     logdir.mkdir(parents=True, exist_ok=True)
     config.traindir.mkdir(parents=True, exist_ok=True)
     config.evaldir.mkdir(parents=True, exist_ok=True)
