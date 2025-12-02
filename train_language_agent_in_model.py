@@ -493,6 +493,7 @@ class LanguageAgent:
 
         return reward, continues
 
+    @torch.no_grad()
     def _get_env_starting_state(self):
         """
         Gets the starting latent state of the evaluation environment
@@ -791,21 +792,23 @@ class LanguageAgent:
         self.language_goal = language_goal
         for n in range(n_training_steps):
             # If None, make it the starting latent of the environment from the initial observation
-            if start_state is None:
-                _, start_state, _, _, _ = self._get_env_starting_state()
-            # Batchify the start state so we can compute multiple model rollouts for training
-            # the policy
-            # Start state is a dictionary whose keys are of shape (Batch, *Dimension)
-            start_state_batched = {}
-            for k, v in start_state.items():
-                start_state_batched[k] = (
-                    v.repeat(batch_size, 1)
-                    if len(v.shape) == 2
-                    else v.repeat(batch_size, 1, 1)
-                )
-            # Add empty time dimension
-            for k, v in start_state_batched.items():
-                start_state_batched[k] = v.unsqueeze(0)
+            with torch.no_grad():
+                if start_state is None:
+                    _, start_state, _, _, _ = self._get_env_starting_state()
+                # Batchify the start state so we can compute multiple model rollouts for training
+                # the policy
+                # Start state is a dictionary whose keys are of shape (Batch, *Dimension)
+                start_state_batched = {}
+                for k, v in start_state.items():
+                    start_state_batched[k] = (
+                        v.repeat(batch_size, 1).detach()
+                        if len(v.shape) == 2
+                        else v.repeat(batch_size, 1, 1).detach()
+                    )
+                # Add empty time dimension
+                for k, v in start_state_batched.items():
+                    start_state_batched[k] = v.unsqueeze(0)
+
             if self._use_learned_reward:
                 self._reward_head_name = ""
                 if self.language_goal == "go to the red key":
@@ -823,6 +826,7 @@ class LanguageAgent:
                 reward_func = self._learned_reward_function
             else:
                 reward_func = self._language_reward
+
             self._world_model._task_behavior._train(
                 start_state_batched,
                 reward_func,
