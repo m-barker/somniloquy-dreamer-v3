@@ -427,6 +427,9 @@ class LanguageAgent:
                 self._reward_assignment_method == "once"
                 or self._reward_entailment_method == "substring"
             ):
+                best_idx = None
+                best_r = None
+                best_translation = None
                 for batch in range(B):
                     for idx, plan_translation in enumerate(
                         string_plan_translations_array[:, batch]
@@ -455,8 +458,14 @@ class LanguageAgent:
                         if r > best_r:
                             best_r = r
                             best_idx = idx
+                            best_translation = plan_translation
                     if self._reward_entailment_method != "substring":
+                        assert best_idx is not None
+                        assert best_r is not None
                         reward[best_idx][batch] = best_r
+                        print(
+                            f"Best translation {best_translation} received a reward of {best_r} for batch {batch}"
+                        )
             else:
                 # (T, B) -> TxB
                 flattened_translations = string_plan_translations_array.flatten()
@@ -706,9 +715,6 @@ class LanguageAgent:
                     posterior
                 ).unsqueeze(0)
                 prev_state = posterior
-                print(
-                    f"State Value: {self._world_model._task_behavior.value(latent_tensor).mode()}"
-                )
                 goal_achieved = False
                 if "babyai" in self.task:
                     goal_achieved, step_reward = self._calculate_babyai_true_reward(
