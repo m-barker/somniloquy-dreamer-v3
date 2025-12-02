@@ -1,3 +1,4 @@
+import json
 import re
 import os
 import pathlib
@@ -267,6 +268,7 @@ class LanguageAgent:
         latent_translation: Union[str, List[str]],
         entailment_model_name: str = "facebook/bart-large-mnli",
         threshold: Optional[float] = None,
+        prompt: str = "i will achieve the following exact behaviour: ",
     ) -> List[float]:
         """
         Calculates the degree to which the natural language goal is semantically
@@ -292,7 +294,7 @@ class LanguageAgent:
                 device=self._world_model._config.device,
             )
 
-        hypothesis = self.language_goal
+        hypothesis = f"{prompt}{self.language_goal}"
 
         if isinstance(latent_translation, str):
             latent_translation = [latent_translation]
@@ -855,6 +857,10 @@ class LanguageAgent:
                     ),
                 }
                 torch.save(items_to_save, os.path.join(logdir, "language_agent.pt"))
+                with open(
+                    os.path.join(logdir, "language_reward_cache.json"), "w"
+                ) as fp:
+                    json.dump(self._reward_cache, fp)
             if n % eval_every == 0 and n > 0:
                 with torch.no_grad():
                     eval_policy_video, eval_reward = self._eval(
@@ -862,12 +868,16 @@ class LanguageAgent:
                     )
                 if self._wandb_run is not None:
                     log_reward_name = "mean_eval_reward"
+                    reward_cache_table = wandb.Table(columns=["Translation", "Reward"])
+                    for k, v in self._reward_cache.items():
+                        reward_cache_table.add_data(k, str(v))
                     self._wandb_run.log(
                         {
                             "eval_policy": wandb.Video(
                                 eval_policy_video, fps=2, format="mp4"
                             ),
                             log_reward_name: eval_reward,
+                            "reward_cache": reward_cache_table,
                         },
                         step=n + 1,  # wandb steps start at 1
                     )
