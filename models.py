@@ -920,7 +920,7 @@ class ImagBehavior(nn.Module):
     ):
         self._update_slow_target()
         metrics = {}
-
+        # Start: Shape (B,T,D)
         with tools.RequiresGrad(self.actor):
             with torch.cuda.amp.autocast(self._use_amp):
                 imag_feat, imag_state, imag_action = self._imagine(
@@ -987,6 +987,8 @@ class ImagBehavior(nn.Module):
 
     def _imagine(self, start, policy, horizon):
         dynamics = self._world_model.dynamics
+        # Start is shape (B, T, D)
+        # flattens to (B*T, ...)
         flatten = lambda x: x.reshape([-1] + list(x.shape[2:]))
         start = {k: flatten(v) for k, v in start.items()}
 

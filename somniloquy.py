@@ -195,6 +195,7 @@ class Dreamer(nn.Module):
         ).mode()
         if not self._random_actions:
             start_time = time.perf_counter()
+            # Start is of shape (B, T, D)
             metrics.update(self._task_behavior._train(start, reward)[-1])
             end_time = time.perf_counter()
         if self._config.expl_behavior != "greedy":
@@ -487,16 +488,16 @@ def create_environments(
 
 def load_existing_episodes(config: argparse.Namespace) -> Tuple[dict, dict]:
     if config.offline_traindir:
-        directory = config.offline_traindir.format(**vars(config))
+        train_directory = config.offline_traindir.format(**vars(config))
     else:
-        directory = config.traindir
+        train_directory = config.traindir
     if config.offline_evaldir:
-        directory = config.offline_evaldir.format(**vars(config))
+        eval_directory = config.offline_evaldir.format(**vars(config))
     else:
-        directory = config.evaldir
+        eval_directory = config.evaldir
 
-    train_eps = tools.load_episodes(directory, limit=config.dataset_size)
-    eval_eps = tools.load_episodes(directory, limit=1)
+    train_eps = tools.load_episodes(train_directory, limit=config.dataset_size)
+    eval_eps = tools.load_episodes(eval_directory, limit=1)
     return train_eps, eval_eps
 
 
