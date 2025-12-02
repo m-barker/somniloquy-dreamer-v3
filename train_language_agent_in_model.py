@@ -668,9 +668,7 @@ class LanguageAgent:
             eval_reward += 1
         return done, eval_reward
 
-    def _eval(
-        self, horizon: int = 15, n_eval_episodes: int = 10
-    ) -> Tuple[np.ndarray, float]:
+    def _eval(self, n_eval_episodes: int = 10) -> Tuple[np.ndarray, float]:
         print("Beginning Evaluation....")
         assert n_eval_episodes > 0
         video_array = None
@@ -684,7 +682,7 @@ class LanguageAgent:
             prev_state = starting_latent
             eval_reward = 0.0
             done = False
-            for t in range(horizon):
+            while not done:
                 if done:
                     break
                 action = (
@@ -854,7 +852,7 @@ class LanguageAgent:
             if n % eval_every == 0 and n > 0:
                 with torch.no_grad():
                     eval_policy_video, eval_reward = self._eval(
-                        horizon=rollout_length, n_eval_episodes=n_eval_episodes
+                        n_eval_episodes=n_eval_episodes
                     )
                 if self._wandb_run is not None:
                     log_reward_name = "mean_eval_reward"
@@ -1055,6 +1053,7 @@ def main():
                 int(config.model_steps),
                 logdir,
                 rollout_length=config.imag_horizon,
+                eval_every=config.eval_every,
             )
 
 
