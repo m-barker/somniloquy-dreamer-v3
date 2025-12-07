@@ -1,3 +1,4 @@
+import math
 import time
 import argparse
 import functools
@@ -92,6 +93,9 @@ class Dreamer(nn.Module):
             plan2explore=lambda: expl.Plan2Explore(config, self._wm, reward),
         )[config.expl_behavior]().to(self._config.device)
         self._random_actor = expl.Random(config, act_space).to(self._config.device)
+
+        self._language_visitation_cache = {}
+        self._max_intrinsic_reward = float(config.max_intrinsic_reward)
 
     def __call__(self, obs, reset, state=None):
         step = self._step
@@ -190,9 +194,12 @@ class Dreamer(nn.Module):
         end_time = time.perf_counter()
         metrics.update(mets)
         start = post
-        reward = lambda f, s, a: self._wm.heads["reward"](
-            self._wm.dynamics.get_feat(s)
-        ).mode()
+        if self._config.language_intrinsic_reward:
+            reward = self._language_count_based_reward
+        else:
+            reward = lambda f, s, a: self._wm.heads["reward"](
+                self._wm.dynamics.get_feat(s)
+            ).mode()
         if not self._random_actions:
             start_time = time.perf_counter()
             # Start is of shape (B, T, D)
@@ -206,6 +213,52 @@ class Dreamer(nn.Module):
                 self._metrics[name] = [value]
             else:
                 self._metrics[name].append(value)
+
+    def _language_count_based_reward(
+        self, _, imagined_states: Dict[str, torch.Tensor], __
+    ) -> torch.Tensor:
+        T, B, _ = imagined_states["deter"].shape
+        intrinsic_reward = torch.zeros((T, B, 1))
+
+        # Shape (T, B ,D)
+        stacked_states = self._wm.dynamics.get_feat(imagined_states)
+
+        extrinsic_reward = self._wm.heads["reward"](stacked_states).mode()
+
+        # (T, B, D) -> B, T, D
+        stacked_states = stacked_states.permute(1, 0, 2)
+        with torch.no_grad():
+            plan_translations = self._wm.heads["language"].generate(
+                stacked_states,
+                self._wm.vocab,
+                self._config.dec_max_length,
+                self._config.token_sampling_method,
+            )
+
+        string_plan_translations = [
+            " ".join(
+                [
+                    word
+                    for word in plan.split()
+                    if word not in ["<BOS>", "<EOS>", "<PAD>"]
+                ]
+            )
+            for plan in plan_translations
+        ]
+
+        for batch, plan_translation in enumerate(string_plan_translations):
+            visitation_count = self._language_visitation_cache.get(plan_translation, 0)
+            if visitation_count == 0:
+                self._language_visitation_cache[plan_translation] = 1
+                visitation_count = 1
+            else:
+                self._language_visitation_cache[plan_translation] += 1
+
+            count_reward = self._max_intrinsic_reward / math.sqrt(visitation_count)
+
+            intrinsic_reward[-1, batch] = count_reward
+
+        return extrinsic_reward + intrinsic_reward
 
 
 def count_steps(folder):
