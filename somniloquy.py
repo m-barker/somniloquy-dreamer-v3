@@ -258,7 +258,7 @@ class Dreamer(nn.Module):
 
             intrinsic_reward[-1, batch] = count_reward
 
-        return extrinsic_reward + intrinsic_reward
+        return extrinsic_reward + intrinsic_reward.to(self._config.device)
 
 
 def count_steps(folder):
