@@ -41,6 +41,7 @@ defaults:
   # Exploration stuff
   language_intrinsic_reward: False
   max_intrinsic_reward: 1.0
+  crafter_random: False
 
   # For environments which support an option to fix
   # their generation

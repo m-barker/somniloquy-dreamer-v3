@@ -360,7 +360,12 @@ def make_env(config, mode, id):
     elif suite == "crafter":
         import envs.crafter as crafter
 
-        env = crafter.Crafter(task, config.size, seed=config.seed + id)
+        env = crafter.Crafter(
+            task,
+            config.size,
+            seed=config.seed + id,
+            randomise_reset=config.crafter_random,
+        )
         env = wrappers.OneHotAction(env)
     elif suite == "minecraft":
         import envs.minecraft as minecraft

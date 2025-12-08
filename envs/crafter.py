@@ -6,11 +6,12 @@ import numpy as np
 class Crafter:
     metadata = {}
 
-    def __init__(self, task, size=(64, 64), seed=0):
+    def __init__(self, task, size=(64, 64), seed=0, randomise_reset: bool = False):
         assert task in ("reward", "noreward")
         import crafter
 
         self._size = size
+        self._randomise_reset = randomise_reset
 
         self._env = crafter.Env(reward=(task == "reward"), seed=seed)
         self._achievements = crafter.constants.achievements.copy()
@@ -127,7 +128,11 @@ class Crafter:
         return self._env.render()
 
     def reset(self):
-        image, info = self._env.reset()
+        if self._randomise_reset:
+            seed = np.random.randint(0, 2**31 - 1)
+        else:
+            seed = None
+        image, info = self._env.reset(seed=seed)
         if image.shape[:2] != self._size:
             resized_img = cv2.resize(image, self._size, interpolation=cv2.INTER_AREA)
         else:
