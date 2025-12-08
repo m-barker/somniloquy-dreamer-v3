@@ -804,7 +804,12 @@ class LanguageAgent:
                 if start_state is None:
                     # Sample a batch from the replay buffer
                     data_sample = next(self.train_dataset)
-                    processed_data = self._world_model._wm.preprocess(data_sample)
+                    processed_data = self._world_model._wm.preprocess(
+                        data_sample,
+                        keys_to_ignore=self._world_model._config.narrator[
+                            "narration_key"
+                        ],
+                    )
                     embed = self._world_model._wm.encoder(processed_data)
                     post, _ = self._world_model._wm.dynamics.observe(
                         embed, processed_data["action"], processed_data["is_first"]
